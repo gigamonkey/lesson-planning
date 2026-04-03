@@ -1,4 +1,4 @@
-# Compare books
+# Make a plan to compare CSAwesome and BHSawesome
 
 I would like you to make a plan for doing a comprehensive review of the contents
 of CSAwesome and BHSawesome, both textbooks for teaching AP Computer Science A.
