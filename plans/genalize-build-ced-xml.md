@@ -1,0 +1,13 @@
+# Genalize build_ced_xml.py
+
+The script `build_ced_xml.py` converts the `csp/ced-hierarchy.md` hierarcy into
+XML. The `csa/ced-2025-hierarchy.md` is essentially the same but the hierarchy
+elements are a bit different.
+
+- # Unit N: TITLE   ->  <unit xml:id="unit-N"><title>TITLE</title>...
+- ## N.a TEXT       ->  <topic xml:id="N.a"><text>TEXT</text>...
+- ### N.a.b TEXT    ->  <learning-objective xml:id="N.a.b"><text>TEXT</text>...
+- #### N.a.b.c TEXT ->  <essential-knowledge xml:id="N.a.b.c"><text>TEXT</text>...
+
+Please adapt that script so it figures out which kind of hierarchy it's reading
+and outputs the right XML.
