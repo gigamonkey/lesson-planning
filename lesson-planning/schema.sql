@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS objectives (
   uuid        TEXT PRIMARY KEY,
   text        TEXT NOT NULL,
   status      TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'merged' | 'draft'
-  merged_into TEXT REFERENCES objectives(uuid) -- set when status='merged' (dedup)
+  merged_into TEXT REFERENCES objectives(uuid) -- reserved; explicit merge dropped
 );
 
 CREATE TABLE IF NOT EXISTS course_objectives (

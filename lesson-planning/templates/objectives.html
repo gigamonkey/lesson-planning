@@ -10,7 +10,8 @@
 
 {% block body %}
   <p><b>{{ total }}</b> active objectives. Edit text in place; map/unmap coverage
-     nodes; merge duplicates on the <a href="{{ url_for('dedup_view', course=course) }}">Dedup</a> page.</p>
+     nodes; add new objectives. (Duplicates are collapsed later when raw
+     objectives are distilled into lesson objectives.)</p>
 
   <div class="obj">
     <form method="post" action="{{ url_for('objective_new', course=course) }}" class="edit">

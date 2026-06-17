@@ -107,7 +107,6 @@
     <nav style="margin-left:auto">
       <a href="{{ url_for('tree', course=course) }}">Outline</a>
       <a href="{{ url_for('objectives', course=course) }}">Objectives</a>
-      <a href="{{ url_for('dedup_view', course=course) }}">Dedup</a>
       <a href="{{ url_for('report', course=course) }}">Report</a>
     </nav>
     <form method="post" action="{{ url_for('export', course=course) }}" style="margin:0">

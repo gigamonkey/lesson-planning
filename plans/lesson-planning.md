@@ -16,7 +16,9 @@ Four jobs the system must do (the user's requirements):
 
 1. **Map** hand-written objectives into the existing hierarchies.
 2. **Identify gaps** — official nodes covered by no objective.
-3. **Dedup** — remove/merge duplicate objectives.
+3. **Collapse duplicates** — not a separate dedup step. Distilling raw objectives
+   into lesson objectives (Phase 3) naturally merges overlaps, so an explicit
+   dedup pass is redundant and was dropped.
 4. **Organize** objectives into an ordered lesson plan (its own structure, not
    the CED's) while keeping the map back to the official outline.
 
@@ -29,7 +31,7 @@ Four jobs the system must do (the user's requirements):
   title. Time budget / resource links / assessment mapping are deferred (hooks
   left in the schema, not built).
 - **Two levels of teacher content:** *raw objectives* (the ~361 drafted atoms, to
-  be deduped and mapped to the CED) and *lesson objectives* (the student-facing
+  mapped to the CED) and *lesson objectives* (the student-facing
   statement written on the whiteboard, synthesized from one or more raw
   objectives). End state: **one lesson objective per lesson.**
 - **Mapping granularity:** an objective may map to any node level, but only
@@ -50,8 +52,9 @@ Four jobs the system must do (the user's requirements):
   `lesson-planning/schema.sql` sketch — this plan supersedes that sketch.
 
 Current state, measured (CSA): 223 EK leaves, **184 covered**, **39 gaps**;
-several EKs have 6–8 objectives mapped (e.g. `4.5.A.1`, `2.9.A.1`) — clear dedup
-candidates. So the app has real work to show on day one.
+several EKs have 6–8 objectives mapped (e.g. `4.5.A.1`, `2.9.A.1`) — overlapping
+objectives that get distilled into a single lesson objective in Phase 3. So the
+app has real work to show on day one.
 
 ## Source-of-truth model (resolves the file-vs-DB tension)
 
@@ -61,7 +64,7 @@ interactive app needs to write to the DB. Resolution:
 - **Hierarchies stay file-sourced.** Regenerated from the `*-hierarchy.md` files;
   the app treats them as read-only reference. Re-import on change.
 - **The lesson-planning DB is the live store for *planning data*** — objective
-  edits, dedup/merge decisions, coverage mappings, lessons.
+  edits, coverage mappings, lessons.
 - **Round-trip to git-diffable files.** An `export` step dumps objectives,
   coverage, and lessons back to TSV/markdown so the canonical state is still
   reviewable in a PR and reproducible. `import` seeds the DB from those files.
@@ -87,13 +90,13 @@ CREATE TABLE nodes (
   PRIMARY KEY (course, node_id)
 );
 
--- RAW objectives: the atoms the teacher drafted. Deduped; mapped to the CED.
+-- RAW objectives: the atoms the teacher drafted, mapped to the CED.
 -- Course-agnostic text; a raw objective can belong to >1 course.
 CREATE TABLE objectives (
   uuid        TEXT PRIMARY KEY,
   text        TEXT NOT NULL,
   status      TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'merged' | 'draft'
-  merged_into TEXT REFERENCES objectives(uuid) -- set when status='merged' (dedup)
+  merged_into TEXT REFERENCES objectives(uuid) -- reserved; explicit merge dropped
 );
 
 CREATE TABLE course_objectives (
@@ -211,15 +214,14 @@ SortableJS gives drag-and-drop reordering for the one screen that needs it.
 (Alternative if you'd rather: FastAPI, or a static SPA — but Flask+htmx is the
 lowest-friction fit for this repo. Flag if you disagree before Phase 1.)
 
-Screens map 1:1 to the four jobs:
+Screens:
 
 1. **Hierarchy + coverage** (job 1 & 2) — the CED/syllabus tree, each leaf
    annotated with its mapped objectives and a status badge: *gap* /
    *objective-only* / *planned*. Filter to "gaps only" → the 39-item worklist.
-2. **Objectives + dedup** (job 1 & 3) — objective list; merge candidates grouped
-   by shared coverage node (see below) surfaced for a semantic yes/no, then
-   flagged for **merge** (sets `status='merged'`, `merged_into`), **edit** (same
-   uuid), or **split/new** (new uuid). Edit a node's coverage mapping here too.
+2. **Objectives + mapping** (job 1) — objective list; **edit** text in place
+   (same uuid), map/unmap coverage nodes (validated, datalist picker), and add
+   new objectives. No dedup step — duplicates collapse during synthesis (job 3).
 3. **Lesson builder** (job 4) — two moves. (a) *Synthesize*: select one or more
    raw objectives and roll them into a **lesson objective** (the whiteboard
    statement), drafting its text. (b) *Schedule*: drag lesson objectives from the
@@ -229,41 +231,29 @@ Screens map 1:1 to the four jobs:
 4. **Coverage report** (traceability) — every leaf → the raw objective(s) → the
    lesson objective → the lesson that covers it; export button → `lesson-plan.md`.
 
-## Dedup: semantic judgment, grouped by shared coverage node
+## Dedup: dropped (subsumed by synthesis)
 
-The duplicates here are **semantic**, not textual ("Distinguish between syntax &
-type errors." vs "Distinguish between syntax, run-time, and logic errors."), so
-the actual yes/no-these-are-the-same call is a Claude judgment, not a string
-metric. Text-similarity pre-filters (jaccard/lcs) were tried and dropped: too
-many objectives share the same "Write code to …" phrasing, so similarity is
-mostly false positives.
+There is no explicit dedup step. Two approaches were tried and removed:
 
-The pre-filter that *isn't* noisy is **shared coverage node**: objectives mapped
-to the same CED node are the genuine merge candidates (recall `4.5.A.1` had ~8).
-So the dedup screen groups active objectives by node and shows every node with
-≥2 objectives as a cluster to review. Cross-node duplicates (a mislabeled pair on
-different nodes) won't group here — those surface during the semantic pass, not
-the structural one.
+- **Text similarity (jaccard/lcs)** — too noisy. So many objectives share the
+  same "Write code to …" phrasing that similarity is mostly false positives.
+- **Grouping by shared coverage node** — structurally clean (objectives on the
+  same EK), but still a manual pass that turned out not to be worth it.
 
-Two rungs (the structural grouping is free; automate the judgment when it pays):
+The reason it doesn't matter: raw objectives get **distilled into lesson
+objectives** in Phase 3, and that synthesis naturally collapses overlapping or
+duplicate raw objectives into one whiteboard statement. Job 3 ("remove
+duplicates") is therefore satisfied as a side effect of job 4, not by a separate
+screen.
 
-1. **Semantic adjudication — interactive (default for now).** You ask me to look
-   at a node's cluster and say which are true duplicates / which to keep /
-   suggested merged wording. Human-in-the-loop, zero new infrastructure.
-2. **Semantic adjudication — automated (later).** Wrap the same judgment in a
-   batch step via the Anthropic API or `claude -p` over the node-grouped
-   clusters, emitting proposed merges the app presents for one-click approval.
-   Same prompt, no human per-pair. (House precedent: the LLM extraction workflows.)
-
-The merge itself is always human-approved and reversible (`status='merged'` +
-`merged_into`, never a delete).
+The schema keeps the `status` / `merged_into` columns (harmless, and a future
+explicit merge could reuse them), but nothing writes `merged` today.
 
 ## Other LLM assists (human always approves)
 
 - **Mapping new objectives → nodes**: suggest best-match nodes (LLM pass over
-  node text — same shape as the dedup ladder, automatable via `claude -p`/API).
-  The original `objectives.tsv` mapping was exactly this, done once in bulk; now
-  incremental and in-app.
+  node text, automatable via `claude -p`/API). The original `objectives.tsv`
+  mapping was exactly this, done once in bulk; now incremental and in-app.
 - **Gap filling**: for an uncovered node, optionally suggest objective text the
   teacher can accept/edit into a new objective.
 
@@ -278,8 +268,9 @@ zero LLM calls; automation is an optimization, not a dependency.
 - **Phase 1 — read-only app.** Flask app, screens 1 & 4 (hierarchy+coverage,
   report). Immediate value: visualize gaps and current mapping. Validates the
   data model before any write paths.
-- **Phase 2 — objectives + dedup (writes).** Screen 2: merge/edit/map with
-  similarity clustering; export round-trip to TSV.
+- **Phase 2 — objectives + mapping (writes).** Screen 2: edit objective text,
+  map/unmap coverage nodes, add objectives; export round-trip to TSV. (Dedup was
+  prototyped here and dropped — see the Dedup section.)
 - **Phase 3 — lesson builder.** Screen 3: synthesize raw → lesson objectives,
   then lessons CRUD + drag/drop scheduling + live coverage; `render_outline.py`
   produces `csa/lesson-plan.md` — **the deliverable**.

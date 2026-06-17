@@ -214,7 +214,7 @@ def report(course):
 
 
 # --------------------------------------------------------------------------
-# Objectives + dedup (write views)
+# Objectives + mapping (write views)
 
 def active_objectives(conn, course):
     """Active raw objectives for a course with their coverage node_ids."""
@@ -259,38 +259,6 @@ def objectives(course):
     return render_template(
         "objectives.html", course=course, courses=cs,
         objectives=rows, leaves=leaves, total=len(rows))
-
-
-@app.route("/<course>/dedup")
-def dedup_view(course):
-    """Merge candidates grouped by shared coverage node.
-
-    Objectives mapped to the same CED node are the genuine merge candidates
-    (text similarity is too noisy here -- too many objectives share phrasing).
-    Each node with >=2 active objectives is a group to review semantically.
-    """
-    with db() as conn:
-        cs = courses(conn)
-        objs = active_objectives(conn, course)
-        labels = {r["node_id"]: (r["text"] or "").split("\n", 1)[0]
-                  for r in conn.execute(
-                      "SELECT node_id, text FROM nodes WHERE course = ?", (course,))}
-        order = node_order(conn, course)
-
-    by_node = {}
-    for o in objs.values():
-        for n in o["nodes"]:
-            by_node.setdefault(n, []).append(o)
-
-    clusters = [
-        {"node": n, "label": labels.get(n, ""),
-         "members": sorted(members, key=lambda o: o["text"].lower())}
-        for n, members in by_node.items() if len(members) >= 2
-    ]
-    clusters.sort(key=lambda c: order.get(c["node"], 10**9))
-    return render_template(
-        "dedup.html", course=course, courses=cs, clusters=clusters,
-        dup_count=sum(len(c["members"]) for c in clusters))
 
 
 @app.route("/<course>/objective/new", methods=["POST"])
@@ -347,37 +315,6 @@ def coverage_remove(course, uuid):
         conn.commit()
     flash(f"Unmapped from {node}.")
     return redirect(request.referrer or url_for("objectives", course=course))
-
-
-@app.route("/<course>/merge", methods=["POST"])
-def merge(course):
-    survivor = request.form.get("survivor")
-    losers = [u for u in request.form.getlist("loser") if u and u != survivor]
-    if survivor and losers:
-        with db() as conn:
-            for loser in losers:
-                # Move coverage and course links onto the survivor, then tombstone.
-                conn.execute(
-                    """INSERT OR IGNORE INTO coverage(course, uuid, node_id)
-                       SELECT course, ?, node_id FROM coverage WHERE uuid = ?""",
-                    (survivor, loser))
-                conn.execute("DELETE FROM coverage WHERE uuid = ?", (loser,))
-                conn.execute(
-                    """INSERT OR IGNORE INTO course_objectives(course, uuid)
-                       SELECT course, ? FROM course_objectives WHERE uuid = ?""",
-                    (survivor, loser))
-                conn.execute("DELETE FROM course_objectives WHERE uuid = ?", (loser,))
-                conn.execute(
-                    """UPDATE OR IGNORE objective_rollup SET objective_uuid = ?
-                        WHERE objective_uuid = ?""", (survivor, loser))
-                conn.execute("DELETE FROM objective_rollup WHERE objective_uuid = ?",
-                             (loser,))
-                conn.execute(
-                    "UPDATE objectives SET status = 'merged', merged_into = ? "
-                    "WHERE uuid = ?", (survivor, loser))
-            conn.commit()
-        flash(f"Merged {len(losers)} objective(s) into one.")
-    return redirect(request.referrer or url_for("dedup_view", course=course))
 
 
 @app.route("/<course>/export", methods=["POST"])
