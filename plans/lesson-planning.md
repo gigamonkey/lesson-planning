@@ -218,7 +218,10 @@ Screens:
 
 1. **Hierarchy + coverage** (job 1 & 2) — the CED/syllabus tree, each leaf
    annotated with its mapped objectives and a status badge: *gap* /
-   *objective-only* / *planned*. Filter to "gaps only" → the 39-item worklist.
+   *objective-only* / *planned*. Filter to "gaps only" → the gaps worklist. Each
+   leaf's objectives sit in a bordered box as an editable bulleted list, with a
+   "+ add objective" that creates a new objective (new uuid) mapped to that node
+   — so gaps can be authored in place, right where they show up.
 2. **Objectives + mapping** (job 1) — objective list; **edit** text in place
    (same uuid), map/unmap coverage nodes (validated, datalist picker), and add
    new objectives. No dedup step — duplicates collapse during synthesis (job 3).

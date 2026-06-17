@@ -54,8 +54,25 @@
            color: var(--muted); margin-right: .4rem; }
     .lvl-unit > .row, .lvl-theme > .row, .lvl-big-idea > .row { font-weight: 700; font-size: 1.05rem; }
     .lvl-topic > .row, .lvl-essential-understanding > .row { font-weight: 600; }
-    .objs { margin: .2rem 0 .3rem 0; padding-left: 1rem; color: #444; }
-    .objs li { font-size: .9rem; padding: .05rem 0; }
+    .leafbox { border: 1px solid var(--line); border-radius: 6px; background: #fff;
+               margin: .3rem 0 .45rem; padding: .35rem .55rem; max-width: 760px; }
+    .noobj { color: var(--muted); font-size: .85rem; font-style: italic; }
+    ul.objlist { list-style: disc; margin: 0; padding-left: 1.2rem; }
+    ul.objlist li { font-size: .9rem; padding: .03rem 0; }
+    .objedit { display: flex; gap: .35rem; align-items: center; margin: 0; }
+    .objedit input[type=text] { flex: 1; font: inherit; font-size: .9rem;
+            border: 1px solid transparent; background: transparent;
+            border-radius: 4px; padding: .12rem .3rem; }
+    .objedit input[type=text]:focus { border-color: #bcd; background: #fcfdff; outline: none; }
+    .objedit button { visibility: hidden; font-size: .78rem; padding: .12rem .5rem; }
+    .objedit:focus-within button { visibility: visible; }
+    .addobj { margin-top: .35rem; }
+    .addobj summary { cursor: pointer; color: #2b6cb0; font-size: .85rem;
+            width: max-content; list-style: none; }
+    .addobj summary::-webkit-details-marker { display: none; }
+    .addobj[open] summary { margin-bottom: .35rem; }
+    .addobj .objedit input[type=text] { border-color: var(--line); background: #fff; }
+    .addobj .objedit button { visibility: visible; }
     code { background: #f0f0f0; padding: 0 .2rem; border-radius: 3px;
            font-family: ui-monospace, monospace; font-size: .9em; }
 

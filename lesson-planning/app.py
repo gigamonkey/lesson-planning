@@ -261,6 +261,19 @@ def objectives(course):
         objectives=rows, leaves=leaves, total=len(rows))
 
 
+def _back(course):
+    """Redirect to the posting page, re-anchored to a node if `anchor` was sent.
+
+    Preserves the referrer's query string (e.g. ?filter=gaps) and re-attaches the
+    `#anchor` fragment so saving from the long outline keeps your scroll position.
+    """
+    target = request.referrer or url_for("objectives", course=course)
+    anchor = (request.form.get("anchor") or "").strip()
+    if anchor:
+        target = target.split("#", 1)[0] + "#" + anchor
+    return redirect(target)
+
+
 @app.route("/<course>/objective/new", methods=["POST"])
 def objective_new(course):
     text = (request.form.get("text") or "").strip()
@@ -275,7 +288,7 @@ def objective_new(course):
                              (course, u, node))
             conn.commit()
         flash(f"Added objective: {text}")
-    return redirect(request.referrer or url_for("objectives", course=course))
+    return _back(course)
 
 
 @app.route("/<course>/objective/<uuid>/edit", methods=["POST"])
@@ -286,7 +299,7 @@ def objective_edit(course, uuid):
             conn.execute("UPDATE objectives SET text = ? WHERE uuid = ?", (text, uuid))
             conn.commit()
         flash("Edited objective.")
-    return redirect(request.referrer or url_for("objectives", course=course))
+    return _back(course)
 
 
 @app.route("/<course>/objective/<uuid>/coverage/add", methods=["POST"])
@@ -303,7 +316,7 @@ def coverage_add(course, uuid):
                          (course, uuid, node))
             conn.commit()
             flash(f"Mapped to {node}.")
-    return redirect(request.referrer or url_for("objectives", course=course))
+    return _back(course)
 
 
 @app.route("/<course>/objective/<uuid>/coverage/remove", methods=["POST"])
@@ -314,7 +327,7 @@ def coverage_remove(course, uuid):
                      (course, uuid, node))
         conn.commit()
     flash(f"Unmapped from {node}.")
-    return redirect(request.referrer or url_for("objectives", course=course))
+    return _back(course)
 
 
 @app.route("/<course>/export", methods=["POST"])

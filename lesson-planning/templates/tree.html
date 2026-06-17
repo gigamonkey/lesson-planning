@@ -3,15 +3,40 @@
 {% block title %}{{ course|upper }} outline{% endblock %}
 
 {% macro node(n) %}
-<li class="node lvl-{{ n.level }}">
+<li class="node lvl-{{ n.level }}" id="n-{{ n.id }}">
   <div class="row">
     <span class="nid">{{ n.id }}</span>{{ n.label|inline }}
     {% if n.is_leaf %}<span class="badge {{ n.status }}">{{ STATUS[n.status][0] }}</span>{% endif %}
   </div>
-  {% if n.is_leaf and n.objectives %}
-    <ul class="objs">
-      {% for o in n.objectives %}<li>{{ o.text|inline }}</li>{% endfor %}
-    </ul>
+  {% if n.is_leaf %}
+    <div class="leafbox">
+      {% if n.objectives %}
+        <ul class="objlist">
+          {% for o in n.objectives %}
+            <li>
+              <form method="post" class="objedit"
+                    action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}">
+                <input type="hidden" name="anchor" value="n-{{ n.id }}">
+                <input type="text" name="text" value="{{ o.text }}">
+                <button type="submit" title="Save edit">Save</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="noobj">no objectives yet</div>
+      {% endif %}
+      <details class="addobj">
+        <summary>+ add objective</summary>
+        <form method="post" class="objedit"
+              action="{{ url_for('objective_new', course=course) }}">
+          <input type="hidden" name="node_id" value="{{ n.id }}">
+          <input type="hidden" name="anchor" value="n-{{ n.id }}">
+          <input type="text" name="text" placeholder="New objective for {{ n.id }}…" required>
+          <button type="submit" class="primary">Add</button>
+        </form>
+      </details>
+    </div>
   {% endif %}
   {% if n.children %}
     <ul>{% for c in n.children %}{{ node(c) }}{% endfor %}</ul>
