@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ course|upper }} objectives{% endblock %}
+
+{% macro nodepicker(action, label) %}
+<form method="post" action="{{ action }}" class="inline-add">
+  <input type="text" name="node_id" list="leaf-nodes" placeholder="node id">
+  <button type="submit">{{ label }}</button>
+</form>
+{% endmacro %}
+
+{% block body %}
+  <p><b>{{ total }}</b> active objectives. Edit text in place; map/unmap coverage
+     nodes; merge duplicates on the <a href="{{ url_for('dedup_view', course=course) }}">Dedup</a> page.</p>
+
+  <div class="obj">
+    <form method="post" action="{{ url_for('objective_new', course=course) }}" class="edit">
+      <input type="text" name="text" placeholder="New objective…" required>
+      <input type="text" name="node_id" list="leaf-nodes" placeholder="node id (optional)" style="flex:0 0 9rem">
+      <button type="submit" class="primary">Add</button>
+    </form>
+  </div>
+
+  {% for o in objectives %}
+    <div class="obj">
+      <form method="post" action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}" class="edit">
+        <input type="text" name="text" value="{{ o.text }}">
+        <button type="submit">Save</button>
+      </form>
+      <div class="chips">
+        {% if not o.nodes %}<span class="chip unmapped">unmapped</span>{% endif %}
+        {% for n in o.nodes %}
+          <span class="chip">{{ n }}
+            <form method="post" action="{{ url_for('coverage_remove', course=course, uuid=o.uuid) }}">
+              <input type="hidden" name="node_id" value="{{ n }}">
+              <button type="submit" title="remove">×</button>
+            </form>
+          </span>
+        {% endfor %}
+        {{ nodepicker(url_for('coverage_add', course=course, uuid=o.uuid), '+ map') }}
+      </div>
+    </div>
+  {% endfor %}
+
+  <datalist id="leaf-nodes">
+    {% for nid, label in leaves %}<option value="{{ nid }}">{{ nid }} — {{ label }}</option>{% endfor %}
+  </datalist>
+{% endblock %}

@@ -17,14 +17,24 @@ import html
 import os
 import re
 import sqlite3
+import sys
+import uuid as uuidlib
 
-from flask import Flask, abort, redirect, render_template, request, url_for
+from flask import (Flask, abort, flash, redirect, render_template, request,
+                   url_for)
+
+# Import the sibling repo-root modules (dedup, export_planning).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import dedup  # noqa: E402
+import export_planning  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
 )
+EXPORT_DIR = os.path.join(os.path.dirname(__file__), "export")
 
 app = Flask(__name__)
+app.secret_key = "lesson-planning-dev"  # local single-user app; not security-sensitive
 
 # Coverage status -> (label, css class). 'planned' = a scheduled lesson traces
 # back to the leaf; 'objective' = a raw objective covers it but nothing is
@@ -202,6 +212,179 @@ def report(course):
         stats=summary(nodes, obn, planned),
         gaps=gaps, covered=covered, STATUS=STATUS,
     )
+
+
+# --------------------------------------------------------------------------
+# Objectives + dedup (write views)
+
+def active_objectives(conn, course):
+    """Active raw objectives for a course with their coverage node_ids."""
+    objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "nodes": []}
+            for r in conn.execute(
+                """SELECT o.uuid, o.text FROM objectives o
+                     JOIN course_objectives co
+                       ON co.uuid = o.uuid AND co.course = ?
+                    WHERE o.status = 'active'""", (course,))}
+    for r in conn.execute(
+        "SELECT uuid, node_id FROM coverage WHERE course = ?", (course,)):
+        if r["uuid"] in objs:
+            objs[r["uuid"]]["nodes"].append(r["node_id"])
+    return objs
+
+
+def leaf_choices(conn, course):
+    """(node_id, label) for every leaf node, in document order -- for pickers."""
+    return [(r["node_id"], (r["text"] or "").split("\n", 1)[0])
+            for r in conn.execute(
+                "SELECT node_id, text FROM nodes "
+                "WHERE course = ? AND is_leaf = 1 ORDER BY ordinal", (course,))]
+
+
+def node_order(conn, course):
+    return {r["node_id"]: r["ordinal"] for r in conn.execute(
+        "SELECT node_id, ordinal FROM nodes WHERE course = ?", (course,))}
+
+
+@app.route("/<course>/objectives")
+def objectives(course):
+    with db() as conn:
+        cs = courses(conn)
+        objs = active_objectives(conn, course)
+        order = node_order(conn, course)
+        leaves = leaf_choices(conn, course)
+    # Sort by earliest covered node (CED order), unmapped last, then text.
+    def key(o):
+        ords = [order.get(n, 10**9) for n in o["nodes"]]
+        return (min(ords) if ords else 10**9, o["text"].lower())
+    rows = sorted(objs.values(), key=key)
+    return render_template(
+        "objectives.html", course=course, courses=cs,
+        objectives=rows, leaves=leaves, total=len(rows))
+
+
+@app.route("/<course>/dedup")
+def dedup_view(course):
+    method = request.args.get("method", "jaccard")
+    threshold = float(request.args.get("threshold", dedup.THRESHOLD))
+    with db() as conn:
+        cs = courses(conn)
+        objs = active_objectives(conn, course)
+    pairs_in = [(o["uuid"], o["text"]) for o in objs.values()]
+    coverage = {u: set(objs[u]["nodes"]) for u in objs}
+    groups, index = dedup.clusters_with_pairs(
+        pairs_in, coverage, threshold=threshold, method=method)
+    # Build display clusters: members (sorted), their nodes, and pair scores.
+    clusters = []
+    for g in groups:
+        members = sorted(g, key=lambda u: objs[u]["text"].lower())
+        sims = {}
+        for a in members:
+            for b in members:
+                if a < b and frozenset((a, b)) in index:
+                    sims[(a, b)] = index[frozenset((a, b))][0]
+        clusters.append({
+            "members": [objs[u] for u in members],
+            "nodes": sorted({n for u in members for n in objs[u]["nodes"]}),
+            "max_sim": max(sims.values(), default=0.0),
+        })
+    return render_template(
+        "dedup.html", course=course, courses=cs, clusters=clusters,
+        method=method, threshold=threshold,
+        dup_count=sum(len(c["members"]) for c in clusters))
+
+
+@app.route("/<course>/objective/new", methods=["POST"])
+def objective_new(course):
+    text = (request.form.get("text") or "").strip()
+    if text:
+        u = str(uuidlib.uuid4())
+        with db() as conn:
+            conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
+            conn.execute("INSERT INTO course_objectives VALUES (?, ?)", (course, u))
+            node = (request.form.get("node_id") or "").strip()
+            if node:
+                conn.execute("INSERT OR IGNORE INTO coverage VALUES (?, ?, ?)",
+                             (course, u, node))
+            conn.commit()
+        flash(f"Added objective: {text}")
+    return redirect(request.referrer or url_for("objectives", course=course))
+
+
+@app.route("/<course>/objective/<uuid>/edit", methods=["POST"])
+def objective_edit(course, uuid):
+    text = (request.form.get("text") or "").strip()
+    if text:
+        with db() as conn:
+            conn.execute("UPDATE objectives SET text = ? WHERE uuid = ?", (text, uuid))
+            conn.commit()
+        flash("Edited objective.")
+    return redirect(request.referrer or url_for("objectives", course=course))
+
+
+@app.route("/<course>/objective/<uuid>/coverage/add", methods=["POST"])
+def coverage_add(course, uuid):
+    node = (request.form.get("node_id") or "").strip()
+    with db() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM nodes WHERE course = ? AND node_id = ?",
+            (course, node)).fetchone()
+        if not node or not exists:
+            flash(f"No such node: {node!r}")
+        else:
+            conn.execute("INSERT OR IGNORE INTO coverage VALUES (?, ?, ?)",
+                         (course, uuid, node))
+            conn.commit()
+            flash(f"Mapped to {node}.")
+    return redirect(request.referrer or url_for("objectives", course=course))
+
+
+@app.route("/<course>/objective/<uuid>/coverage/remove", methods=["POST"])
+def coverage_remove(course, uuid):
+    node = (request.form.get("node_id") or "").strip()
+    with db() as conn:
+        conn.execute("DELETE FROM coverage WHERE course = ? AND uuid = ? AND node_id = ?",
+                     (course, uuid, node))
+        conn.commit()
+    flash(f"Unmapped from {node}.")
+    return redirect(request.referrer or url_for("objectives", course=course))
+
+
+@app.route("/<course>/merge", methods=["POST"])
+def merge(course):
+    survivor = request.form.get("survivor")
+    losers = [u for u in request.form.getlist("loser") if u and u != survivor]
+    if survivor and losers:
+        with db() as conn:
+            for loser in losers:
+                # Move coverage and course links onto the survivor, then tombstone.
+                conn.execute(
+                    """INSERT OR IGNORE INTO coverage(course, uuid, node_id)
+                       SELECT course, ?, node_id FROM coverage WHERE uuid = ?""",
+                    (survivor, loser))
+                conn.execute("DELETE FROM coverage WHERE uuid = ?", (loser,))
+                conn.execute(
+                    """INSERT OR IGNORE INTO course_objectives(course, uuid)
+                       SELECT course, ? FROM course_objectives WHERE uuid = ?""",
+                    (survivor, loser))
+                conn.execute("DELETE FROM course_objectives WHERE uuid = ?", (loser,))
+                conn.execute(
+                    """UPDATE OR IGNORE objective_rollup SET objective_uuid = ?
+                        WHERE objective_uuid = ?""", (survivor, loser))
+                conn.execute("DELETE FROM objective_rollup WHERE objective_uuid = ?",
+                             (loser,))
+                conn.execute(
+                    "UPDATE objectives SET status = 'merged', merged_into = ? "
+                    "WHERE uuid = ?", (survivor, loser))
+            conn.commit()
+        flash(f"Merged {len(losers)} objective(s) into one.")
+    return redirect(request.referrer or url_for("dedup_view", course=course))
+
+
+@app.route("/<course>/export", methods=["POST"])
+def export(course):
+    written = export_planning.export(DB_PATH, EXPORT_DIR)
+    flash("Exported snapshot: " + ", ".join(f"{t} ({n})" for t, n in written))
+    return redirect(request.referrer or url_for("objectives", course=course))
 
 
 if __name__ == "__main__":

@@ -64,6 +64,35 @@
            padding: .4rem .6rem; text-align: left; vertical-align: top; }
     table.report th { background: #f4f4f4; font-size: .82rem; }
     h2 { border-bottom: 2px solid var(--line); padding-bottom: .2rem; margin-top: 1.6rem; }
+
+    button, input[type=text] { font: inherit; }
+    button { cursor: pointer; border: 1px solid var(--line); background: #fff;
+             border-radius: 4px; padding: .25rem .6rem; }
+    button.primary { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+    button.danger { color: var(--gap); border-color: #e3b7b3; }
+    .flash { background: #fffbe6; border: 1px solid #f0e0a0; border-radius: 6px;
+             padding: .5rem .8rem; margin-bottom: 1rem; }
+    .obj { background: #fff; border: 1px solid var(--line); border-radius: 6px;
+           padding: .6rem .8rem; margin-bottom: .6rem; }
+    .obj .edit { display: flex; gap: .4rem; }
+    .obj .edit input[type=text] { flex: 1; padding: .3rem .5rem;
+           border: 1px solid var(--line); border-radius: 4px; }
+    .chips { margin-top: .4rem; display: flex; gap: .4rem; flex-wrap: wrap;
+             align-items: center; }
+    .chip { font-family: ui-monospace, monospace; font-size: .8rem;
+            background: #eef3f8; border: 1px solid #d6e2ee; border-radius: 12px;
+            padding: .05rem .2rem .05rem .5rem; display: inline-flex; align-items: center; gap: .2rem; }
+    .chip.unmapped { background: #fdeceb; border-color: #f3c9c4; color: var(--gap); }
+    .chip button { border: none; background: none; padding: 0 .2rem; color: var(--muted); }
+    .chip form { display: inline; margin: 0; }
+    .cluster { background: #fff; border: 1px solid var(--line); border-radius: 6px;
+               padding: .7rem .9rem; margin-bottom: .9rem; }
+    .cluster table { border-collapse: collapse; width: 100%; margin: .3rem 0; }
+    .cluster td { padding: .2rem .4rem; border-bottom: 1px solid #f0f0f0; }
+    .sim { font-size: .8rem; color: var(--muted); }
+    .inline-add { display: inline-flex; gap: .2rem; }
+    .inline-add input { width: 6rem; padding: .1rem .3rem; border: 1px solid var(--line);
+            border-radius: 4px; font-family: ui-monospace, monospace; font-size: .8rem; }
   </style>
 </head>
 <body>
@@ -77,9 +106,19 @@
     </nav>
     <nav style="margin-left:auto">
       <a href="{{ url_for('tree', course=course) }}">Outline</a>
+      <a href="{{ url_for('objectives', course=course) }}">Objectives</a>
+      <a href="{{ url_for('dedup_view', course=course) }}">Dedup</a>
       <a href="{{ url_for('report', course=course) }}">Report</a>
     </nav>
+    <form method="post" action="{{ url_for('export', course=course) }}" style="margin:0">
+      <button type="submit">Export snapshot</button>
+    </form>
   </header>
-  <main>{% block body %}{% endblock %}</main>
+  <main>
+    {% with msgs = get_flashed_messages() %}
+      {% if msgs %}<div class="flash">{% for m in msgs %}<div>{{ m }}</div>{% endfor %}</div>{% endif %}
+    {% endwith %}
+    {% block body %}{% endblock %}
+  </main>
 </body>
 </html>

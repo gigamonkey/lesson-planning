@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ course|upper }} dedup{% endblock %}
+
+{% block body %}
+  <p><b>{{ clusters|length }}</b> candidate cluster(s) covering <b>{{ dup_count }}</b>
+     objectives ({{ method }}, threshold {{ threshold }}). These are
+     <em>suggestions</em> from the similarity pre-filter — judge semantically, then
+     pick a survivor and merge. Non-duplicates can simply be left alone.</p>
+
+  <div class="toolbar">
+    <a href="{{ url_for('dedup_view', course=course, method='jaccard', threshold=threshold) }}"
+       class="{{ 'active' if method == 'jaccard' else '' }}">Jaccard</a>
+    <a href="{{ url_for('dedup_view', course=course, method='lcs', threshold=threshold) }}"
+       class="{{ 'active' if method == 'lcs' else '' }}">LCS</a>
+  </div>
+
+  {% if not clusters %}
+    <p>No candidate duplicates at this threshold.</p>
+  {% endif %}
+
+  {% for c in clusters %}
+    <div class="cluster">
+      <div class="sim">{{ c.members|length }} objectives ·
+        nodes: {{ c.nodes|join(', ') or '—' }} ·
+        max similarity {{ '%.2f'|format(c.max_sim) }}</div>
+      <form method="post" action="{{ url_for('merge', course=course) }}">
+        <table>
+          <tr><th>keep</th><th>merge</th><th>objective</th><th>nodes</th></tr>
+          {% for o in c.members %}
+            <tr>
+              <td style="text-align:center"><input type="radio" name="survivor" value="{{ o.uuid }}" {{ 'checked' if loop.first }}></td>
+              <td style="text-align:center"><input type="checkbox" name="loser" value="{{ o.uuid }}" {{ 'checked' if not loop.first }}></td>
+              <td>{{ o.text|inline }}</td>
+              <td class="sim">{{ o.nodes|join(', ') }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+        <button type="submit" class="primary">Merge checked into kept</button>
+      </form>
+    </div>
+  {% endfor %}
+{% endblock %}
