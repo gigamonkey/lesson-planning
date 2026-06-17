@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_stats.html" import statbar %}
+{% block title %}{{ course|upper }} coverage report{% endblock %}
+
+{% block body %}
+  {{ statbar(stats) }}
+
+  <h2>Gaps — {{ gaps|length }} leaf node(s) with no objective</h2>
+  {% if gaps %}
+    <table class="report">
+      <tr><th>Node</th><th>Statement</th></tr>
+      {% for n in gaps %}
+        <tr><td class="nid">{{ n.node_id }}</td><td>{{ (n.text or '').split('\n')[0]|inline }}</td></tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p>None — every leaf is covered by at least one objective.</p>
+  {% endif %}
+
+  <h2>Traceability — {{ covered|length }} covered leaf node(s)</h2>
+  <table class="report">
+    <tr><th>Node</th><th>Statement</th><th>Status</th><th>Objectives</th></tr>
+    {% for n, objs, status in covered %}
+      <tr>
+        <td class="nid">{{ n.node_id }}</td>
+        <td>{{ (n.text or '').split('\n')[0]|inline }}</td>
+        <td><span class="badge {{ status }}">{{ STATUS[status][0] }}</span></td>
+        <td>
+          <ul style="margin:0; padding-left:1rem">
+            {% for o in objs %}<li>{{ o.text|inline }}</li>{% endfor %}
+          </ul>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+{% endblock %}

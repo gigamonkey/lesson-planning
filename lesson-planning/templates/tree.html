@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_stats.html" import statbar %}
+{% block title %}{{ course|upper }} outline{% endblock %}
+
+{% macro node(n) %}
+<li class="node lvl-{{ n.level }}">
+  <div class="row">
+    <span class="nid">{{ n.id }}</span>{{ n.label|inline }}
+    {% if n.is_leaf %}<span class="badge {{ n.status }}">{{ STATUS[n.status][0] }}</span>{% endif %}
+  </div>
+  {% if n.is_leaf and n.objectives %}
+    <ul class="objs">
+      {% for o in n.objectives %}<li>{{ o.text|inline }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+  {% if n.children %}
+    <ul>{% for c in n.children %}{{ node(c) }}{% endfor %}</ul>
+  {% endif %}
+</li>
+{% endmacro %}
+
+{% block body %}
+  {{ statbar(stats) }}
+  <div class="toolbar">
+    <a href="{{ url_for('tree', course=course) }}"
+       class="{{ '' if gaps_only else 'active' }}">All nodes</a>
+    <a href="{{ url_for('tree', course=course, filter='gaps') }}"
+       class="{{ 'active' if gaps_only else '' }}">Gaps only ({{ stats.gaps }})</a>
+  </div>
+  {% if gaps_only and stats.gaps == 0 %}
+    <p>No gaps — every leaf has at least one objective. 🎉</p>
+  {% else %}
+    <ul class="tree">{% for n in tree %}{{ node(n) }}{% endfor %}</ul>
+  {% endif %}
+{% endblock %}

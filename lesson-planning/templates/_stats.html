@@ -1,0 +1,14 @@
+{% macro statbar(stats) %}
+<div class="stats">
+  <div class="stat"><b>{{ stats.leaves }}</b><span>leaf nodes</span></div>
+  <div class="stat"><b style="color:var(--gap)">{{ stats.gaps }}</b><span>gaps</span></div>
+  <div class="stat"><b style="color:var(--objective)">{{ stats.objective }}</b><span>objective only</span></div>
+  <div class="stat"><b style="color:var(--planned)">{{ stats.planned }}</b><span>planned</span></div>
+  <div class="stat"><b>{{ stats.pct_covered }}%</b><span>covered</span></div>
+  <div class="bar" title="{{ stats.planned }} planned / {{ stats.objective }} objective / {{ stats.gaps }} gap">
+    <i class="planned" style="width:{{ (100 * stats.planned / stats.leaves) if stats.leaves else 0 }}%"></i>
+    <i class="objective" style="width:{{ (100 * stats.objective / stats.leaves) if stats.leaves else 0 }}%"></i>
+    <i class="gap" style="width:{{ (100 * stats.gaps / stats.leaves) if stats.leaves else 0 }}%"></i>
+  </div>
+</div>
+{% endmacro %}

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Lesson Planning{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    :root {
+      --gap: #c0392b; --objective: #b7791f; --planned: #2f855a;
+      --line: #e2e2e2; --muted: #777; --bg: #fafafa;
+    }
+    * { box-sizing: border-box; }
+    body { font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 0;
+           color: #222; background: var(--bg); }
+    header { background: #fff; border-bottom: 1px solid var(--line);
+             padding: .6rem 1.2rem; display: flex; align-items: center;
+             gap: 1.2rem; position: sticky; top: 0; z-index: 5; }
+    header h1 { font-size: 1rem; margin: 0; font-weight: 700; }
+    header nav a { margin-right: .8rem; text-decoration: none; color: #2b6cb0; }
+    header nav a.active { font-weight: 700; color: #222; }
+    main { max-width: 1000px; margin: 0 auto; padding: 1.2rem; }
+
+    .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0 0 1rem;
+             padding: .8rem 1rem; background: #fff; border: 1px solid var(--line);
+             border-radius: 6px; }
+    .stat { line-height: 1.2; }
+    .stat b { font-size: 1.4rem; display: block; }
+    .stat span { color: var(--muted); font-size: .8rem; }
+    .bar { height: 8px; border-radius: 4px; background: #eee; overflow: hidden;
+           display: flex; min-width: 220px; align-self: center; flex: 1; }
+    .bar i { display: block; height: 100%; }
+    .bar .planned { background: var(--planned); }
+    .bar .objective { background: var(--objective); }
+    .bar .gap { background: var(--gap); }
+
+    .badge { font-size: .68rem; font-weight: 700; text-transform: uppercase;
+             letter-spacing: .03em; padding: .05rem .4rem; border-radius: 3px;
+             color: #fff; vertical-align: middle; }
+    .badge.gap { background: var(--gap); }
+    .badge.objective { background: var(--objective); }
+    .badge.planned { background: var(--planned); }
+
+    .toolbar { margin-bottom: 1rem; }
+    .toolbar a { text-decoration: none; border: 1px solid var(--line);
+                 padding: .25rem .7rem; border-radius: 4px; color: #2b6cb0;
+                 background: #fff; }
+    .toolbar a.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+
+    ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 1.1rem; }
+    ul.tree { padding-left: 0; }
+    li.node { border-left: 1px solid var(--line); padding: .15rem 0 .15rem .8rem; }
+    .nid { font-family: ui-monospace, monospace; font-size: .82rem;
+           color: var(--muted); margin-right: .4rem; }
+    .lvl-unit > .row, .lvl-theme > .row, .lvl-big-idea > .row { font-weight: 700; font-size: 1.05rem; }
+    .lvl-topic > .row, .lvl-essential-understanding > .row { font-weight: 600; }
+    .objs { margin: .2rem 0 .3rem 0; padding-left: 1rem; color: #444; }
+    .objs li { font-size: .9rem; padding: .05rem 0; }
+    code { background: #f0f0f0; padding: 0 .2rem; border-radius: 3px;
+           font-family: ui-monospace, monospace; font-size: .9em; }
+
+    table.report { border-collapse: collapse; width: 100%; background: #fff; }
+    table.report th, table.report td { border: 1px solid var(--line);
+           padding: .4rem .6rem; text-align: left; vertical-align: top; }
+    table.report th { background: #f4f4f4; font-size: .82rem; }
+    h2 { border-bottom: 2px solid var(--line); padding-bottom: .2rem; margin-top: 1.6rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Lesson Planning</h1>
+    <nav>
+      {% for c in courses %}
+        <a href="{{ url_for('tree', course=c) }}"
+           class="{{ 'active' if c == course else '' }}">{{ c|upper }}</a>
+      {% endfor %}
+    </nav>
+    <nav style="margin-left:auto">
+      <a href="{{ url_for('tree', course=course) }}">Outline</a>
+      <a href="{{ url_for('report', course=course) }}">Report</a>
+    </nav>
+  </header>
+  <main>{% block body %}{% endblock %}</main>
+</body>
+</html>
