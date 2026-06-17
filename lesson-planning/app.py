@@ -23,9 +23,8 @@ import uuid as uuidlib
 from flask import (Flask, abort, flash, redirect, render_template, request,
                    url_for)
 
-# Import the sibling repo-root modules (dedup, export_planning).
+# Import the sibling repo-root module (export_planning).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import dedup  # noqa: E402
 import export_planning  # noqa: E402
 
 DB_PATH = os.environ.get(
@@ -264,32 +263,33 @@ def objectives(course):
 
 @app.route("/<course>/dedup")
 def dedup_view(course):
-    method = request.args.get("method", "jaccard")
-    threshold = float(request.args.get("threshold", dedup.THRESHOLD))
+    """Merge candidates grouped by shared coverage node.
+
+    Objectives mapped to the same CED node are the genuine merge candidates
+    (text similarity is too noisy here -- too many objectives share phrasing).
+    Each node with >=2 active objectives is a group to review semantically.
+    """
     with db() as conn:
         cs = courses(conn)
         objs = active_objectives(conn, course)
-    pairs_in = [(o["uuid"], o["text"]) for o in objs.values()]
-    coverage = {u: set(objs[u]["nodes"]) for u in objs}
-    groups, index = dedup.clusters_with_pairs(
-        pairs_in, coverage, threshold=threshold, method=method)
-    # Build display clusters: members (sorted), their nodes, and pair scores.
-    clusters = []
-    for g in groups:
-        members = sorted(g, key=lambda u: objs[u]["text"].lower())
-        sims = {}
-        for a in members:
-            for b in members:
-                if a < b and frozenset((a, b)) in index:
-                    sims[(a, b)] = index[frozenset((a, b))][0]
-        clusters.append({
-            "members": [objs[u] for u in members],
-            "nodes": sorted({n for u in members for n in objs[u]["nodes"]}),
-            "max_sim": max(sims.values(), default=0.0),
-        })
+        labels = {r["node_id"]: (r["text"] or "").split("\n", 1)[0]
+                  for r in conn.execute(
+                      "SELECT node_id, text FROM nodes WHERE course = ?", (course,))}
+        order = node_order(conn, course)
+
+    by_node = {}
+    for o in objs.values():
+        for n in o["nodes"]:
+            by_node.setdefault(n, []).append(o)
+
+    clusters = [
+        {"node": n, "label": labels.get(n, ""),
+         "members": sorted(members, key=lambda o: o["text"].lower())}
+        for n, members in by_node.items() if len(members) >= 2
+    ]
+    clusters.sort(key=lambda c: order.get(c["node"], 10**9))
     return render_template(
         "dedup.html", course=course, courses=cs, clusters=clusters,
-        method=method, threshold=threshold,
         dup_count=sum(len(c["members"]) for c in clusters))
 
 

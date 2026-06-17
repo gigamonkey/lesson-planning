@@ -44,7 +44,8 @@ Four jobs the system must do (the user's requirements):
   labeled with best-match CED coordinates in `objectives.tsv`, loaded by
   `load_objectives.py` into normalized tables (`objectives`, `course_objectives`,
   `csa_objectives`).
-- **Similarity utilities**: `jaccard.py`, `lcs.py` — reuse for dedup clustering.
+- **Similarity utilities**: `jaccard.py`, `lcs.py` (used by `compare_activities.py`;
+  tried for dedup and dropped — see the dedup section).
 - **Seed db**: `lesson-planning/db.db` (currently just `csa_ced`) and a
   `lesson-planning/schema.sql` sketch — this plan supersedes that sketch.
 
@@ -215,11 +216,10 @@ Screens map 1:1 to the four jobs:
 1. **Hierarchy + coverage** (job 1 & 2) — the CED/syllabus tree, each leaf
    annotated with its mapped objectives and a status badge: *gap* /
    *objective-only* / *planned*. Filter to "gaps only" → the 39-item worklist.
-2. **Objectives + dedup** (job 1 & 3) — objective list; candidate duplicate
-   *pairs/clusters* (jaccard/lcs pre-filter, see below) surfaced for a semantic
-   yes/no, then flagged for **merge** (sets `status='merged'`, `merged_into`),
-   **edit** (same uuid), or **split/new** (new uuid). Edit a node's coverage
-   mapping here too.
+2. **Objectives + dedup** (job 1 & 3) — objective list; merge candidates grouped
+   by shared coverage node (see below) surfaced for a semantic yes/no, then
+   flagged for **merge** (sets `status='merged'`, `merged_into`), **edit** (same
+   uuid), or **split/new** (new uuid). Edit a node's coverage mapping here too.
 3. **Lesson builder** (job 4) — two moves. (a) *Synthesize*: select one or more
    raw objectives and roll them into a **lesson objective** (the whiteboard
    statement), drafting its text. (b) *Schedule*: drag lesson objectives from the
@@ -229,29 +229,31 @@ Screens map 1:1 to the four jobs:
 4. **Coverage report** (traceability) — every leaf → the raw objective(s) → the
    lesson objective → the lesson that covers it; export button → `lesson-plan.md`.
 
-## Dedup: semantic judgment, with similarity as a pre-filter
+## Dedup: semantic judgment, grouped by shared coverage node
 
 The duplicates here are **semantic**, not textual ("Distinguish between syntax &
 type errors." vs "Distinguish between syntax, run-time, and logic errors."), so
 the actual yes/no-these-are-the-same call is a Claude judgment, not a string
-metric. `jaccard.py`/`lcs.py` are the cheap **pre-filter** that decides which
-pairs are even worth a semantic look — you don't want O(n²) over 361 objectives
-sent to an LLM. The same deterministic-narrow → LLM-adjudicate → human-approve
-ladder the CED-extraction workflows already use.
+metric. Text-similarity pre-filters (jaccard/lcs) were tried and dropped: too
+many objectives share the same "Write code to …" phrasing, so similarity is
+mostly false positives.
 
-Concretely, three rungs (build the cheap ones first, automate when it pays off):
+The pre-filter that *isn't* noisy is **shared coverage node**: objectives mapped
+to the same CED node are the genuine merge candidates (recall `4.5.A.1` had ~8).
+So the dedup screen groups active objectives by node and shows every node with
+≥2 objectives as a cluster to review. Cross-node duplicates (a mislabeled pair on
+different nodes) won't group here — those surface during the semantic pass, not
+the structural one.
 
-1. **Pre-filter** — `dedup_candidates.py` ranks pairs by jaccard/lcs (and group
-   by shared `coverage` node, since objectives on the same EK are the most likely
-   dupes — recall `4.5.A.1` has 8). Emit the candidate pairs/clusters, nothing
-   decided.
-2. **Semantic adjudication — interactive (default for now).** You ask me to look
-   at a candidate cluster and say which are true duplicates / which to keep /
+Two rungs (the structural grouping is free; automate the judgment when it pays):
+
+1. **Semantic adjudication — interactive (default for now).** You ask me to look
+   at a node's cluster and say which are true duplicates / which to keep /
    suggested merged wording. Human-in-the-loop, zero new infrastructure.
-3. **Semantic adjudication — automated (later).** Wrap the same judgment in a
-   batch step via the Anthropic API or `claude -p` over the candidate list,
-   emitting proposed merges the app presents for one-click approval. Same prompt,
-   no human per-pair. (House precedent: the LLM extraction workflows.)
+2. **Semantic adjudication — automated (later).** Wrap the same judgment in a
+   batch step via the Anthropic API or `claude -p` over the node-grouped
+   clusters, emitting proposed merges the app presents for one-click approval.
+   Same prompt, no human per-pair. (House precedent: the LLM extraction workflows.)
 
 The merge itself is always human-approved and reversible (`status='merged'` +
 `merged_into`, never a delete).
