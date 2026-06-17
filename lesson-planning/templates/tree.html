@@ -6,7 +6,7 @@
 <li class="node lvl-{{ n.level }}" id="n-{{ n.id }}">
   <div class="row">
     <span class="nid">{{ n.id }}</span>{{ n.label|inline }}
-    {% if n.is_leaf %}<span class="badge {{ n.status }}">{{ STATUS[n.status][0] }}</span>{% endif %}
+    {% if n.is_leaf and n.status == 'planned' %}<span class="badge planned">planned</span>{% endif %}
   </div>
   {% if n.is_leaf %}
     <div class="leafbox">
