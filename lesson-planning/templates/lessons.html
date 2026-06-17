@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_worklist.html" import worklist %}
+{% block title %}{{ course|upper }} lessons{% endblock %}
+
+{% block body %}
+  {{ worklist(course, counts) }}
+  <p>Drag lesson objectives between the pool and lessons, and reorder within a
+     lesson. Lessons can have several while you work; the goal is one per lesson.</p>
+
+  <div class="board">
+    <section class="pool">
+      <h2>Unscheduled ({{ unscheduled|length }})</h2>
+      <ul class="sortable los" data-lesson-id="">
+        {% for o in unscheduled %}
+          <li class="lo" data-id="{{ o.id }}">{{ o.text|inline }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="lessons">
+      <form method="post" action="{{ url_for('lesson_new', course=course) }}" class="addlesson">
+        <input type="text" name="title" placeholder="New lesson title…" required>
+        <button type="submit" class="primary">Add lesson</button>
+      </form>
+
+      {% for L in lessons %}
+        <div class="lessoncard">
+          <div class="lessonhead">
+            <form method="post" class="edit"
+                  action="{{ url_for('lesson_rename', course=course, lesson_id=L.id) }}">
+              <span class="lnum">{{ loop.index }}.</span>
+              <input type="text" name="title" value="{{ L.title }}">
+              <button type="submit">Save</button>
+            </form>
+            <div class="lessonctl">
+              <form method="post" action="{{ url_for('lesson_move', course=course, lesson_id=L.id) }}">
+                <input type="hidden" name="dir" value="up"><button {{ 'disabled' if loop.first }}>↑</button>
+              </form>
+              <form method="post" action="{{ url_for('lesson_move', course=course, lesson_id=L.id) }}">
+                <input type="hidden" name="dir" value="down"><button {{ 'disabled' if loop.last }}>↓</button>
+              </form>
+              <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}">
+                <button class="danger" title="Delete lesson">✕</button>
+              </form>
+            </div>
+          </div>
+          <ul class="sortable los" data-lesson-id="{{ L.id }}">
+            {% for o in L.objectives %}
+              <li class="lo" data-id="{{ o.id }}">{{ o.text|inline }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% else %}
+        <p class="noobj">No lessons yet — add one above.</p>
+      {% endfor %}
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+  <script>
+    const scheduleUrl = "{{ url_for('schedule', course=course) }}";
+    document.querySelectorAll('.sortable').forEach(function (el) {
+      new Sortable(el, {
+        group: 'los', animation: 120, ghostClass: 'drag-ghost',
+        onEnd: function (evt) {
+          const ul = evt.to;
+          const ids = Array.from(ul.querySelectorAll('.lo')).map(li => li.dataset.id);
+          const body = new URLSearchParams();
+          body.set('lesson_id', ul.dataset.lessonId || '');
+          body.set('ids', ids.join(','));
+          fetch(scheduleUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body
+          });
+        }
+      });
+    });
+  </script>
+{% endblock %}

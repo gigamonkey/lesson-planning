@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_worklist.html" import worklist %}
+{% block title %}{{ course|upper }} synthesize{% endblock %}
+
+{% block body %}
+  {{ worklist(course, counts) }}
+  <p>Distill raw objectives into <b>lesson objectives</b> — the whiteboard
+     statement. Check the raw objectives a lesson objective covers, write its
+     text, and create it. This is where duplicates collapse: several overlapping
+     raw objectives roll up into one.</p>
+
+  <div class="cols">
+    <section class="col">
+      <h2>Unsynthesized raw objectives ({{ unsynth|length }})</h2>
+      {% if unsynth %}
+        <form method="post" action="{{ url_for('lesson_objective_new', course=course) }}">
+          <div class="obj">
+            <div class="edit">
+              <input type="text" name="text" placeholder="New lesson objective text…" required>
+              <button type="submit" class="primary">Create from checked</button>
+            </div>
+          </div>
+          <ul class="objlist plain">
+            {% for o in unsynth %}
+              <li>
+                <label>
+                  <input type="checkbox" name="objective_uuid" value="{{ o.uuid }}">
+                  {{ o.text|inline }}
+                  <span class="sim">{{ o.nodes|join(', ') }}</span>
+                </label>
+              </li>
+            {% endfor %}
+          </ul>
+        </form>
+      {% else %}
+        <p>All raw objectives have been synthesized. 🎉</p>
+      {% endif %}
+    </section>
+
+    <section class="col">
+      <h2>Lesson objectives ({{ los|length }})</h2>
+      {% for lo in los %}
+        <div class="obj">
+          <form method="post" class="edit"
+                action="{{ url_for('lesson_objective_edit', course=course, lo_id=lo.id) }}">
+            <input type="text" name="text" value="{{ lo.text }}">
+            <button type="submit">Save</button>
+            {% if lo.scheduled %}<span class="badge planned">scheduled</span>{% endif %}
+          </form>
+          <ul class="objlist">
+            {% for r in lo.raws %}<li class="sim">{{ r.text|inline }}</li>{% endfor %}
+          </ul>
+          <form method="post"
+                action="{{ url_for('lesson_objective_delete', course=course, lo_id=lo.id) }}">
+            <button type="submit" class="danger">Delete</button>
+          </form>
+        </div>
+      {% else %}
+        <p class="noobj">No lesson objectives yet.</p>
+      {% endfor %}
+    </section>
+  </div>
+{% endblock %}

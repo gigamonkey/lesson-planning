@@ -1,0 +1,14 @@
+{% macro worklist(course, counts) %}
+<div class="stats">
+  <a class="stat" href="{{ url_for('tree', course=course, filter='gaps') }}">
+    <b style="color:var(--gap)">{{ counts.gaps }}</b><span>CED gaps</span></a>
+  <a class="stat" href="{{ url_for('synthesize', course=course) }}">
+    <b style="color:var(--objective)">{{ counts.unsynth }}</b><span>unsynthesized raw</span></a>
+  <a class="stat" href="{{ url_for('lessons', course=course) }}">
+    <b>{{ counts.unscheduled }}</b><span>unscheduled lesson obj.</span></a>
+  <div class="stat"><b style="color:var(--planned)">{{ counts.planned_pct }}%</b><span>leaves planned</span></div>
+  <div class="bar" title="{{ counts.planned }} of {{ counts.leaves }} leaves planned">
+    <i class="planned" style="width:{{ (100 * counts.planned / counts.leaves) if counts.leaves else 0 }}%"></i>
+  </div>
+</div>
+{% endmacro %}

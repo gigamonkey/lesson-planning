@@ -337,5 +337,221 @@ def export(course):
     return redirect(request.referrer or url_for("objectives", course=course))
 
 
+# --------------------------------------------------------------------------
+# Lesson builder: synthesize raw -> lesson objectives, then schedule into lessons
+
+def worklist_counts(conn, course):
+    """The three progressive worklists plus planned-leaf coverage, as counts."""
+    def scalar(sql):
+        return conn.execute(sql, (course,)).fetchone()[0]
+
+    leaves = scalar("SELECT count(*) FROM nodes WHERE course=? AND is_leaf=1")
+    gaps = scalar("""
+        SELECT count(*) FROM nodes n WHERE n.course=? AND n.is_leaf=1
+          AND NOT EXISTS (
+            SELECT 1 FROM coverage cv JOIN objectives o
+                   ON o.uuid=cv.uuid AND o.status='active'
+             WHERE cv.course=n.course AND cv.node_id=n.node_id)""")
+    planned = scalar("""
+        SELECT count(*) FROM nodes n WHERE n.course=? AND n.is_leaf=1
+          AND EXISTS (
+            SELECT 1 FROM coverage cv
+              JOIN objectives o         ON o.uuid=cv.uuid AND o.status='active'
+              JOIN objective_rollup r   ON r.objective_uuid=cv.uuid
+              JOIN lesson_objectives lo ON lo.id=r.lesson_objective_id
+             WHERE cv.course=n.course AND cv.node_id=n.node_id
+               AND lo.lesson_id IS NOT NULL)""")
+    unsynth = scalar("""
+        SELECT count(*) FROM objectives o
+          JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
+         WHERE o.status='active'
+           AND NOT EXISTS (SELECT 1 FROM objective_rollup r
+                            WHERE r.objective_uuid=o.uuid)""")
+    unscheduled = scalar(
+        "SELECT count(*) FROM lesson_objectives WHERE course=? AND lesson_id IS NULL")
+    return {"leaves": leaves, "gaps": gaps, "planned": planned,
+            "unsynth": unsynth, "unscheduled": unscheduled,
+            "planned_pct": round(100 * planned / leaves) if leaves else 0}
+
+
+def rolled_uuids(conn, course):
+    """Raw objective uuids already rolled into some lesson objective for a course."""
+    return {r["objective_uuid"] for r in conn.execute(
+        """SELECT r.objective_uuid FROM objective_rollup r
+             JOIN lesson_objectives lo ON lo.id = r.lesson_objective_id
+            WHERE lo.course = ?""", (course,))}
+
+
+def _id_list(field="ids"):
+    """Read an id list sent either as repeated fields or one comma-joined field."""
+    vals = request.form.getlist(field)
+    if len(vals) == 1 and "," in vals[0]:
+        vals = vals[0].split(",")
+    return [v for v in (s.strip() for s in vals) if v]
+
+
+@app.route("/<course>/synthesize")
+def synthesize(course):
+    with db() as conn:
+        cs = courses(conn)
+        counts = worklist_counts(conn, course)
+        order = node_order(conn, course)
+        objs = active_objectives(conn, course)
+        rolled = rolled_uuids(conn, course)
+        los = []
+        for lo in conn.execute(
+            "SELECT id, text, lesson_id FROM lesson_objectives "
+            "WHERE course=? ORDER BY id", (course,)):
+            raws = [objs.get(r["objective_uuid"],
+                             {"uuid": r["objective_uuid"], "text": "(missing)", "nodes": []})
+                    for r in conn.execute(
+                        "SELECT objective_uuid FROM objective_rollup "
+                        "WHERE lesson_objective_id=?", (lo["id"],))]
+            los.append({"id": lo["id"], "text": lo["text"],
+                        "scheduled": lo["lesson_id"] is not None, "raws": raws})
+
+    def key(o):
+        ords = [order.get(n, 10**9) for n in o["nodes"]]
+        return (min(ords) if ords else 10**9, o["text"].lower())
+    unsynth = sorted((o for o in objs.values() if o["uuid"] not in rolled), key=key)
+    return render_template("synthesize.html", course=course, courses=cs,
+                           counts=counts, unsynth=unsynth, los=los)
+
+
+@app.route("/<course>/lesson-objective/new", methods=["POST"])
+def lesson_objective_new(course):
+    text = (request.form.get("text") or "").strip()
+    uuids = request.form.getlist("objective_uuid")
+    if text:
+        with db() as conn:
+            cur = conn.execute(
+                "INSERT INTO lesson_objectives(course, text, lesson_id, position) "
+                "VALUES (?, ?, NULL, NULL)", (course, text))
+            for u in uuids:
+                conn.execute("INSERT OR IGNORE INTO objective_rollup VALUES (?, ?)",
+                             (cur.lastrowid, u))
+            conn.commit()
+        flash(f"Created lesson objective from {len(uuids)} raw objective(s).")
+    return _back(course)
+
+
+@app.route("/<course>/lesson-objective/<int:lo_id>/edit", methods=["POST"])
+def lesson_objective_edit(course, lo_id):
+    text = (request.form.get("text") or "").strip()
+    if text:
+        with db() as conn:
+            conn.execute("UPDATE lesson_objectives SET text=? WHERE id=? AND course=?",
+                         (text, lo_id, course))
+            conn.commit()
+    return _back(course)
+
+
+@app.route("/<course>/lesson-objective/<int:lo_id>/delete", methods=["POST"])
+def lesson_objective_delete(course, lo_id):
+    with db() as conn:
+        conn.execute("DELETE FROM objective_rollup WHERE lesson_objective_id=?", (lo_id,))
+        conn.execute("DELETE FROM lesson_objectives WHERE id=? AND course=?", (lo_id, course))
+        conn.commit()
+    flash("Deleted lesson objective (its raw objectives return to the pool).")
+    return _back(course)
+
+
+@app.route("/<course>/lessons")
+def lessons(course):
+    with db() as conn:
+        cs = courses(conn)
+        counts = worklist_counts(conn, course)
+        lessons = [dict(r) for r in conn.execute(
+            "SELECT id, title, position FROM lessons WHERE course=? "
+            "ORDER BY position, id", (course,))]
+        lo_rows = conn.execute(
+            "SELECT id, text, lesson_id FROM lesson_objectives WHERE course=? "
+            "ORDER BY position IS NULL, position, id", (course,)).fetchall()
+    by_lesson, unscheduled = {}, []
+    for r in lo_rows:
+        d = {"id": r["id"], "text": r["text"]}
+        (unscheduled if r["lesson_id"] is None
+         else by_lesson.setdefault(r["lesson_id"], [])).append(d)
+    for L in lessons:
+        L["objectives"] = by_lesson.get(L["id"], [])
+    return render_template("lessons.html", course=course, courses=cs,
+                           counts=counts, lessons=lessons, unscheduled=unscheduled)
+
+
+@app.route("/<course>/lesson/new", methods=["POST"])
+def lesson_new(course):
+    title = (request.form.get("title") or "").strip()
+    if title:
+        with db() as conn:
+            nxt = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 FROM lessons WHERE course=?",
+                (course,)).fetchone()[0]
+            conn.execute("INSERT INTO lessons(course, title, position) VALUES (?, ?, ?)",
+                         (course, title, nxt))
+            conn.commit()
+        flash(f"Added lesson: {title}")
+    return _back(course)
+
+
+@app.route("/<course>/lesson/<int:lesson_id>/rename", methods=["POST"])
+def lesson_rename(course, lesson_id):
+    title = (request.form.get("title") or "").strip()
+    if title:
+        with db() as conn:
+            conn.execute("UPDATE lessons SET title=? WHERE id=? AND course=?",
+                         (title, lesson_id, course))
+            conn.commit()
+    return _back(course)
+
+
+@app.route("/<course>/lesson/<int:lesson_id>/delete", methods=["POST"])
+def lesson_delete(course, lesson_id):
+    with db() as conn:
+        # Unschedule its lesson objectives (back to the pool), then drop the lesson.
+        conn.execute("UPDATE lesson_objectives SET lesson_id=NULL, position=NULL "
+                     "WHERE lesson_id=?", (lesson_id,))
+        conn.execute("DELETE FROM lessons WHERE id=? AND course=?", (lesson_id, course))
+        conn.commit()
+    flash("Deleted lesson; its objectives returned to the unscheduled pool.")
+    return _back(course)
+
+
+@app.route("/<course>/lesson/<int:lesson_id>/move", methods=["POST"])
+def lesson_move(course, lesson_id):
+    direction = request.form.get("dir")
+    with db() as conn:
+        rows = conn.execute("SELECT id, position FROM lessons WHERE course=? "
+                            "ORDER BY position, id", (course,)).fetchall()
+        ids = [r["id"] for r in rows]
+        if lesson_id in ids:
+            i = ids.index(lesson_id)
+            j = i - 1 if direction == "up" else i + 1
+            if 0 <= j < len(ids):
+                ids[i], ids[j] = ids[j], ids[i]
+                for pos, lid in enumerate(ids):
+                    conn.execute("UPDATE lessons SET position=? WHERE id=?", (pos, lid))
+                conn.commit()
+    return _back(course)
+
+
+@app.route("/<course>/schedule", methods=["POST"])
+def schedule(course):
+    """Place/reorder lesson objectives in a container (a lesson, or the pool).
+
+    Form: `lesson_id` (empty = unscheduled pool) and `ids` (the container's new
+    ordered lesson_objective ids). Sets each id's lesson_id and position by index.
+    Returns 204 (called from drag/drop via fetch).
+    """
+    lesson_id = (request.form.get("lesson_id") or "").strip() or None
+    ids = _id_list("ids")
+    with db() as conn:
+        for pos, lo_id in enumerate(ids):
+            conn.execute(
+                "UPDATE lesson_objectives SET lesson_id=?, position=? "
+                "WHERE id=? AND course=?", (lesson_id, pos, lo_id, course))
+        conn.commit()
+    return ("", 204)
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=int(os.environ.get("PORT", "5001")))
