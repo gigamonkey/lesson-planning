@@ -9,34 +9,9 @@
     {% if n.is_leaf and n.status == 'planned' %}<span class="badge planned">planned</span>{% endif %}
   </div>
   {% if n.is_leaf %}
-    <div class="leafbox{% if not n.objectives %} empty{% endif %}">
-      {% if n.objectives %}
-        <ul class="objlist">
-          {% for o in n.objectives %}
-            <li>
-              <form method="post" class="objedit"
-                    action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}">
-                <input type="hidden" name="anchor" value="n-{{ n.id }}">
-                <input type="text" name="text" value="{{ o.text }}">
-                <button type="submit" title="Save edit">Save</button>
-              </form>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <div class="noobj">no objectives yet</div>
-      {% endif %}
-      <details class="addobj">
-        <summary>+ add objective</summary>
-        <form method="post" class="objedit"
-              action="{{ url_for('objective_new', course=course) }}">
-          <input type="hidden" name="node_id" value="{{ n.id }}">
-          <input type="hidden" name="anchor" value="n-{{ n.id }}">
-          <input type="text" name="text" placeholder="New objective for {{ n.id }}…" required>
-          <button type="submit" class="primary">Add</button>
-        </form>
-      </details>
-    </div>
+    {% with node_id = n.id, objectives = n.objectives %}
+      {% include "_leafbox.html" %}
+    {% endwith %}
   {% endif %}
   {% if n.children %}
     <ul>{% for c in n.children %}{{ node(c) }}{% endfor %}</ul>

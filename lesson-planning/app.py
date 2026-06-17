@@ -274,19 +274,35 @@ def _back(course):
     return redirect(target)
 
 
+def leafbox_response(course, node_id):
+    """Render the leaf's objectives box partial (the htmx swap target)."""
+    with db() as conn:
+        objs = conn.execute(
+            """SELECT o.uuid, o.text FROM coverage cv
+                 JOIN objectives o ON o.uuid = cv.uuid AND o.status = 'active'
+                WHERE cv.course = ? AND cv.node_id = ? ORDER BY o.text""",
+            (course, node_id)).fetchall()
+    return render_template("_leafbox.html", course=course,
+                           node_id=node_id, objectives=objs)
+
+
 @app.route("/<course>/objective/new", methods=["POST"])
 def objective_new(course):
     text = (request.form.get("text") or "").strip()
+    node = (request.form.get("node_id") or "").strip()
     if text:
         u = str(uuidlib.uuid4())
         with db() as conn:
             conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
             conn.execute("INSERT INTO course_objectives VALUES (?, ?)", (course, u))
-            node = (request.form.get("node_id") or "").strip()
             if node:
                 conn.execute("INSERT OR IGNORE INTO coverage VALUES (?, ?, ?)",
                              (course, u, node))
             conn.commit()
+    # htmx (outline): swap just this leaf's box; otherwise PRG back to the page.
+    if request.headers.get("HX-Request"):
+        return leafbox_response(course, node)
+    if text:
         flash(f"Added objective: {text}")
     return _back(course)
 
@@ -298,6 +314,9 @@ def objective_edit(course, uuid):
         with db() as conn:
             conn.execute("UPDATE objectives SET text = ? WHERE uuid = ?", (text, uuid))
             conn.commit()
+    if request.headers.get("HX-Request"):
+        return leafbox_response(course, (request.form.get("node_id") or "").strip())
+    if text:
         flash("Edited objective.")
     return _back(course)
 

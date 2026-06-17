@@ -1,0 +1,39 @@
+{# Leaf objectives box. Shared by the outline tree and the htmx add/edit
+   responses, so an add/edit swaps in markup identical to a fresh render --
+   including the `.empty` class (red border) flipping off once objectives exist.
+   Forms target the enclosing .leafbox (node ids contain dots, so an #id CSS
+   selector won't work); they keep `action`/`method` so they still work without
+   htmx. #}
+<div class="leafbox{% if not objectives %} empty{% endif %}">
+  {% if objectives %}
+    <ul class="objlist">
+      {% for o in objectives %}
+        <li>
+          <form method="post" class="objedit"
+                action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
+                hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
+                hx-target="closest .leafbox" hx-swap="outerHTML">
+            <input type="hidden" name="node_id" value="{{ node_id }}">
+            <input type="hidden" name="anchor" value="n-{{ node_id }}">
+            <input type="text" name="text" value="{{ o.text }}">
+            <button type="submit" title="Save edit">Save</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="noobj">no objectives yet</div>
+  {% endif %}
+  <details class="addobj">
+    <summary>+ add objective</summary>
+    <form method="post" class="objedit"
+          action="{{ url_for('objective_new', course=course) }}"
+          hx-post="{{ url_for('objective_new', course=course) }}"
+          hx-target="closest .leafbox" hx-swap="outerHTML">
+      <input type="hidden" name="node_id" value="{{ node_id }}">
+      <input type="hidden" name="anchor" value="n-{{ node_id }}">
+      <input type="text" name="text" placeholder="New objective for {{ node_id }}…" required>
+      <button type="submit" class="primary">Add</button>
+    </form>
+  </details>
+</div>
