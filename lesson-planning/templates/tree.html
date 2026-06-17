@@ -9,7 +9,7 @@
     {% if n.is_leaf and n.status == 'planned' %}<span class="badge planned">planned</span>{% endif %}
   </div>
   {% if n.is_leaf %}
-    <div class="leafbox">
+    <div class="leafbox{% if not n.objectives %} empty{% endif %}">
       {% if n.objectives %}
         <ul class="objlist">
           {% for o in n.objectives %}
