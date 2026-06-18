@@ -4,7 +4,6 @@
 
 {% macro rawitem(o) %}
 <li class="rawitem" data-uuid="{{ o.uuid }}">
-  <span class="grip" title="drag">⠿</span>
   <span class="rawtext">{{ o.text|inline }}</span>
   <span class="sim">{{ o.nodes|join(', ') }}</span>
 </li>
@@ -13,7 +12,6 @@
 {% macro lessoncard(L) %}
 <li class="lessoncard" data-lesson-id="{{ L.uuid }}">
   <div class="lessonhead">
-    <span class="grip lessonhandle" title="drag lesson between units">⠿</span>
     <form method="post" class="edit autosave"
           action="{{ url_for('lesson_edit', course=course, lesson_id=L.uuid) }}"
           hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.uuid) }}" hx-swap="none">
@@ -118,7 +116,7 @@
     // Raw objectives: drag between the pool, unit rough-zones, and lessons.
     document.querySelectorAll('.sortable.rawzone').forEach(function (el) {
       new Sortable(el, {
-        group: 'raws', handle: '.grip', draggable: 'li.rawitem',
+        group: 'raws', draggable: 'li.rawitem',
         animation: 120, ghostClass: 'sortable-ghost',
         onEnd: function (evt) {
           const body = new URLSearchParams();
@@ -138,7 +136,11 @@
     // Lessons: drag (by the grip) between units and Unassigned.
     document.querySelectorAll('.sortable.unitlessons').forEach(function (el) {
       new Sortable(el, {
-        group: 'lessons', handle: '.lessonhandle', draggable: 'li.lessoncard',
+        group: 'lessons', draggable: 'li.lessoncard',
+        // Whole card drags, except its inputs/buttons and the nested raw zone
+        // (so you can still edit fields and drag raws). preventOnFilter:false
+        // lets the inputs receive focus.
+        filter: 'input, textarea, button, ul.rawzone', preventOnFilter: false,
         animation: 120, ghostClass: 'sortable-ghost',
         onEnd: function (evt) {
           const body = new URLSearchParams();

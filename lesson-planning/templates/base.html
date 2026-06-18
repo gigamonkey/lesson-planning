@@ -169,9 +169,8 @@
     ul.sortable.rawpool { margin-top: 0; min-height: 4rem; }
     li.rawitem { display: flex; gap: .4rem; align-items: baseline; background: #fff;
               border: 1px solid var(--line); border-radius: 4px; padding: .25rem .45rem;
-              margin: .25rem 0; font-size: .9rem; }
-    li.rawitem .grip { cursor: grab; }
-    li.rawitem .grip:active { cursor: grabbing; }
+              margin: .25rem 0; font-size: .9rem; cursor: grab; }
+    li.rawitem:active { cursor: grabbing; }
     li.rawitem .rawtext { flex: 1; min-width: 0; }
     li.rawitem.sortable-ghost { opacity: .4; }
 
@@ -211,11 +210,10 @@
             background: #fff; outline: none; }
     .unitlabel { flex: 1; font-weight: 700; color: var(--muted); }
     ul.unitlessons { min-height: 3rem; }
-    .lessonhandle { cursor: grab; color: #c4c4c4; font-size: .85rem; }
-    .lessonhandle:active { cursor: grabbing; }
     .lessonhead .edit input { flex: 1; min-width: 0; padding: .2rem .4rem;
             border: 1px solid var(--line); border-radius: 4px; }
-    ul.unitlessons > li.lessoncard { margin: .35rem 0; cursor: default; }
+    ul.unitlessons > li.lessoncard { margin: .35rem 0; cursor: grab; }
+    .lessoncard input, .lessoncard textarea { cursor: text; }
     /* Plan page: outline (left) + raw pool (right). */
     .plan-board { grid-template-columns: 1fr 300px; }
     .plan-board .pool { position: sticky; top: 60px; }
