@@ -1,5 +1,5 @@
-{% macro statbar(stats) %}
-<div class="stats">
+{% macro statbar(stats, id=None) %}
+<div class="stats"{% if id %} id="{{ id }}"{% endif %}>
   <div class="stat"><b>{{ stats.leaves }}</b><span>leaf nodes</span></div>
   <div class="stat"><b style="color:var(--gap)">{{ stats.gaps }}</b><span>gaps</span></div>
   <div class="stat"><b style="color:var(--objective)">{{ stats.objective }}</b><span>objective only</span></div>

@@ -292,6 +292,14 @@ def leafbox(course, node_id):
     return leafbox_response(course, node_id)
 
 
+@app.route("/<course>/outline-stats")
+def outline_stats(course):
+    """The outline's coverage stats bar partial (refreshed after add/recategorize)."""
+    with db() as conn:
+        nodes, obn, planned = load_course(conn, course)
+    return render_template("_outline_stats.html", stats=summary(nodes, obn, planned))
+
+
 @app.route("/<course>/objective/<uuid>/recategorize", methods=["POST"])
 def recategorize(course, uuid):
     """Move an objective's coverage from one leaf to another (drag/drop)."""
