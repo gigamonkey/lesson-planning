@@ -463,8 +463,10 @@ def help_page():
 def workspace_data(conn, course, H):
     """Node tree of hierarchy H with the raw objectives mapped onto each node, plus
     the unplaced pool. Single placement per hierarchy: an objective sits under one
-    node of H or in the pool. Each objective also carries `tags` -- its coverage in
-    OTHER hierarchies -- as cross-reference hints."""
+    node of H or in the pool. Each objective also carries `tags` -- its node ids in
+    OTHER reference hierarchies -- as cross-reference hints (outline placements are
+    omitted: their node ids are uuids, not meaningful labels)."""
+    refs = {r[0] for r in conn.execute("SELECT hierarchy FROM hierarchies WHERE editable=0")}
     objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "position": r["position"],
                         "node": None, "tags": []}
             for r in conn.execute(
@@ -479,7 +481,7 @@ def workspace_data(conn, course, H):
             continue
         if r["hierarchy"] == H:
             o["node"] = r["node_id"]
-        else:
+        elif r["hierarchy"] in refs:
             o["tags"].append(r["node_id"])
     for o in objs.values():
         o["tags"] = sorted(set(o["tags"]))
