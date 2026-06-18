@@ -32,4 +32,29 @@
   {% else %}
     <ul class="tree">{% for n in tree %}{{ node(n) }}{% endfor %}</ul>
   {% endif %}
+
+  <script>
+    // Add a new objective row at the end of a leaf's list: clone the template,
+    // focus it so you can type right away, Escape cancels. Saving htmx-swaps the
+    // whole leafbox. Re-clicking just focuses the pending row.
+    function addObjective(btn) {
+      const box = btn.closest('.leafbox');
+      const ul = box.querySelector('ul.objlist');
+      const noobj = box.querySelector('.noobj');
+      let li = ul.querySelector('li.newobj');
+      if (!li) {
+        li = box.querySelector('template.newobj-tpl').content.firstElementChild.cloneNode(true);
+        ul.appendChild(li);
+        if (window.htmx) htmx.process(li);
+        if (noobj) noobj.hidden = true;
+        li.querySelector('input[name=text]').addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') {
+            li.remove();
+            if (noobj && !ul.children.length) noobj.hidden = false;
+          }
+        });
+      }
+      li.querySelector('input[name=text]').focus();
+    }
+  </script>
 {% endblock %}
