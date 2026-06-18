@@ -45,11 +45,13 @@ CREATE TABLE IF NOT EXISTS nodes (
   PRIMARY KEY (hierarchy, node_id)
 );
 
--- RAW objectives: the atoms the teacher drafted. Deduped; mapped via coverage.
--- Course-agnostic text; a raw objective can belong to >1 course.
+-- RAW objectives: the atoms the teacher drafted. Course-agnostic text; a raw
+-- objective can belong to >1 course. Text is the natural key (UNIQUE): importers
+-- and the app intern by text -- find-or-create -- so identical text never yields
+-- two objectives (they share one uuid and accumulate coverage edges).
 CREATE TABLE IF NOT EXISTS objectives (
   uuid   TEXT PRIMARY KEY,
-  text   TEXT NOT NULL,
+  text   TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL DEFAULT 'active'  -- reserved hook (soft-delete/archive); always 'active' today
 );
 

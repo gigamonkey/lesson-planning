@@ -183,6 +183,29 @@ def ensure_schema():
                              " SELECT uuid, text, status FROM objectives")
                 conn.execute("DROP TABLE objectives")
                 conn.execute("ALTER TABLE objectives_new RENAME TO objectives")
+
+            # Enforce unique objective text: merge any duplicate-text objectives
+            # onto one survivor (repointing coverage + pool membership), then add
+            # the unique index. Idempotent -- a no-op once text is unique.
+            if "objectives" in {r[0] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")}:
+                for (text,) in conn.execute(
+                        "SELECT text FROM objectives GROUP BY text HAVING count(*)>1").fetchall():
+                    uuids = [u for (u,) in conn.execute(
+                        "SELECT uuid FROM objectives WHERE text=? ORDER BY uuid", (text,))]
+                    keep, drop = uuids[0], uuids[1:]
+                    for d in drop:
+                        conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
+                                     " SELECT hierarchy, ?, node_id FROM coverage WHERE uuid=?",
+                                     (keep, d))
+                        conn.execute("DELETE FROM coverage WHERE uuid=?", (d,))
+                        conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid, position)"
+                                     " SELECT course, ?, position FROM course_objectives WHERE uuid=?",
+                                     (keep, d))
+                        conn.execute("DELETE FROM course_objectives WHERE uuid=?", (d,))
+                        conn.execute("DELETE FROM objectives WHERE uuid=?", (d,))
+                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS objectives_text_unique"
+                             " ON objectives(text)")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)
@@ -554,10 +577,14 @@ def objective_new(course):
     text = (request.form.get("text") or "").strip()
     node = (request.form.get("node_id") or "").strip()
     if text:
-        u = str(uuidlib.uuid4())
         with db() as conn:
-            conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
-            conn.execute("INSERT INTO course_objectives(course, uuid) VALUES (?, ?)", (course, u))
+            # Intern by text: reuse the existing objective, or create a new one.
+            row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
+            u = row[0] if row else str(uuidlib.uuid4())
+            if not row:
+                conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
+            conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid) VALUES (?, ?)",
+                         (course, u))
             if node:
                 conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
                              "VALUES (?, ?, ?)", (reference_hierarchy(conn, course), u, node))
@@ -575,6 +602,15 @@ def objective_edit(course, uuid):
     text = (request.form.get("text") or "").strip()
     if text:
         with db() as conn:
+            # Text is the natural key: refuse an edit that would duplicate another
+            # objective (the user should map both to a node, not retype the text).
+            clash = conn.execute("SELECT 1 FROM objectives WHERE text=? AND uuid<>?",
+                                 (text, uuid)).fetchone()
+            if clash:
+                if request.headers.get("HX-Request"):
+                    return ("an objective with that text already exists", 409)
+                flash("Not saved: an objective with that text already exists.")
+                return _back(course)
             conn.execute("UPDATE objectives SET text = ? WHERE uuid = ?", (text, uuid))
             conn.commit()
     # An edit doesn't change structure/coverage, so no re-render -- just persist.

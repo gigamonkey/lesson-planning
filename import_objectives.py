@@ -36,7 +36,7 @@ import uuid as uuidlib
 DDL = [
     """CREATE TABLE IF NOT EXISTS objectives (
          uuid TEXT PRIMARY KEY,
-         text TEXT NOT NULL,
+         text TEXT NOT NULL UNIQUE,
          status TEXT NOT NULL DEFAULT 'active'
        )""",
     """CREATE TABLE IF NOT EXISTS course_objectives (
