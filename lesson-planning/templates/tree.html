@@ -45,6 +45,13 @@
                                  { target: '#outline-stats', swap: 'outerHTML' });
     }
 
+    // Clicking anywhere in an empty leaf's box opens a new objective row,
+    // like the + button -- but not when clicking the input/button themselves.
+    function boxClick(ev) {
+      if (ev.target.closest('input, button, textarea, select, a')) return;
+      addObjective(ev.currentTarget);
+    }
+
     // Collapse / expand a node's subtree (the triangle on non-leaf headers).
     function toggleNode(ev, el) {
       ev.stopPropagation();

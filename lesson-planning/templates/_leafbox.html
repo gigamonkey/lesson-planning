@@ -6,7 +6,8 @@
    so they work without htmx. Each objective li carries data-uuid and a .grip drag
    handle; the ul carries data-node-id -- used to recategorize an objective by
    dragging it to another leaf. #}
-<div class="leafbox{% if not objectives %} empty{% endif %}">
+<div class="leafbox{% if not objectives %} empty{% endif %}"
+     {%- if not objectives %} onclick="boxClick(event)"{% endif %}>
   <ul class="objlist" data-node-id="{{ node_id }}">
     {% for o in objectives %}
       <li class="obj" data-uuid="{{ o.uuid }}">
@@ -25,7 +26,7 @@
       </li>
     {% endfor %}
   </ul>
-  {% if not objectives %}<div class="noobj">no objectives yet</div>{% endif %}
+  {% if not objectives %}<div class="noobj">no objectives yet — click to add</div>{% endif %}
   <button type="button" class="addbtn" title="add objective" onclick="addObjective(this)">+</button>
 
   <template class="newobj-tpl">
