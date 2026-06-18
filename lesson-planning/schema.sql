@@ -50,12 +50,23 @@ CREATE TABLE IF NOT EXISTS coverage (
   FOREIGN KEY (course, node_id) REFERENCES nodes(course, node_id)
 );
 
--- The teacher's own structure: an ordered list of lessons per course.
-CREATE TABLE IF NOT EXISTS lessons (
+-- The teacher's own top-level grouping (distinct from CED units): lessons are
+-- organized into units. Ordered per course.
+CREATE TABLE IF NOT EXISTS units (
   id       INTEGER PRIMARY KEY,
   course   TEXT NOT NULL,
   title    TEXT NOT NULL,
   position INTEGER NOT NULL          -- order within the course
+);
+
+-- The teacher's own structure: an ordered list of lessons, each optionally in a
+-- unit (unit_id NULL = ungrouped). Position orders lessons within their group.
+CREATE TABLE IF NOT EXISTS lessons (
+  id       INTEGER PRIMARY KEY,
+  course   TEXT NOT NULL,
+  title    TEXT NOT NULL,
+  unit_id  INTEGER REFERENCES units(id),  -- NULL = unassigned
+  position INTEGER NOT NULL               -- order within the unit (or the unassigned group)
 );
 
 -- LESSON objectives: the student-facing statement (whiteboard objective),

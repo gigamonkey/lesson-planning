@@ -59,7 +59,14 @@ def ensure_schema():
             cols = [r[1] for r in conn.execute("PRAGMA table_info(course_objectives)")]
             if "position" not in cols:
                 conn.execute("ALTER TABLE course_objectives ADD COLUMN position INTEGER")
-                conn.commit()
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS units ("
+                "id INTEGER PRIMARY KEY, course TEXT NOT NULL, title TEXT NOT NULL,"
+                " position INTEGER NOT NULL)")
+            lcols = [r[1] for r in conn.execute("PRAGMA table_info(lessons)")]
+            if lcols and "unit_id" not in lcols:
+                conn.execute("ALTER TABLE lessons ADD COLUMN unit_id INTEGER")
+            conn.commit()
     except sqlite3.OperationalError:
         pass  # table not created yet (unseeded db)
 
@@ -600,21 +607,31 @@ def lessons(course):
     with db() as conn:
         cs = courses(conn)
         counts = worklist_counts(conn, course)
-        lessons = [dict(r) for r in conn.execute(
-            "SELECT id, title, position FROM lessons WHERE course=? "
+        unit_rows = [dict(r) for r in conn.execute(
+            "SELECT id, title FROM units WHERE course=? ORDER BY position, id", (course,))]
+        lesson_rows = [dict(r) for r in conn.execute(
+            "SELECT id, title, unit_id FROM lessons WHERE course=? "
             "ORDER BY position, id", (course,))]
         lo_rows = conn.execute(
             "SELECT id, text, lesson_id FROM lesson_objectives WHERE course=? "
             "ORDER BY position IS NULL, position, id", (course,)).fetchall()
+
     by_lesson, unscheduled = {}, []
     for r in lo_rows:
         d = {"id": r["id"], "text": r["text"]}
         (unscheduled if r["lesson_id"] is None
          else by_lesson.setdefault(r["lesson_id"], [])).append(d)
-    for L in lessons:
+    for L in lesson_rows:
         L["objectives"] = by_lesson.get(L["id"], [])
+
+    by_unit = {}
+    for L in lesson_rows:
+        by_unit.setdefault(L["unit_id"], []).append(L)
+    for u in unit_rows:
+        u["lessons"] = by_unit.get(u["id"], [])
+    ungrouped = by_unit.get(None, [])
     return render_template("lessons.html", course=course, courses=cs,
-                           counts=counts, lessons=lessons, unscheduled=unscheduled)
+                           counts=counts, units=unit_rows, ungrouped=ungrouped)
 
 
 @app.route("/<course>/lesson/new", methods=["POST"])
@@ -623,8 +640,8 @@ def lesson_new(course):
     if title:
         with db() as conn:
             nxt = conn.execute(
-                "SELECT COALESCE(MAX(position), -1) + 1 FROM lessons WHERE course=?",
-                (course,)).fetchone()[0]
+                "SELECT COALESCE(MAX(position), -1) + 1 FROM lessons "
+                "WHERE course=? AND unit_id IS NULL", (course,)).fetchone()[0]
             conn.execute("INSERT INTO lessons(course, title, position) VALUES (?, ?, ?)",
                          (course, title, nxt))
             conn.commit()
@@ -655,20 +672,73 @@ def lesson_delete(course, lesson_id):
     return _back(course)
 
 
-@app.route("/<course>/lesson/<int:lesson_id>/move", methods=["POST"])
-def lesson_move(course, lesson_id):
+@app.route("/<course>/lesson/arrange", methods=["POST"])
+def lesson_arrange(course):
+    """Place/reorder lessons in a unit (or the unassigned group), via drag.
+
+    Form: `unit` (a unit id, or "" / "none" for unassigned) and `ids` (the
+    group's new ordered lesson ids). Sets each lesson's unit_id and position.
+    """
+    unit = (request.form.get("unit") or "").strip()
+    unit_id = None if unit in ("", "none") else int(unit)
+    with db() as conn:
+        for pos, lid in enumerate(_id_list("ids")):
+            conn.execute("UPDATE lessons SET unit_id=?, position=? WHERE id=? AND course=?",
+                         (unit_id, pos, int(lid), course))
+        conn.commit()
+    return ("", 204)
+
+
+@app.route("/<course>/unit/new", methods=["POST"])
+def unit_new(course):
+    title = (request.form.get("title") or "").strip()
+    if title:
+        with db() as conn:
+            nxt = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 FROM units WHERE course=?",
+                (course,)).fetchone()[0]
+            conn.execute("INSERT INTO units(course, title, position) VALUES (?, ?, ?)",
+                         (course, title, nxt))
+            conn.commit()
+        flash(f"Added unit: {title}")
+    return _back(course)
+
+
+@app.route("/<course>/unit/<int:unit_id>/rename", methods=["POST"])
+def unit_rename(course, unit_id):
+    title = (request.form.get("title") or "").strip()
+    if title:
+        with db() as conn:
+            conn.execute("UPDATE units SET title=? WHERE id=? AND course=?",
+                         (title, unit_id, course))
+            conn.commit()
+    return _back(course)
+
+
+@app.route("/<course>/unit/<int:unit_id>/delete", methods=["POST"])
+def unit_delete(course, unit_id):
+    with db() as conn:
+        # Ungroup its lessons (back to Unassigned), then drop the unit.
+        conn.execute("UPDATE lessons SET unit_id=NULL WHERE unit_id=?", (unit_id,))
+        conn.execute("DELETE FROM units WHERE id=? AND course=?", (unit_id, course))
+        conn.commit()
+    flash("Deleted unit; its lessons moved to Unassigned.")
+    return _back(course)
+
+
+@app.route("/<course>/unit/<int:unit_id>/move", methods=["POST"])
+def unit_move(course, unit_id):
     direction = request.form.get("dir")
     with db() as conn:
-        rows = conn.execute("SELECT id, position FROM lessons WHERE course=? "
-                            "ORDER BY position, id", (course,)).fetchall()
-        ids = [r["id"] for r in rows]
-        if lesson_id in ids:
-            i = ids.index(lesson_id)
+        ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM units WHERE course=? ORDER BY position, id", (course,))]
+        if unit_id in ids:
+            i = ids.index(unit_id)
             j = i - 1 if direction == "up" else i + 1
             if 0 <= j < len(ids):
                 ids[i], ids[j] = ids[j], ids[i]
-                for pos, lid in enumerate(ids):
-                    conn.execute("UPDATE lessons SET position=? WHERE id=?", (pos, lid))
+                for pos, uid in enumerate(ids):
+                    conn.execute("UPDATE units SET position=? WHERE id=?", (pos, uid))
                 conn.commit()
     return _back(course)
 

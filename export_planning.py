@@ -25,7 +25,9 @@ TABLES = {
     "objectives": (["uuid", "text", "status"], ["uuid"]),
     "course_objectives": (["course", "uuid", "position"], ["course", "uuid"]),
     "coverage": (["course", "uuid", "node_id"], ["course", "node_id", "uuid"]),
-    "lessons": (["id", "course", "title", "position"], ["course", "position", "id"]),
+    "units": (["id", "course", "title", "position"], ["course", "position", "id"]),
+    "lessons": (["id", "course", "title", "unit_id", "position"],
+                ["course", "unit_id", "position", "id"]),
     "lesson_objectives": (
         ["id", "course", "text", "lesson_id", "position"],
         ["course", "lesson_id", "position", "id"],

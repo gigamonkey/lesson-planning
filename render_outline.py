@@ -37,11 +37,18 @@ def fetch(conn, course):
             out.append({"id": lo["id"], "text": lo["text"], "raws": raws, "nodes": nodes})
         return out
 
-    lessons = []
-    for L in conn.execute("SELECT id, title FROM lessons WHERE course=? "
+    lessons_by_unit, all_lessons = {}, []
+    for L in conn.execute("SELECT id, title, unit_id FROM lessons WHERE course=? "
                           "ORDER BY position, id", (course,)):
-        lessons.append({"id": L["id"], "title": L["title"],
-                        "objectives": los_where("lesson_id=?", L["id"])})
+        lesson = {"id": L["id"], "title": L["title"],
+                  "objectives": los_where("lesson_id=?", L["id"])}
+        lessons_by_unit.setdefault(L["unit_id"], []).append(lesson)
+        all_lessons.append(lesson)
+    units = [{"title": u["title"], "lessons": lessons_by_unit.get(u["id"], [])}
+             for u in conn.execute("SELECT id, title FROM units WHERE course=? "
+                                   "ORDER BY position, id", (course,))]
+    ungrouped = lessons_by_unit.get(None, [])
+
     unscheduled = los_where("course=? AND lesson_id IS NULL", course)
     leaves = [{"node_id": r["node_id"], "text": (r["text"] or "").split("\n", 1)[0]}
               for r in conn.execute("SELECT node_id, text FROM nodes "
@@ -50,13 +57,14 @@ def fetch(conn, course):
         """SELECT DISTINCT cv.node_id FROM coverage cv
              JOIN objectives o ON o.uuid=cv.uuid AND o.status='active'
             WHERE cv.course=?""", (course,))}
-    return lessons, unscheduled, leaves, covered_any
+    return units, ungrouped, all_lessons, unscheduled, leaves, covered_any
 
 
-def render(course, lessons, unscheduled, leaves, covered_any):
-    # leaf -> ordered list of lesson labels that plan-cover it
+def render(course, units, ungrouped, all_lessons, unscheduled, leaves, covered_any):
+    # Global lesson numbering in document order (units, then unassigned).
     leaf_lessons = {}
-    for i, L in enumerate(lessons, 1):
+    for i, L in enumerate(all_lessons, 1):
+        L["num"] = i
         label = f"Lesson {i}"
         for lo in L["objectives"]:
             for n in lo["nodes"]:
@@ -66,35 +74,44 @@ def render(course, lessons, unscheduled, leaves, covered_any):
 
     planned = sum(1 for lf in leaves if lf["node_id"] in leaf_lessons)
     gaps = [lf for lf in leaves if lf["node_id"] not in covered_any]
-    n_lo = sum(len(L["objectives"]) for L in lessons) + len(unscheduled)
+    n_lo = sum(len(L["objectives"]) for L in all_lessons) + len(unscheduled)
 
     out = [f"# {course.upper()} lesson plan", ""]
     out.append(
-        f"_{len(lessons)} lessons · {n_lo} learning objectives · "
-        f"{planned}/{len(leaves)} leaves planned "
+        f"_{len(units)} units · {len(all_lessons)} lessons · {n_lo} learning "
+        f"objectives · {planned}/{len(leaves)} leaves planned "
         f"({round(100 * planned / len(leaves)) if leaves else 0}%) · "
         f"{len(gaps)} gaps · {len(unscheduled)} unscheduled learning objectives._")
     out.append("")
 
-    for i, L in enumerate(lessons, 1):
-        out.append(f"## Lesson {i}: {L['title']}")
+    groups = [(u["title"], u["lessons"]) for u in units]
+    if ungrouped:
+        groups.append((None, ungrouped))
+    for title, lessons in groups:
+        out.append(f"## Unit: {title}" if title is not None else "## (Unassigned lessons)")
         out.append("")
-        if not L["objectives"]:
-            out.append("_(no learning objectives yet)_")
+        if not lessons:
+            out.append("_(no lessons yet)_")
             out.append("")
-        for lo in L["objectives"]:
-            out.append(f"### {lo['text']}")
+        for L in lessons:
+            out.append(f"### Lesson {L['num']}: {L['title']}")
             out.append("")
-            if lo["nodes"]:
-                out.append("Covers: " + ", ".join(f"`{n}`" for n in lo["nodes"]))
+            if not L["objectives"]:
+                out.append("_(no learning objectives yet)_")
                 out.append("")
-            if lo["raws"]:
-                out.append("Rolls up:")
+            for lo in L["objectives"]:
+                out.append(f"#### {lo['text']}")
                 out.append("")
-                for r in lo["raws"]:
-                    tag = f"  (`{'`, `'.join(r['nodes'])}`)" if r["nodes"] else ""
-                    out.append(f"- {r['text']}{tag}")
-                out.append("")
+                if lo["nodes"]:
+                    out.append("Covers: " + ", ".join(f"`{n}`" for n in lo["nodes"]))
+                    out.append("")
+                if lo["raws"]:
+                    out.append("Rolls up:")
+                    out.append("")
+                    for r in lo["raws"]:
+                        tag = f"  (`{'`, `'.join(r['nodes'])}`)" if r["nodes"] else ""
+                        out.append(f"- {r['text']}{tag}")
+                    out.append("")
 
     if unscheduled:
         out.append("## Unscheduled learning objectives")
@@ -136,8 +153,8 @@ def main():
     md = render(args.course, *data)
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(md)
-    lessons, unscheduled, leaves, covered_any = data
-    print(f"wrote {args.output}: {len(lessons)} lessons, "
+    units, ungrouped, all_lessons, unscheduled, leaves, covered_any = data
+    print(f"wrote {args.output}: {len(units)} units, {len(all_lessons)} lessons, "
           f"{len(unscheduled)} unscheduled learning objectives")
 
 
