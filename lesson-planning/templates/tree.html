@@ -5,16 +5,20 @@
 {% macro node(n) %}
 <li class="node lvl-{{ n.level }}" id="n-{{ n.id }}">
   <div class="row">
-    {% if n.children %}<span class="toggle" onclick="toggleNode(event, this)">▾</span>
-    {% else %}<span class="toggle-spacer"></span>{% endif %}
-    <span class="nid">{{ n.id }}</span>{{ n.label|inline }}
-    {% if n.is_leaf and n.status == 'planned' %}<span class="badge planned">planned</span>{% endif %}
+    <span class="gutter">
+      {%- if n.children %}<span class="toggle" onclick="toggleNode(event, this)">▾</span>
+      {%- else %}<span class="toggle-spacer"></span>{% endif %}
+      <span class="nid">{{ n.id }}</span>
+    </span>
+    <div class="content">
+      <span class="label">{{ n.label|inline }}{% if n.is_leaf and n.status == 'planned' %} <span class="badge planned">planned</span>{% endif %}</span>
+      {% if n.is_leaf %}
+        {% with node_id = n.id, objectives = n.objectives %}
+          {% include "_leafbox.html" %}
+        {% endwith %}
+      {% endif %}
+    </div>
   </div>
-  {% if n.is_leaf %}
-    {% with node_id = n.id, objectives = n.objectives %}
-      {% include "_leafbox.html" %}
-    {% endwith %}
-  {% endif %}
   {% if n.children %}
     <ul>{% for c in n.children %}{{ node(c) }}{% endfor %}</ul>
   {% endif %}
