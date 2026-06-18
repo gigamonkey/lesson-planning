@@ -59,6 +59,9 @@
     .leafbox.empty { border: 2px solid var(--gap); }
     .noobj { color: var(--muted); font-size: .85rem; font-style: italic; }
     ul.objlist { list-style: disc; margin: 0; padding-left: 1.2rem; }
+    /* More specific than `ul.tree ul` (which sets list-style:none), so the
+       objectives box keeps its bullets inside the outline tree. */
+    ul.tree ul.objlist { list-style: disc; padding-left: 1.2rem; }
     ul.objlist li { font-size: .9rem; padding: .03rem 0; }
     .objedit { display: flex; gap: .35rem; align-items: center; margin: 0; }
     .objedit input[type=text] { flex: 1; font: inherit; font-size: .9rem;
