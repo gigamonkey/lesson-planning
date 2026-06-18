@@ -18,7 +18,7 @@
       <input type="text" name="title" value="{{ L.title }}" placeholder="Lesson title…">
     </form>
     <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.uuid) }}">
-      <button class="danger" title="Delete lesson">✕</button>
+      <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
     </form>
   </div>
   <form method="post" class="loedit-form autosave"
@@ -68,7 +68,7 @@
                 <input type="hidden" name="dir" value="down"><button {{ 'disabled' if loop.last }}>↓</button>
               </form>
               <form method="post" action="{{ url_for('unit_delete', course=course, unit_id=u.uuid) }}">
-                <button class="danger" title="Delete unit">✕</button>
+                <button class="iconbtn" title="Delete unit"><i class="bi bi-trash3"></i></button>
               </form>
             </div>
           </div>
