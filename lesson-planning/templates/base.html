@@ -70,9 +70,9 @@
     .leafbox.empty { border: 2px solid var(--gap); cursor: pointer; }
     .noobj { color: var(--muted); font-size: .85rem; font-style: italic; }
     ul.objlist { list-style: disc; margin: 0; padding-left: 1.2rem; }
-    /* More specific than `ul.tree ul` (which sets list-style:none), so the
-       objectives box keeps its bullets inside the outline tree. */
-    ul.tree ul.objlist { list-style: disc; padding-left: 1.2rem; }
+    /* No bullets in the outline -- the drag grip serves as the marker; pull the
+       list flush left so the grips sit where the bullets were. */
+    ul.tree ul.objlist { list-style: none; padding-left: 0; }
     ul.objlist li { font-size: .9rem; padding: .03rem 0; }
     ul.objlist li.sortable-ghost { opacity: .4; }
     /* Outline objective <li>s reuse class "obj" as a drag/JS selector, but must
