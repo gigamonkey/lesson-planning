@@ -27,10 +27,9 @@ CREATE TABLE IF NOT EXISTS nodes (
 -- RAW objectives: the atoms the teacher drafted. Deduped; mapped to the CED.
 -- Course-agnostic text; a raw objective can belong to >1 course.
 CREATE TABLE IF NOT EXISTS objectives (
-  uuid        TEXT PRIMARY KEY,
-  text        TEXT NOT NULL,
-  status      TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'merged' | 'draft'
-  merged_into TEXT REFERENCES objectives(uuid) -- reserved; explicit merge dropped
+  uuid   TEXT PRIMARY KEY,
+  text   TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active'  -- reserved hook (soft-delete/archive); always 'active' today
 );
 
 CREATE TABLE IF NOT EXISTS course_objectives (

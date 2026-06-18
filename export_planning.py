@@ -20,8 +20,6 @@ import sqlite3
 # Planning tables to export, each with the columns to dump and the columns to
 # sort by for a stable diff.
 TABLES = {
-    # merged_into is omitted: it is reserved/always-empty (explicit merge was
-    # dropped), and a trailing empty column just leaves a trailing tab per row.
     "objectives": (["uuid", "text", "status"], ["uuid"]),
     "course_objectives": (
         ["course", "uuid", "position", "plan_unit", "plan_lesson"], ["course", "uuid"]),

@@ -84,6 +84,18 @@ def ensure_schema():
                     "CREATE TABLE lessons (uuid TEXT PRIMARY KEY, course TEXT NOT NULL,"
                     " unit_id TEXT, title TEXT NOT NULL DEFAULT '',"
                     " learning_objective TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL)")
+
+            # Drop the unused objectives.merged_into column. It carries a self-FK,
+            # which a plain DROP COLUMN can't remove, so rebuild the table (FKs are
+            # off, so dropping the referenced table is fine).
+            if "merged_into" in [r[1] for r in conn.execute("PRAGMA table_info(objectives)")]:
+                conn.execute("DROP TABLE IF EXISTS objectives_new")
+                conn.execute("CREATE TABLE objectives_new (uuid TEXT PRIMARY KEY,"
+                             " text TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active')")
+                conn.execute("INSERT INTO objectives_new(uuid, text, status)"
+                             " SELECT uuid, text, status FROM objectives")
+                conn.execute("DROP TABLE objectives")
+                conn.execute("ALTER TABLE objectives_new RENAME TO objectives")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)

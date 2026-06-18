@@ -3,7 +3,7 @@
 Reads a learning-objectives TSV (header plus columns uuid, unit, topic, lo, ek,
 objective) and loads it into the lesson-planning database's raw-objective tables:
 
-    objectives(uuid, text, status, merged_into)   -- the objective text
+    objectives(uuid, text, status)                -- the objective text
     course_objectives(course, uuid)               -- which course it belongs to
     coverage(course, uuid, node_id)               -- the CED node it covers
 
@@ -26,8 +26,7 @@ DDL = [
     """CREATE TABLE IF NOT EXISTS objectives (
          uuid TEXT PRIMARY KEY,
          text TEXT NOT NULL,
-         status TEXT NOT NULL DEFAULT 'active',
-         merged_into TEXT REFERENCES objectives(uuid)
+         status TEXT NOT NULL DEFAULT 'active'
        )""",
     """CREATE TABLE IF NOT EXISTS course_objectives (
          course TEXT NOT NULL,
