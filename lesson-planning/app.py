@@ -453,8 +453,11 @@ def coverage_remove(course, uuid):
 
 @app.route("/<course>/export", methods=["POST"])
 def export(course):
-    written = export_planning.export(DB_PATH, EXPORT_DIR)
-    flash("Exported snapshot: " + ", ".join(f"{t} ({n})" for t, n in written))
+    written, pruned = export_planning.export(DB_PATH, EXPORT_DIR)
+    msg = "Exported snapshot: " + ", ".join(f"{t} ({n})" for t, n in written)
+    if pruned:
+        msg += " · removed " + ", ".join(pruned)
+    flash(msg)
     return redirect(request.referrer or url_for("objectives", course=course))
 
 

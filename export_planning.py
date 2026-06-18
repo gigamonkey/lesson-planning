@@ -57,7 +57,13 @@ def export(db_path, out_dir):
             written.append((table, len(rows)))
     finally:
         conn.close()
-    return written
+    # Prune stale <table>.tsv files for tables that are no longer exported.
+    keep = {f"{t}.tsv" for t in TABLES}
+    pruned = [fn for fn in sorted(os.listdir(out_dir))
+              if fn.endswith(".tsv") and fn not in keep]
+    for fn in pruned:
+        os.remove(os.path.join(out_dir, fn))
+    return written, pruned
 
 
 def main():
@@ -66,9 +72,11 @@ def main():
     parser.add_argument("out_dir", help="directory to write <table>.tsv files")
     args = parser.parse_args()
 
-    written = export(args.database, args.out_dir)
+    written, pruned = export(args.database, args.out_dir)
     for table, n in written:
         print(f"  {table}.tsv: {n} rows")
+    for fn in pruned:
+        print(f"  removed stale {fn}")
     print(f"exported {len(written)} tables to {args.out_dir}")
 
 
