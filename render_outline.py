@@ -16,7 +16,7 @@ import sqlite3
 def fetch(conn, course):
     conn.row_factory = sqlite3.Row
     coverage = {}
-    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE course=?", (course,)):
+    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (course,)):
         coverage.setdefault(r["uuid"], []).append(r["node_id"])
 
     raws = {}
@@ -54,7 +54,7 @@ def fetch(conn, course):
 
     leaves = [{"node_id": r["node_id"], "text": (r["text"] or "").split("\n", 1)[0]}
               for r in conn.execute("SELECT node_id, text FROM nodes "
-                                    "WHERE course=? AND is_leaf=1 ORDER BY ordinal", (course,))]
+                                    "WHERE hierarchy=? AND is_leaf=1 ORDER BY ordinal", (course,))]
     covered_any = {r["node_id"] for r in conn.execute(
         """SELECT DISTINCT cv.node_id FROM coverage cv
              JOIN objectives o ON o.uuid=cv.uuid AND o.status='active'

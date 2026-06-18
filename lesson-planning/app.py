@@ -56,6 +56,19 @@ def ensure_schema():
     """Idempotent migrations for an existing working-copy db."""
     try:
         with db() as conn:
+            # Generalize nodes/coverage: course -> hierarchy, and a registry.
+            ncols = [r[1] for r in conn.execute("PRAGMA table_info(nodes)")]
+            if ncols and "course" in ncols:
+                conn.execute("ALTER TABLE nodes RENAME COLUMN course TO hierarchy")
+                conn.execute("ALTER TABLE coverage RENAME COLUMN course TO hierarchy")
+            conn.execute("CREATE TABLE IF NOT EXISTS hierarchies (hierarchy TEXT PRIMARY KEY,"
+                         " kind TEXT NOT NULL, title TEXT NOT NULL, source TEXT)")
+            if conn.execute("SELECT count(*) FROM hierarchies").fetchone()[0] == 0:
+                conn.executemany(
+                    "INSERT OR IGNORE INTO hierarchies(hierarchy, kind, title, source)"
+                    " VALUES (?, 'reference', ?, NULL)",
+                    [(h, h) for (h,) in conn.execute("SELECT DISTINCT hierarchy FROM nodes")])
+
             cols = [r[1] for r in conn.execute("PRAGMA table_info(course_objectives)")]
             if "position" not in cols:
                 conn.execute("ALTER TABLE course_objectives ADD COLUMN position INTEGER")
@@ -103,7 +116,7 @@ def ensure_schema():
 
 def courses(conn):
     return [r["course"] for r in conn.execute(
-        "SELECT DISTINCT course FROM nodes ORDER BY course"
+        "SELECT DISTINCT course FROM course_objectives ORDER BY course"
     )]
 
 
@@ -115,7 +128,7 @@ def load_course(conn, course):
     planned_leaves: set of leaf node_ids that a scheduled lesson traces back to.
     """
     nodes = conn.execute(
-        "SELECT * FROM nodes WHERE course = ? ORDER BY ordinal", (course,)
+        "SELECT * FROM nodes WHERE hierarchy = ? ORDER BY ordinal", (course,)
     ).fetchall()
     if not nodes:
         abort(404, f"no nodes loaded for course {course!r}")
@@ -125,7 +138,7 @@ def load_course(conn, course):
         """SELECT cv.node_id, o.uuid, o.text
              FROM coverage cv
              JOIN objectives o ON o.uuid = cv.uuid AND o.status = 'active'
-            WHERE cv.course = ?
+            WHERE cv.hierarchy = ?
             ORDER BY o.text""",
         (course,),
     ):
@@ -136,8 +149,8 @@ def load_course(conn, course):
         """SELECT DISTINCT cv.node_id
              FROM coverage cv
              JOIN objectives o         ON o.uuid = cv.uuid AND o.status = 'active'
-             JOIN course_objectives co ON co.uuid = cv.uuid AND co.course = cv.course
-            WHERE cv.course = ? AND co.plan_lesson IS NOT NULL""",
+             JOIN course_objectives co ON co.uuid = cv.uuid AND co.course = cv.hierarchy
+            WHERE cv.hierarchy = ? AND co.plan_lesson IS NOT NULL""",
         (course,),
     )}
     return nodes, objectives_by_node, planned_leaves
@@ -307,7 +320,7 @@ def active_objectives(conn, course):
                        ON co.uuid = o.uuid AND co.course = ?
                     WHERE o.status = 'active'""", (course,))}
     for r in conn.execute(
-        "SELECT uuid, node_id FROM coverage WHERE course = ?", (course,)):
+        "SELECT uuid, node_id FROM coverage WHERE hierarchy = ?", (course,)):
         if r["uuid"] in objs:
             objs[r["uuid"]]["nodes"].append(r["node_id"])
     return objs
@@ -318,12 +331,12 @@ def leaf_choices(conn, course):
     return [(r["node_id"], (r["text"] or "").split("\n", 1)[0])
             for r in conn.execute(
                 "SELECT node_id, text FROM nodes "
-                "WHERE course = ? AND is_leaf = 1 ORDER BY ordinal", (course,))]
+                "WHERE hierarchy = ? AND is_leaf = 1 ORDER BY ordinal", (course,))]
 
 
 def node_order(conn, course):
     return {r["node_id"]: r["ordinal"] for r in conn.execute(
-        "SELECT node_id, ordinal FROM nodes WHERE course = ?", (course,))}
+        "SELECT node_id, ordinal FROM nodes WHERE hierarchy = ?", (course,))}
 
 
 @app.route("/<course>/objectives")
@@ -362,7 +375,7 @@ def leafbox_response(course, node_id):
         objs = conn.execute(
             """SELECT o.uuid, o.text FROM coverage cv
                  JOIN objectives o ON o.uuid = cv.uuid AND o.status = 'active'
-                WHERE cv.course = ? AND cv.node_id = ? ORDER BY o.text""",
+                WHERE cv.hierarchy = ? AND cv.node_id = ? ORDER BY o.text""",
             (course, node_id)).fetchall()
     return render_template("_leafbox.html", course=course,
                            node_id=node_id, objectives=objs)
@@ -388,12 +401,12 @@ def recategorize(course, uuid):
     from_node = (request.form.get("from_node") or "").strip()
     to_node = (request.form.get("to_node") or "").strip()
     with db() as conn:
-        valid = conn.execute("SELECT 1 FROM nodes WHERE course=? AND node_id=?",
+        valid = conn.execute("SELECT 1 FROM nodes WHERE hierarchy=? AND node_id=?",
                              (course, to_node)).fetchone()
         if to_node and valid and to_node != from_node:
-            conn.execute("INSERT OR IGNORE INTO coverage VALUES (?, ?, ?)",
-                         (course, uuid, to_node))
-            conn.execute("DELETE FROM coverage WHERE course=? AND uuid=? AND node_id=?",
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
+                         "VALUES (?, ?, ?)", (course, uuid, to_node))
+            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=? AND node_id=?",
                          (course, uuid, from_node))
             conn.commit()
     return ("", 204)
@@ -409,8 +422,8 @@ def objective_new(course):
             conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
             conn.execute("INSERT INTO course_objectives(course, uuid) VALUES (?, ?)", (course, u))
             if node:
-                conn.execute("INSERT OR IGNORE INTO coverage VALUES (?, ?, ?)",
-                             (course, u, node))
+                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
+                             "VALUES (?, ?, ?)", (course, u, node))
             conn.commit()
     # htmx (outline): swap just this leaf's box; otherwise PRG back to the page.
     if request.headers.get("HX-Request"):
@@ -440,13 +453,13 @@ def coverage_add(course, uuid):
     node = (request.form.get("node_id") or "").strip()
     with db() as conn:
         exists = conn.execute(
-            "SELECT 1 FROM nodes WHERE course = ? AND node_id = ?",
+            "SELECT 1 FROM nodes WHERE hierarchy = ? AND node_id = ?",
             (course, node)).fetchone()
         if not node or not exists:
             flash(f"No such node: {node!r}")
         else:
-            conn.execute("INSERT OR IGNORE INTO coverage VALUES (?, ?, ?)",
-                         (course, uuid, node))
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
+                         "VALUES (?, ?, ?)", (course, uuid, node))
             conn.commit()
             flash(f"Mapped to {node}.")
     return _back(course)
@@ -456,7 +469,7 @@ def coverage_add(course, uuid):
 def coverage_remove(course, uuid):
     node = (request.form.get("node_id") or "").strip()
     with db() as conn:
-        conn.execute("DELETE FROM coverage WHERE course = ? AND uuid = ? AND node_id = ?",
+        conn.execute("DELETE FROM coverage WHERE hierarchy = ? AND uuid = ? AND node_id = ?",
                      (course, uuid, node))
         conn.commit()
     flash(f"Unmapped from {node}.")
@@ -481,20 +494,20 @@ def worklist_counts(conn, course):
     def scalar(sql):
         return conn.execute(sql, (course,)).fetchone()[0]
 
-    leaves = scalar("SELECT count(*) FROM nodes WHERE course=? AND is_leaf=1")
+    leaves = scalar("SELECT count(*) FROM nodes WHERE hierarchy=? AND is_leaf=1")
     gaps = scalar("""
-        SELECT count(*) FROM nodes n WHERE n.course=? AND n.is_leaf=1
+        SELECT count(*) FROM nodes n WHERE n.hierarchy=? AND n.is_leaf=1
           AND NOT EXISTS (
             SELECT 1 FROM coverage cv JOIN objectives o
                    ON o.uuid=cv.uuid AND o.status='active'
-             WHERE cv.course=n.course AND cv.node_id=n.node_id)""")
+             WHERE cv.hierarchy=n.hierarchy AND cv.node_id=n.node_id)""")
     planned = scalar("""
-        SELECT count(*) FROM nodes n WHERE n.course=? AND n.is_leaf=1
+        SELECT count(*) FROM nodes n WHERE n.hierarchy=? AND n.is_leaf=1
           AND EXISTS (
             SELECT 1 FROM coverage cv
               JOIN objectives o         ON o.uuid=cv.uuid AND o.status='active'
-              JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=cv.course
-             WHERE cv.course=n.course AND cv.node_id=n.node_id
+              JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=cv.hierarchy
+             WHERE cv.hierarchy=n.hierarchy AND cv.node_id=n.node_id
                AND co.plan_lesson IS NOT NULL)""")
 
     def raw_count(where):

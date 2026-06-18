@@ -43,8 +43,8 @@ def rebuild(db_path, schema_path, export_dir, hierarchies):
         with open(hf) as f:
             flavor, sections = parse_sections(f.read())
         rows = load_nodes.build_rows(flavor, flavor, sections)
-        load_nodes.load(db_path, flavor, rows)
-        print(f"  nodes: {hf} -> course {flavor!r} ({len(rows)} nodes)")
+        load_nodes.load(db_path, flavor, rows, source=hf)
+        print(f"  nodes: {hf} -> hierarchy {flavor!r} ({len(rows)} nodes)")
 
     for table, n in import_planning.load(db_path, export_dir):
         print(f"  {table}: {n} rows")

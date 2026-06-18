@@ -13,15 +13,27 @@
 -- Official outline nodes, normalized across all flavors (CSA/CSP/IB). Derived
 -- from a *-hierarchy.md file by load_nodes.py: one row per node, with its parent,
 -- level tag, whether it is a leaf (the unit of "coverage"), and document order.
+-- Registry of every hierarchy (a tree of nodes): the CED/IB/book references and
+-- (later) authored outlines like a course lesson plan. Reference hierarchies are
+-- regenerated from markdown; outline hierarchies are authored in-app.
+CREATE TABLE IF NOT EXISTS hierarchies (
+  hierarchy TEXT PRIMARY KEY,        -- 'csa', 'csp', 'ib', 'bhsawesome-book', ... (later 'csa-plan')
+  kind      TEXT NOT NULL,           -- 'reference' (from markdown) | 'outline' (authored)
+  title     TEXT NOT NULL,
+  source    TEXT                     -- reference: the markdown path; outline: NULL
+);
+
+-- Nodes of any hierarchy (one row per node), keyed by hierarchy (not course): an
+-- objective maps into a hierarchy's nodes via the coverage table.
 CREATE TABLE IF NOT EXISTS nodes (
-  course    TEXT    NOT NULL,        -- 'csa' | 'csp' | 'ib'
+  hierarchy TEXT    NOT NULL,        -- which hierarchy this node belongs to
   node_id   TEXT    NOT NULL,        -- verbatim id: '1.1.A.1', 'CRD-1.A', 'A1.1.1.1'
   parent_id TEXT,                    -- parent node_id; NULL for level-1 nodes
   level     TEXT    NOT NULL,        -- level tag: 'unit'|'topic'|'learning-objective'|...
   is_leaf   INTEGER NOT NULL,        -- 1 if the node has no children
   ordinal   INTEGER NOT NULL,        -- document order, for stable display
   text      TEXT    NOT NULL,
-  PRIMARY KEY (course, node_id)
+  PRIMARY KEY (hierarchy, node_id)
 );
 
 -- RAW objectives: the atoms the teacher drafted. Deduped; mapped to the CED.
@@ -43,14 +55,14 @@ CREATE TABLE IF NOT EXISTS course_objectives (
   PRIMARY KEY (course, uuid)
 );
 
--- Many-to-many: a raw objective covers >=1 official node; a node may be covered
--- by >=1 raw objective.
+-- Objective <-> node, in ANY hierarchy (a raw objective covers >=1 node; a node
+-- may be covered by >=1 objective).
 CREATE TABLE IF NOT EXISTS coverage (
-  course  TEXT NOT NULL,
-  uuid    TEXT NOT NULL REFERENCES objectives(uuid),
-  node_id TEXT NOT NULL,
-  PRIMARY KEY (course, uuid, node_id),
-  FOREIGN KEY (course, node_id) REFERENCES nodes(course, node_id)
+  hierarchy TEXT NOT NULL,
+  uuid      TEXT NOT NULL REFERENCES objectives(uuid),
+  node_id   TEXT NOT NULL,
+  PRIMARY KEY (hierarchy, uuid, node_id),
+  FOREIGN KEY (hierarchy, node_id) REFERENCES nodes(hierarchy, node_id)
 );
 
 -- The teacher's own top-level grouping (distinct from CED units): lessons are
