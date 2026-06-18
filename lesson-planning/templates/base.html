@@ -54,8 +54,9 @@
            color: var(--muted); margin-right: .4rem; }
     .lvl-unit > .row, .lvl-theme > .row, .lvl-big-idea > .row { font-weight: 700; font-size: 1.05rem; }
     .lvl-topic > .row, .lvl-essential-understanding > .row { font-weight: 600; }
-    .leafbox { border: 1px solid var(--line); border-radius: 6px; background: #fff;
-               margin: .3rem 0 .45rem; padding: .35rem .55rem; max-width: 760px; }
+    .leafbox { position: relative; border: 1px solid var(--line); border-radius: 6px;
+               background: #fff; margin: .3rem 0 .45rem;
+               padding: .35rem 2.1rem .35rem .55rem; max-width: 760px; }
     .leafbox.empty { border: 2px solid var(--gap); }
     .noobj { color: var(--muted); font-size: .85rem; font-style: italic; }
     ul.objlist { list-style: disc; margin: 0; padding-left: 1.2rem; }
@@ -70,10 +71,11 @@
     .objedit input[type=text]:focus { border-color: #bcd; background: #fcfdff; outline: none; }
     .objedit button { visibility: hidden; font-size: .78rem; padding: .12rem .5rem; }
     .objedit:focus-within button { visibility: visible; }
-    .addlink { display: inline-block; margin-top: .35rem; cursor: pointer;
-            color: #2b6cb0; font-size: .85rem; background: none; border: none;
-            padding: .1rem 0; }
-    .addlink:hover { text-decoration: underline; }
+    .addbtn { position: absolute; top: .25rem; right: .3rem; width: 1.7rem;
+            height: 1.7rem; padding: 0; font-size: 1.3rem; line-height: 1;
+            cursor: pointer; color: #2b6cb0; background: #fff;
+            border: 1px solid var(--line); border-radius: 4px; }
+    .addbtn:hover { background: #eef3f8; }
     code { background: #f0f0f0; padding: 0 .2rem; border-radius: 3px;
            font-family: ui-monospace, monospace; font-size: .9em; }
 
