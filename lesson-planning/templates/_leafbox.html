@@ -13,14 +13,13 @@
       <li class="obj" data-uuid="{{ o.uuid }}">
         <div class="objrow">
           <span class="grip" title="drag to another node to recategorize">⠿</span>
-          <form method="post" class="objedit"
+          <form method="post" class="objedit autosave"
                 action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
                 hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
-                hx-target="closest .leafbox" hx-swap="outerHTML">
+                hx-swap="none">
             <input type="hidden" name="node_id" value="{{ node_id }}">
             <input type="hidden" name="anchor" value="n-{{ node_id }}">
             <textarea name="text" rows="1">{{ o.text }}</textarea>
-            <button type="submit" title="Save edit">Save</button>
           </form>
         </div>
       </li>
@@ -33,14 +32,13 @@
     <li class="newobj">
       <div class="objrow">
         <span class="grip" style="visibility:hidden">⠿</span>
-        <form method="post" class="objedit"
+        <form method="post" class="objedit autosave"
               action="{{ url_for('objective_new', course=course) }}"
               hx-post="{{ url_for('objective_new', course=course) }}"
               hx-target="closest .leafbox" hx-swap="outerHTML">
           <input type="hidden" name="node_id" value="{{ node_id }}">
           <input type="hidden" name="anchor" value="n-{{ node_id }}">
           <textarea name="text" rows="1" placeholder="New objective…" required></textarea>
-          <button type="submit" title="Save">Save</button>
         </form>
       </div>
     </li>

@@ -14,20 +14,20 @@
 <li class="lessoncard" data-lesson-id="{{ L.uuid }}">
   <div class="lessonhead">
     <span class="grip lessonhandle" title="drag lesson between units">⠿</span>
-    <form method="post" class="edit"
-          action="{{ url_for('lesson_edit', course=course, lesson_id=L.uuid) }}">
+    <form method="post" class="edit autosave"
+          action="{{ url_for('lesson_edit', course=course, lesson_id=L.uuid) }}"
+          hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.uuid) }}" hx-swap="none">
       <input type="text" name="title" value="{{ L.title }}" placeholder="Lesson title…">
-      <button type="submit">Save</button>
     </form>
     <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.uuid) }}">
       <button class="danger" title="Delete lesson">✕</button>
     </form>
   </div>
-  <form method="post" class="loedit-form"
-        action="{{ url_for('lesson_edit', course=course, lesson_id=L.uuid) }}">
+  <form method="post" class="loedit-form autosave"
+        action="{{ url_for('lesson_edit', course=course, lesson_id=L.uuid) }}"
+        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.uuid) }}" hx-swap="none">
     <input type="text" name="learning_objective" value="{{ L.learning_objective }}"
            placeholder="Learning objective (the whiteboard statement)…">
-    <button type="submit">Save</button>
   </form>
   <ul class="sortable rawzone" data-to="lesson-{{ L.uuid }}">
     {% for o in L.raws %}{{ rawitem(o) }}{% endfor %}
@@ -53,10 +53,10 @@
       {% for u in units %}
         <section class="unit">
           <div class="unithead">
-            <form method="post" class="edit"
-                  action="{{ url_for('unit_rename', course=course, unit_id=u.uuid) }}">
+            <form method="post" class="edit autosave"
+                  action="{{ url_for('unit_rename', course=course, unit_id=u.uuid) }}"
+                  hx-post="{{ url_for('unit_rename', course=course, unit_id=u.uuid) }}" hx-swap="none">
               <input type="text" name="title" value="{{ u.title }}">
-              <button type="submit">Save</button>
             </form>
             <form method="post" action="{{ url_for('lesson_new', course=course) }}">
               <input type="hidden" name="unit" value="{{ u.uuid }}">

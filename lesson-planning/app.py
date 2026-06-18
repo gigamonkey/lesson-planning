@@ -415,8 +415,9 @@ def objective_edit(course, uuid):
         with db() as conn:
             conn.execute("UPDATE objectives SET text = ? WHERE uuid = ?", (text, uuid))
             conn.commit()
+    # An edit doesn't change structure/coverage, so no re-render -- just persist.
     if request.headers.get("HX-Request"):
-        return leafbox_response(course, (request.form.get("node_id") or "").strip())
+        return ("", 204)
     if text:
         flash("Edited objective.")
     return _back(course)
@@ -613,6 +614,8 @@ def unit_rename(course, unit_id):
             conn.execute("UPDATE units SET title=? WHERE uuid=? AND course=?",
                          (title, unit_id, course))
             conn.commit()
+    if request.headers.get("HX-Request"):
+        return ("", 204)
     return _back(course)
 
 
@@ -676,6 +679,8 @@ def lesson_edit(course, lesson_id):
                 "UPDATE lessons SET learning_objective=? WHERE uuid=? AND course=?",
                 ((request.form.get("learning_objective") or "").strip(), lesson_id, course))
         conn.commit()
+    if request.headers.get("HX-Request"):
+        return ("", 204)
     return _back(course)
 
 

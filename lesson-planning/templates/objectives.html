@@ -23,9 +23,10 @@
 
   {% for o in objectives %}
     <div class="obj">
-      <form method="post" action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}" class="edit">
+      <form method="post" class="edit autosave"
+            action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
+            hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}" hx-swap="none">
         <input type="text" name="text" value="{{ o.text }}">
-        <button type="submit">Save</button>
       </form>
       <div class="chips">
         {% if not o.nodes %}<span class="chip unmapped">unmapped</span>{% endif %}

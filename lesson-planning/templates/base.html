@@ -258,5 +258,19 @@
     {% endwith %}
     {% block body %}{% endblock %}
   </main>
+  <script>
+    // Auto-save: an inline field in a `.autosave` form saves on blur if it
+    // changed (Enter still saves too). Those forms are htmx (hx-post) so saving
+    // never reloads the page; the live DB stays current and the header's
+    // "Export snapshot" is what writes the git-diffable text files.
+    document.addEventListener('focusout', function (e) {
+      const el = e.target;
+      if (!el.matches || !el.matches('form.autosave input[type=text], form.autosave textarea')) return;
+      if (el.value === el.defaultValue) return;
+      el.defaultValue = el.value;
+      const form = el.closest('form.autosave');
+      if (form) form.requestSubmit();
+    });
+  </script>
 </body>
 </html>
