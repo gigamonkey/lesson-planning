@@ -1,0 +1,6 @@
+{# One draggable raw objective. `o` has uuid, text, and optional tags (its
+   coverage in OTHER hierarchies, shown as cross-reference hints). #}
+<li class="rawitem" data-uuid="{{ o.uuid }}">
+  <span class="rawtext">{{ o.text|inline }}</span>
+  {% if o.tags %}<span class="sim">{{ o.tags|join(', ') }}</span>{% endif %}
+</li>

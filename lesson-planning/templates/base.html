@@ -281,6 +281,43 @@
     body.dragging .units ul.rawzone { outline: 1px dashed #b9cbe0; background: #f5f9fe; }
     body.dragging .units ul.rawzone.rough { outline-color: #d9cfa0; background: #fbf8ee; }
 
+    /* Unified workspace: hierarchy (left) + raw pool (right). */
+    .workspace-board { grid-template-columns: 1fr 300px; }
+    .workspace-board .pool { position: sticky; top: 1rem; }
+    .nodes { min-width: 0; }
+    .poolnew input { width: 100%; padding: .3rem .5rem; margin-bottom: .4rem; font: inherit;
+            border: 1px solid var(--line); border-radius: 4px; }
+    .poolnew input:focus { border-color: #bcd; outline: none; }
+    /* Reference tree: shallow indentation (these hierarchies are deep) -- a thin
+       guide line carries the nesting; typography distinguishes the levels. */
+    .refnodes .wnode { margin: .1rem 0; }
+    .refnodes .wnodehead { display: flex; align-items: baseline; gap: .4rem; padding: .05rem 0; }
+    .refnodes .nid { font-family: ui-monospace, monospace; font-size: .76rem;
+            color: var(--muted); flex: none; }
+    .refnodes .wlabel { min-width: 0; }
+    .refnodes .lvl-unit > .wnodehead, .refnodes .lvl-chapter > .wnodehead,
+    .refnodes .lvl-theme > .wnodehead, .refnodes .lvl-big-idea > .wnodehead {
+            font-weight: 700; font-size: 1.05rem; margin-top: .5rem; }
+    .refnodes .lvl-topic > .wnodehead, .refnodes .lvl-section > .wnodehead,
+    .refnodes .lvl-essential-understanding > .wnodehead { font-weight: 600; }
+    .refnodes .wchildren { margin-left: .55rem; padding-left: .6rem;
+            border-left: 1px solid var(--line); }
+    .refnodes ul.rawzone { list-style: none; border: none; background: none; margin: .03rem 0;
+            padding: .03rem 0 .03rem .2rem; min-height: .6rem; }
+    .refnodes li.rawitem { background: none; border: none; padding: .06rem .3rem; margin: 0; }
+    .refnodes li.rawitem:hover { background: #f1f1f1; }
+    body.dragging .refnodes ul.rawzone { outline: 1px dashed #b9cbe0; background: #f5f9fe;
+            min-height: 1.2rem; }
+    /* Inline "+ objective" under a node. */
+    .nodeadd { margin: 0 0 .1rem .2rem; }
+    .nodeadd .addlink { font-size: .74rem; color: var(--muted); cursor: pointer; }
+    .nodeadd .addlink:hover { color: #2b6cb0; }
+    .nodeadd input[type=text] { display: none; width: 100%; max-width: 32rem; font: inherit;
+            font-size: .85rem; padding: .15rem .4rem; border: 1px solid var(--line); border-radius: 4px; }
+    .nodeadd.open .addlink { display: none; }
+    .nodeadd.open input[type=text] { display: inline-block; }
+    .nodeadd input:focus { border-color: #bcd; outline: none; }
+
     /* Help page */
     .help { max-width: 760px; }
     .help h2 { font-size: 1.15rem; }
@@ -312,13 +349,9 @@
           <span class="ctitle">{{ c.title }}</span>
           <ul class="hiers">
             {% for h in c.hierarchies %}
-              {% if h.editable %}
-                {% set href = url_for('plan', course=c.course) %}
-              {% else %}
-                {% set href = url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) %}
-              {% endif %}
               <li class="{{ 'active' if h.hierarchy == active_hierarchy else '' }}">
-                <a href="{{ href }}" title="{{ h.title }}">{{ h.title }}</a>
+                <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
+                   title="{{ h.title }}">{{ h.title }}</a>
                 <span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>
               </li>
             {% endfor %}

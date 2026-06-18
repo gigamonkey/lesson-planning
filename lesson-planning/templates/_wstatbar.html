@@ -1,0 +1,11 @@
+{% macro wstatbar(stats, id=None) %}
+<div class="stats"{% if id %} id="{{ id }}"{% endif %}>
+  <div class="stat"><b>{{ stats.leaves }}</b><span>leaf nodes</span></div>
+  <div class="stat"><b style="color:var(--objective)">{{ stats.covered }}</b><span>covered</span></div>
+  <div class="stat"><b style="color:var(--gap)">{{ stats.gaps }}</b><span>uncovered</span></div>
+  <div class="stat"><b>{{ stats.pct }}%</b><span>covered</span></div>
+  <div class="bar" title="{{ stats.covered }} / {{ stats.leaves }} leaves covered">
+    <i class="objective" style="width:{{ (100 * stats.covered / stats.leaves) if stats.leaves else 0 }}%"></i>
+  </div>
+</div>
+{% endmacro %}

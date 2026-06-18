@@ -460,40 +460,105 @@ def help_page():
                            course_rows=rows)
 
 
-def render_tree(course, R, gaps_only):
-    """Render the read-only tree view of reference hierarchy R."""
-    with db() as conn:
-        nodes, obn, planned = load_course(conn, course, R)
-        title = conn.execute("SELECT title FROM hierarchies WHERE hierarchy=?", (R,)).fetchone()
-    return render_template(
-        "tree.html",
-        course=course, ref=R, hierarchy_title=title["title"] if title else R,
-        gaps_only=gaps_only,
-        stats=summary(nodes, obn, planned),
-        tree=build_tree(nodes, obn, planned, gaps_only),
-        STATUS=STATUS,
-    )
+def workspace_data(conn, course, H):
+    """Node tree of hierarchy H with the raw objectives mapped onto each node, plus
+    the unplaced pool. Single placement per hierarchy: an objective sits under one
+    node of H or in the pool. Each objective also carries `tags` -- its coverage in
+    OTHER hierarchies -- as cross-reference hints."""
+    objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "position": r["position"],
+                        "node": None, "tags": []}
+            for r in conn.execute(
+                "SELECT o.uuid, o.text, co.position FROM objectives o "
+                "JOIN course_objectives co ON co.uuid=o.uuid AND co.course=? "
+                "WHERE o.status='active'", (course,))}
+    for r in conn.execute(
+        "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv "
+        "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?", (course,)):
+        o = objs.get(r["uuid"])
+        if not o:
+            continue
+        if r["hierarchy"] == H:
+            o["node"] = r["node_id"]
+        else:
+            o["tags"].append(r["node_id"])
+    for o in objs.values():
+        o["tags"] = sorted(set(o["tags"]))
+
+    by_node = {}
+    for o in sorted(objs.values(), key=lambda o: o["text"].lower()):
+        if o["node"]:
+            by_node.setdefault(o["node"], []).append(o)
+    pool = sorted((o for o in objs.values() if not o["node"]),
+                  key=lambda o: (0, o["position"]) if o["position"] is not None
+                  else (1, o["text"].lower()))
+
+    nodes = conn.execute("SELECT * FROM nodes WHERE hierarchy=? ORDER BY ordinal", (H,)).fetchall()
+    return nodes, by_node, pool
+
+
+def workspace_stats(nodes, by_node, pool):
+    leaves = [n for n in nodes if n["is_leaf"]]
+    covered = sum(1 for n in leaves if by_node.get(n["node_id"]))
+    return {"leaves": len(leaves), "covered": covered, "gaps": len(leaves) - covered,
+            "pool": len(pool), "pct": round(100 * covered / len(leaves)) if leaves else 0}
 
 
 @app.route("/<course>")
 def tree(course):
     with db() as conn:
         R = reference_hierarchy(conn, course)
-    return render_tree(course, R, request.args.get("filter") == "gaps")
+    if not R:
+        abort(404, f"no reference hierarchy for course {course!r}")
+    return redirect(url_for("hierarchy_view", course=course, hierarchy=R))
 
 
 @app.route("/<course>/h/<hierarchy>")
 def hierarchy_view(course, hierarchy):
-    """Canonical per-hierarchy URL: a reference renders its tree; an outline (the
-    plan) redirects to the outline editor."""
+    """The unified workspace for any hierarchy: its node tree with a droppable zone
+    per node + the raw-objective pool. Editable hierarchies also edit structure."""
     with db() as conn:
-        h = conn.execute("SELECT editable FROM hierarchies WHERE hierarchy=? AND course=?",
+        h = conn.execute("SELECT * FROM hierarchies WHERE hierarchy=? AND course=?",
                          (hierarchy, course)).fetchone()
-    if not h:
-        abort(404, f"no hierarchy {hierarchy!r} for course {course!r}")
-    if h["editable"]:
-        return redirect(url_for("plan", course=course))
-    return render_tree(course, hierarchy, request.args.get("filter") == "gaps")
+        if not h:
+            abort(404, f"no hierarchy {hierarchy!r} for course {course!r}")
+        nodes, by_node, pool = workspace_data(conn, course, hierarchy)
+        los = {r["node_id"]: r["value"] for r in conn.execute(
+            "SELECT node_id, value FROM node_attr "
+            "WHERE hierarchy=? AND name='learning_objective'", (hierarchy,))} \
+            if h["editable"] else {}
+    return render_template(
+        "workspace.html", course=course, ref=hierarchy, hierarchy_title=h["title"],
+        kind=h["kind"], editable=bool(h["editable"]), los=los, pool=pool,
+        tree=build_tree(nodes, by_node, set()),
+        stats=workspace_stats(nodes, by_node, pool))
+
+
+@app.route("/<course>/h/<hierarchy>/stats")
+def workspace_stats_partial(course, hierarchy):
+    with db() as conn:
+        nodes, by_node, pool = workspace_data(conn, course, hierarchy)
+    return render_template("_wstats.html", course=course, ref=hierarchy,
+                           stats=workspace_stats(nodes, by_node, pool))
+
+
+@app.route("/<course>/h/<hierarchy>/place", methods=["POST"])
+def place(course, hierarchy):
+    """Drag a raw objective: `to` is "node-<id>" (map/recategorize) or "pool"
+    (unmap, + reorder via `ids`). Single placement per hierarchy."""
+    uuid = request.form.get("uuid")
+    to = (request.form.get("to") or "").strip()
+    node = to[5:] if to.startswith("node-") else None
+    with db() as conn:
+        conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, uuid))
+        if node:
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
+                         "VALUES (?, ?, ?)", (hierarchy, uuid, node))
+        if to == "pool":
+            for i, u in enumerate(_id_list("ids")):
+                conn.execute("UPDATE course_objectives SET position=? "
+                             "WHERE course=? AND uuid=?", (i, course, u))
+        conn.commit()
+    return ("", 204)
 
 
 @app.route("/<course>/report")
@@ -636,7 +701,7 @@ def recategorize(course, uuid):
 def objective_new(course):
     text = (request.form.get("text") or "").strip()
     node = (request.form.get("node_id") or "").strip()
-    R = None
+    u = None
     if text:
         with db() as conn:
             R = active_ref(conn, course)
@@ -651,11 +716,11 @@ def objective_new(course):
                 conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
                              "VALUES (?, ?, ?)", (R, u, node))
             conn.commit()
-    # htmx (outline): swap just this leaf's box; otherwise PRG back to the page.
-    if request.headers.get("HX-Request"):
-        with db() as conn:
-            R = R or active_ref(conn, course)
-        return leafbox_response(course, node, R)
+    # Workspace (htmx): return just the new raw item to drop into the target zone.
+    if request.form.get("as") == "item":
+        if not text:
+            return ("", 204)
+        return render_template("_rawitem.html", o={"uuid": u, "text": text, "tags": []})
     if text:
         flash(f"Added objective: {text}")
     return _back(course)
@@ -866,11 +931,11 @@ def plan_data(conn, course):
 
 @app.route("/<course>/plan")
 def plan(course):
+    """Back-compat: the plan is now the outline hierarchy's workspace."""
     with db() as conn:
-        cs = courses(conn)
-        counts, units, unassigned, pool = plan_data(conn, course)
-    return render_template("plan.html", course=course, courses=cs, counts=counts,
-                           units=units, unassigned=unassigned, pool=pool)
+        O = outline_hierarchy(conn, course) or ensure_outline(conn, course)
+        conn.commit()
+    return redirect(url_for("hierarchy_view", course=course, hierarchy=O))
 
 
 @app.route("/<course>/plan-stats")

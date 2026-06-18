@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% from "_wstatbar.html" import wstatbar %}
+{% block title %}{{ hierarchy_title }}{% endblock %}
+
+{# Reveal-able "write a new objective here" control for a node. Submitting htmx-
+   appends the new raw item into the node's drop zone (the previous .rawzone). #}
+{% macro nodeadd(node_id) %}
+<form class="nodeadd" method="post" action="{{ url_for('objective_new', course=course) }}"
+      hx-post="{{ url_for('objective_new', course=course) }}"
+      hx-target="previous .rawzone" hx-swap="beforeend"
+      hx-on::after-request="this.reset(); this.classList.remove('open')">
+  <input type="hidden" name="node_id" value="{{ node_id }}">
+  <input type="hidden" name="ref" value="{{ ref }}">
+  <input type="hidden" name="as" value="item">
+  <a class="addlink" onclick="this.closest('.nodeadd').classList.add('open'); this.nextElementSibling.focus()">+ objective</a>
+  <input type="text" name="text" placeholder="new objective…" autocomplete="off">
+</form>
+{% endmacro %}
+
+{# A reference node: its drop zone + (optionally) children. Structure is fixed. #}
+{% macro refnode(n) %}
+<div class="wnode lvl-{{ n.level }}{{ ' wbranch' if n.children }}">
+  <div class="wnodehead">
+    <span class="nid">{{ n.id }}</span>
+    <span class="wlabel">{{ n.label|inline }}</span>
+  </div>
+  <ul class="sortable rawzone" data-to="node-{{ n.id }}">
+    {% for o in n.objectives %}{% include "_rawitem.html" %}{% endfor %}
+  </ul>
+  {{ nodeadd(n.id) }}
+  {% if n.children %}
+    <div class="wchildren">{% for c in n.children %}{{ refnode(c) }}{% endfor %}</div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# An outline lesson: title + learning objective + its raws (editable). #}
+{% macro lessoncard(L) %}
+<li class="lessoncard" data-lesson-id="{{ L.id }}">
+  <div class="lessonhead">
+    <form method="post" class="edit autosave"
+          action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
+          hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
+      <input type="text" name="title" value="{{ L.label }}" placeholder="Lesson title…">
+    </form>
+    <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}">
+      <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
+    </form>
+  </div>
+  <form method="post" class="loedit-form autosave"
+        action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
+        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
+    <input type="text" name="learning_objective" value="{{ los.get(L.id, '') }}"
+           placeholder="Learning objective (the whiteboard statement)…">
+  </form>
+  <ul class="sortable rawzone" data-to="node-{{ L.id }}">
+    {% for o in L.objectives %}{% include "_rawitem.html" %}{% endfor %}
+  </ul>
+  {{ nodeadd(L.id) }}
+</li>
+{% endmacro %}
+
+{% block body %}
+  {{ wstatbar(stats, id='wstats') }}
+
+  {% if editable %}
+    <p>Edit the plan: create <b>units</b>, add <b>lessons</b>, and drag raw objectives
+       from the pool into a lesson — or onto a unit's <i>rough</i> zone. Each lesson
+       gets one learning objective.</p>
+    <div class="addrow">
+      <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addlesson">
+        <input type="text" name="title" placeholder="New unit title…" required>
+        <button type="submit" class="primary">Add unit</button>
+      </form>
+    </div>
+  {% else %}
+    <p>Drag raw objectives from the pool onto the nodes they belong to (or write new
+       ones in place). The outline itself is fixed — it comes from the source.</p>
+  {% endif %}
+
+  <div class="board workspace-board">
+    <section class="nodes {{ 'units' if editable else 'refnodes' }}">
+      {% if editable %}
+        {% for u in tree if u.level == 'unit' %}
+          <section class="unit">
+            <div class="unithead">
+              <form method="post" class="edit autosave"
+                    action="{{ url_for('unit_rename', course=course, unit_id=u.id) }}"
+                    hx-post="{{ url_for('unit_rename', course=course, unit_id=u.id) }}" hx-swap="none">
+                <input type="text" name="title" value="{{ u.label }}">
+              </form>
+              <form method="post" action="{{ url_for('lesson_new', course=course) }}">
+                <input type="hidden" name="unit" value="{{ u.id }}">
+                <button type="submit" title="Add a lesson to this unit">+ lesson</button>
+              </form>
+              <div class="lessonctl">
+                <form method="post" action="{{ url_for('unit_move', course=course, unit_id=u.id) }}">
+                  <input type="hidden" name="dir" value="up"><button>↑</button>
+                </form>
+                <form method="post" action="{{ url_for('unit_move', course=course, unit_id=u.id) }}">
+                  <input type="hidden" name="dir" value="down"><button>↓</button>
+                </form>
+                <form method="post" action="{{ url_for('unit_delete', course=course, unit_id=u.id) }}">
+                  <button class="iconbtn" title="Delete unit"><i class="bi bi-trash3"></i></button>
+                </form>
+              </div>
+            </div>
+            <div class="roughzone">
+              <span class="zonelabel">rough (whole unit)</span>
+              <ul class="sortable rawzone rough" data-to="node-{{ u.id }}">
+                {% for o in u.objectives %}{% include "_rawitem.html" %}{% endfor %}
+              </ul>
+            </div>
+            <ul class="sortable unitlessons" data-unit="{{ u.id }}">
+              {% for L in u.children if L.level == 'lesson' %}{{ lessoncard(L) }}{% endfor %}
+            </ul>
+          </section>
+        {% endfor %}
+        <section class="unit unassigned">
+          <div class="unithead">
+            <span class="unitlabel">Unassigned lessons</span>
+            <form method="post" action="{{ url_for('lesson_new', course=course) }}">
+              <button type="submit" title="Add an unassigned lesson">+ lesson</button>
+            </form>
+          </div>
+          <ul class="sortable unitlessons" data-unit="none">
+            {% for L in tree if L.level == 'lesson' %}{{ lessoncard(L) }}{% endfor %}
+          </ul>
+        </section>
+      {% else %}
+        {% for n in tree %}{{ refnode(n) }}{% endfor %}
+      {% endif %}
+    </section>
+
+    <section class="pool">
+      <h2>Raw objectives (<span id="pool-count">{{ pool|length }}</span>)</h2>
+      <form class="poolnew" method="post" action="{{ url_for('objective_new', course=course) }}"
+            hx-post="{{ url_for('objective_new', course=course) }}"
+            hx-target="#rawpool" hx-swap="afterbegin"
+            hx-on::after-request="this.reset()">
+        <input type="hidden" name="ref" value="{{ ref }}">
+        <input type="hidden" name="as" value="item">
+        <input type="text" name="text" placeholder="Write a new objective…" autocomplete="off">
+      </form>
+      <input type="search" id="raw-search" class="poolsearch" autocomplete="off"
+             placeholder="filter… (substring or regex)">
+      <ul class="sortable rawzone rawpool" id="rawpool" data-to="pool">
+        {% for o in pool %}{% include "_rawitem.html" %}{% endfor %}
+      </ul>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+  <script>
+    const course = "{{ course }}";
+    const ref = "{{ ref }}";
+    const editable = {{ 'true' if editable else 'false' }};
+    const placeURL = '/' + course + '/h/' + encodeURIComponent(ref) + '/place';
+    const statsURL = '/' + course + '/h/' + encodeURIComponent(ref) + '/stats';
+
+    const rawSearch = document.getElementById('raw-search');
+    function applyRawFilter() {
+      const q = rawSearch.value.trim();
+      let test = function () { return true; };
+      if (q) {
+        let re = null;
+        try { re = new RegExp(q, 'i'); } catch (e) { re = null; }
+        test = re ? function (t) { return re.test(t); }
+                  : function (t) { return t.toLowerCase().includes(q.toLowerCase()); };
+      }
+      document.querySelectorAll('ul.rawpool > li.rawitem').forEach(function (li) {
+        li.style.display = test(li.textContent) ? '' : 'none';
+      });
+    }
+    rawSearch.addEventListener('input', applyRawFilter);
+
+    function refreshStats() {
+      if (window.htmx) htmx.ajax('GET', statsURL, { target: '#wstats', swap: 'outerHTML' });
+    }
+
+    // Raw objectives: drag between the pool and any node's drop zone.
+    document.querySelectorAll('.sortable.rawzone').forEach(function (el) {
+      new Sortable(el, {
+        group: 'raws', draggable: 'li.rawitem',
+        animation: 120, ghostClass: 'sortable-ghost',
+        onStart: function () { document.body.classList.add('dragging'); },
+        onEnd: function (evt) {
+          document.body.classList.remove('dragging');
+          const body = new URLSearchParams();
+          body.set('uuid', evt.item.dataset.uuid);
+          body.set('to', evt.to.dataset.to);
+          if (evt.to.dataset.to === 'pool') {
+            body.set('ids', Array.from(evt.to.querySelectorAll('.rawitem'))
+              .map(li => li.dataset.uuid).join(','));
+          }
+          fetch(placeURL, { method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
+            .then(refreshStats);
+          applyRawFilter();
+        }
+      });
+    });
+
+    // Outline only: drag lessons between units / reorder.
+    if (editable) {
+      document.querySelectorAll('.sortable.unitlessons').forEach(function (el) {
+        new Sortable(el, {
+          group: 'lessons', draggable: 'li.lessoncard',
+          filter: 'input, textarea, button, ul.rawzone, .nodeadd', preventOnFilter: false,
+          animation: 120, ghostClass: 'sortable-ghost',
+          onEnd: function (evt) {
+            const body = new URLSearchParams();
+            body.set('unit', evt.to.dataset.unit || 'none');
+            body.set('ids', Array.from(evt.to.children)
+              .filter(c => c.classList.contains('lessoncard')).map(li => li.dataset.lessonId).join(','));
+            fetch('/' + course + '/lesson/arrange', { method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body });
+          }
+        });
+      });
+    }
+
+    // After an htmx add (new raw item appended), refresh stats + re-filter. Skip
+    // when the swap *was* the stats refresh, to avoid an infinite loop.
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+      var path = (e.detail && e.detail.requestConfig && e.detail.requestConfig.path) || '';
+      if (path.indexOf('/stats') !== -1) return;
+      refreshStats();
+      applyRawFilter();
+    });
+  </script>
+{% endblock %}
