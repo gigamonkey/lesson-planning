@@ -34,9 +34,13 @@ CREATE TABLE IF NOT EXISTS objectives (
 );
 
 CREATE TABLE IF NOT EXISTS course_objectives (
-  course   TEXT NOT NULL,
-  uuid     TEXT NOT NULL REFERENCES objectives(uuid),
-  position INTEGER,                              -- per-course raw-objective order (NULL = unsorted)
+  course      TEXT NOT NULL,
+  uuid        TEXT NOT NULL REFERENCES objectives(uuid),
+  position    INTEGER,                       -- per-course raw-objective order in the pool
+  -- Plan placement, deepest level wins (CED-style): a raw sits in a lesson
+  -- (plan_lesson), or just a unit (plan_unit, rough), or nowhere (both NULL).
+  plan_unit   TEXT REFERENCES units(uuid),
+  plan_lesson TEXT REFERENCES lessons(uuid),
   PRIMARY KEY (course, uuid)
 );
 
@@ -51,38 +55,22 @@ CREATE TABLE IF NOT EXISTS coverage (
 );
 
 -- The teacher's own top-level grouping (distinct from CED units): lessons are
--- organized into units. Ordered per course.
+-- organized into units. UUID-identified so titles can change freely.
 CREATE TABLE IF NOT EXISTS units (
-  id       INTEGER PRIMARY KEY,
+  uuid     TEXT PRIMARY KEY,
   course   TEXT NOT NULL,
   title    TEXT NOT NULL,
   position INTEGER NOT NULL          -- order within the course
 );
 
--- The teacher's own structure: an ordered list of lessons, each optionally in a
--- unit (unit_id NULL = ungrouped). Position orders lessons within their group.
+-- Lessons live in a unit (unit_id NULL = unassigned). Each lesson has a short
+-- title AND one learning_objective (the whiteboard statement, 1:1 with the
+-- lesson) authored from the raw objectives placed in it. UUID-identified.
 CREATE TABLE IF NOT EXISTS lessons (
-  id       INTEGER PRIMARY KEY,
-  course   TEXT NOT NULL,
-  title    TEXT NOT NULL,
-  unit_id  INTEGER REFERENCES units(id),  -- NULL = unassigned
-  position INTEGER NOT NULL               -- order within the unit (or the unassigned group)
-);
-
--- LESSON objectives: the student-facing statement (whiteboard objective),
--- synthesized from >=1 raw objective. End state: one per lesson. lesson_id is
--- nullable while a lesson objective is still being drafted/unscheduled.
-CREATE TABLE IF NOT EXISTS lesson_objectives (
-  id        INTEGER PRIMARY KEY,
-  course    TEXT NOT NULL,
-  text      TEXT NOT NULL,
-  lesson_id INTEGER REFERENCES lessons(id),
-  position  INTEGER                  -- order within the lesson (NULL = unscheduled)
-);
-
--- Roll-up: which raw objectives a lesson objective encompasses (many-to-many).
-CREATE TABLE IF NOT EXISTS objective_rollup (
-  lesson_objective_id INTEGER NOT NULL REFERENCES lesson_objectives(id),
-  objective_uuid      TEXT    NOT NULL REFERENCES objectives(uuid),
-  PRIMARY KEY (lesson_objective_id, objective_uuid)
+  uuid               TEXT PRIMARY KEY,
+  course             TEXT NOT NULL,
+  unit_id            TEXT REFERENCES units(uuid),  -- NULL = unassigned
+  title              TEXT NOT NULL DEFAULT '',
+  learning_objective TEXT NOT NULL DEFAULT '',
+  position           INTEGER NOT NULL              -- order within the unit
 );
