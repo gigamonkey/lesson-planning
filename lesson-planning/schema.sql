@@ -1,42 +1,42 @@
 -- Lesson-planning database schema (canonical reference).
 --
--- The live store for *planning data*: deduped raw objectives, their CED/syllabus
--- coverage, the synthesized lesson objectives, and the ordered lessons. The
--- official outline (the `nodes` table) is file-sourced and treated as read-only
--- reference -- regenerated from the *-hierarchy.md files via load_nodes.py.
+-- Everything is a HIERARCHY of nodes, and objectives are the connective tissue
+-- between nodes across hierarchies. Reference hierarchies (CED/IB/book) are
+-- file-sourced and read-only -- regenerated from the *-hierarchy.md files via
+-- load_nodes.py. Outline hierarchies (a course's lesson plan; later a planned
+-- book) are authored in-app. An objective's reference "coverage" and its lesson
+-- "placement" are the SAME relation: a coverage edge to a node in some hierarchy.
 --
 -- Loaders (load_nodes.py, import_objectives.py) embed the DDL for the tables
 -- they own (with IF NOT EXISTS) so they are independently runnable; this file is
 -- the authored, in-sync description of the whole schema and can be applied to a
 -- fresh database to create every table up front.
 
--- Official outline nodes, normalized across all flavors (CSA/CSP/IB). Derived
--- from a *-hierarchy.md file by load_nodes.py: one row per node, with its parent,
--- level tag, whether it is a leaf (the unit of "coverage"), and document order.
 -- Registry of every hierarchy (a tree of nodes): the CED/IB/book references and
--- (later) authored outlines like a course lesson plan. Reference hierarchies are
+-- authored outlines like a course lesson plan. Reference hierarchies are
 -- regenerated from markdown; outline hierarchies are authored in-app.
 CREATE TABLE IF NOT EXISTS hierarchies (
-  hierarchy TEXT PRIMARY KEY,        -- 'csa', 'csp', 'ib', 'bhsawesome-book', ... (later 'csa-plan')
+  hierarchy TEXT PRIMARY KEY,        -- 'csa', 'csp', 'ib', ... and outlines 'csa-plan'
   kind      TEXT NOT NULL,           -- 'reference' (from markdown) | 'outline' (authored)
   title     TEXT NOT NULL,
   source    TEXT                     -- reference: the markdown path; outline: NULL
 );
 
--- Nodes of any hierarchy (one row per node), keyed by hierarchy (not course): an
--- objective maps into a hierarchy's nodes via the coverage table.
+-- Nodes of any hierarchy (one row per node), keyed by hierarchy (not course).
+-- Reference rows are regenerated from markdown (node_id = verbatim id, read-only);
+-- outline rows are authored in-app (node_id = uuid; parent_id/ordinal mutable).
 CREATE TABLE IF NOT EXISTS nodes (
-  hierarchy TEXT    NOT NULL,        -- which hierarchy this node belongs to
-  node_id   TEXT    NOT NULL,        -- verbatim id: '1.1.A.1', 'CRD-1.A', 'A1.1.1.1'
-  parent_id TEXT,                    -- parent node_id; NULL for level-1 nodes
-  level     TEXT    NOT NULL,        -- level tag: 'unit'|'topic'|'learning-objective'|...
-  is_leaf   INTEGER NOT NULL,        -- 1 if the node has no children
-  ordinal   INTEGER NOT NULL,        -- document order, for stable display
-  text      TEXT    NOT NULL,
+  hierarchy TEXT    NOT NULL REFERENCES hierarchies(hierarchy),
+  node_id   TEXT    NOT NULL,        -- verbatim id ('1.1.A.1', 'CRD-1.A') or a uuid
+  parent_id TEXT,                    -- parent node_id; NULL for top-level nodes
+  level     TEXT    NOT NULL,        -- per-hierarchy vocab: 'topic'|'ek'… or 'unit'|'lesson'
+  is_leaf   INTEGER NOT NULL,        -- 1 if the node has no children (the unit of coverage)
+  ordinal   INTEGER NOT NULL,        -- order within its sibling group, for stable display
+  text      TEXT    NOT NULL,        -- statement / title
   PRIMARY KEY (hierarchy, node_id)
 );
 
--- RAW objectives: the atoms the teacher drafted. Deduped; mapped to the CED.
+-- RAW objectives: the atoms the teacher drafted. Deduped; mapped via coverage.
 -- Course-agnostic text; a raw objective can belong to >1 course.
 CREATE TABLE IF NOT EXISTS objectives (
   uuid   TEXT PRIMARY KEY,
@@ -44,19 +44,18 @@ CREATE TABLE IF NOT EXISTS objectives (
   status TEXT NOT NULL DEFAULT 'active'  -- reserved hook (soft-delete/archive); always 'active' today
 );
 
+-- The raw-objective pool, course-scoped (membership + pool order). Plan placement
+-- is NOT here -- it is a coverage edge into the course's outline hierarchy.
 CREATE TABLE IF NOT EXISTS course_objectives (
-  course      TEXT NOT NULL,
-  uuid        TEXT NOT NULL REFERENCES objectives(uuid),
-  position    INTEGER,                       -- per-course raw-objective order in the pool
-  -- Plan placement, deepest level wins (CED-style): a raw sits in a lesson
-  -- (plan_lesson), or just a unit (plan_unit, rough), or nowhere (both NULL).
-  plan_unit   TEXT REFERENCES units(uuid),
-  plan_lesson TEXT REFERENCES lessons(uuid),
+  course   TEXT NOT NULL,
+  uuid     TEXT NOT NULL REFERENCES objectives(uuid),
+  position INTEGER,                  -- per-course raw-objective order in the pool
   PRIMARY KEY (course, uuid)
 );
 
--- Objective <-> node, in ANY hierarchy (a raw objective covers >=1 node; a node
--- may be covered by >=1 objective).
+-- Objective <-> node, in ANY hierarchy. Reference edges = "covers this standard";
+-- outline edges = "placed at this lesson/unit". The schema allows many edges per
+-- (hierarchy, uuid); the app enforces single placement per outline (relaxable).
 CREATE TABLE IF NOT EXISTS coverage (
   hierarchy TEXT NOT NULL,
   uuid      TEXT NOT NULL REFERENCES objectives(uuid),
@@ -65,23 +64,21 @@ CREATE TABLE IF NOT EXISTS coverage (
   FOREIGN KEY (hierarchy, node_id) REFERENCES nodes(hierarchy, node_id)
 );
 
--- The teacher's own top-level grouping (distinct from CED units): lessons are
--- organized into units. UUID-identified so titles can change freely.
-CREATE TABLE IF NOT EXISTS units (
-  uuid     TEXT PRIMARY KEY,
-  course   TEXT NOT NULL,
-  title    TEXT NOT NULL,
-  position INTEGER NOT NULL          -- order within the course
+-- Generic per-node extras for authored outlines (sparse, stringly-typed). E.g.
+-- ('csa-plan', <lesson-uuid>, 'learning_objective', 'Declare and use variables').
+CREATE TABLE IF NOT EXISTS node_attr (
+  hierarchy TEXT NOT NULL,
+  node_id   TEXT NOT NULL,
+  name      TEXT NOT NULL,
+  value     TEXT NOT NULL,
+  PRIMARY KEY (hierarchy, node_id, name),
+  FOREIGN KEY (hierarchy, node_id) REFERENCES nodes(hierarchy, node_id)
 );
 
--- Lessons live in a unit (unit_id NULL = unassigned). Each lesson has a short
--- title AND one learning_objective (the whiteboard statement, 1:1 with the
--- lesson) authored from the raw objectives placed in it. UUID-identified.
-CREATE TABLE IF NOT EXISTS lessons (
-  uuid               TEXT PRIMARY KEY,
-  course             TEXT NOT NULL,
-  unit_id            TEXT REFERENCES units(uuid),  -- NULL = unassigned
-  title              TEXT NOT NULL DEFAULT '',
-  learning_objective TEXT NOT NULL DEFAULT '',
-  position           INTEGER NOT NULL              -- order within the unit
+-- Pair an outline with the reference(s) it is measured against, so the UI can
+-- show the outline's coverage stats (gaps/planned) against the reference.
+CREATE TABLE IF NOT EXISTS hierarchy_targets (
+  outline   TEXT NOT NULL REFERENCES hierarchies(hierarchy),
+  reference TEXT NOT NULL REFERENCES hierarchies(hierarchy),
+  PRIMARY KEY (outline, reference)
 );

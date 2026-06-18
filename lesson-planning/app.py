@@ -69,34 +69,65 @@ def ensure_schema():
                     " VALUES (?, 'reference', ?, NULL)",
                     [(h, h) for (h,) in conn.execute("SELECT DISTINCT hierarchy FROM nodes")])
 
-            cols = [r[1] for r in conn.execute("PRAGMA table_info(course_objectives)")]
-            if "position" not in cols:
-                conn.execute("ALTER TABLE course_objectives ADD COLUMN position INTEGER")
-            if "plan_unit" not in cols:
-                conn.execute("ALTER TABLE course_objectives ADD COLUMN plan_unit TEXT")
-            if "plan_lesson" not in cols:
-                conn.execute("ALTER TABLE course_objectives ADD COLUMN plan_lesson TEXT")
+            conn.execute("CREATE TABLE IF NOT EXISTS node_attr (hierarchy TEXT NOT NULL,"
+                         " node_id TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL,"
+                         " PRIMARY KEY (hierarchy, node_id, name))")
+            conn.execute("CREATE TABLE IF NOT EXISTS hierarchy_targets (outline TEXT NOT NULL,"
+                         " reference TEXT NOT NULL, PRIMARY KEY (outline, reference))")
 
-            # Plan tables moved to UUID ids + per-lesson learning objective. The
-            # old rollup model is dropped; recreate only if empty (no data loss).
-            def empty(t):
-                try:
-                    return conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0] == 0
-                except sqlite3.OperationalError:
-                    return True
-            lcols = [r[1] for r in conn.execute("PRAGMA table_info(lessons)")]
-            stale = ("learning_objective" not in lcols) if lcols else True
-            if stale and all(empty(t) for t in
-                             ("units", "lessons", "lesson_objectives", "objective_rollup")):
-                for t in ("objective_rollup", "lesson_objectives", "lessons", "units"):
-                    conn.execute(f"DROP TABLE IF EXISTS {t}")
-                conn.execute(
-                    "CREATE TABLE units (uuid TEXT PRIMARY KEY, course TEXT NOT NULL,"
-                    " title TEXT NOT NULL, position INTEGER NOT NULL)")
-                conn.execute(
-                    "CREATE TABLE lessons (uuid TEXT PRIMARY KEY, course TEXT NOT NULL,"
-                    " unit_id TEXT, title TEXT NOT NULL DEFAULT '',"
-                    " learning_objective TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL)")
+            # Stage 1: the lesson plan becomes an 'outline' hierarchy. Convert the
+            # old units/lessons tables + plan_unit/plan_lesson placement into
+            # nodes + coverage + node_attr, then drop them.
+            have = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            if "units" in have and "lessons" in have:
+                plan_courses = [c for (c,) in conn.execute(
+                    "SELECT course FROM units UNION SELECT course FROM lessons "
+                    "UNION SELECT course FROM course_objectives")]
+                for course in plan_courses:
+                    O = course + "-plan"
+                    conn.execute(
+                        "INSERT OR IGNORE INTO hierarchies(hierarchy, kind, title, source)"
+                        " VALUES (?, 'outline', ?, NULL)", (O, course.upper() + " Lesson Plan"))
+                    conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
+                                 " VALUES (?, ?)", (O, course))
+                    for u in conn.execute(
+                        "SELECT uuid, title, position FROM units WHERE course=?",
+                        (course,)).fetchall():
+                        conn.execute(
+                            "INSERT OR IGNORE INTO nodes(hierarchy, node_id, parent_id, level,"
+                            " is_leaf, ordinal, text) VALUES (?, ?, NULL, 'unit', 0, ?, ?)",
+                            (O, u["uuid"], u["position"], u["title"]))
+                    for L in conn.execute(
+                        "SELECT uuid, unit_id, title, learning_objective, position"
+                        " FROM lessons WHERE course=?", (course,)).fetchall():
+                        conn.execute(
+                            "INSERT OR IGNORE INTO nodes(hierarchy, node_id, parent_id, level,"
+                            " is_leaf, ordinal, text) VALUES (?, ?, ?, 'lesson', 1, ?, ?)",
+                            (O, L["uuid"], L["unit_id"], L["position"], L["title"] or ""))
+                        if (L["learning_objective"] or "").strip():
+                            conn.execute(
+                                "INSERT OR IGNORE INTO node_attr(hierarchy, node_id, name, value)"
+                                " VALUES (?, ?, 'learning_objective', ?)",
+                                (O, L["uuid"], L["learning_objective"]))
+                    for r in conn.execute(
+                        "SELECT uuid, plan_unit, plan_lesson FROM course_objectives"
+                        " WHERE course=?", (course,)).fetchall():
+                        node = r["plan_lesson"] or r["plan_unit"]
+                        if node:
+                            conn.execute(
+                                "INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
+                                " VALUES (?, ?, ?)", (O, r["uuid"], node))
+                conn.execute("DROP TABLE IF EXISTS lessons")
+                conn.execute("DROP TABLE IF EXISTS units")
+                # Rebuild course_objectives without the plan_unit/plan_lesson columns.
+                conn.execute("CREATE TABLE course_objectives_new (course TEXT NOT NULL,"
+                             " uuid TEXT NOT NULL REFERENCES objectives(uuid),"
+                             " position INTEGER, PRIMARY KEY (course, uuid))")
+                conn.execute("INSERT INTO course_objectives_new(course, uuid, position)"
+                             " SELECT course, uuid, position FROM course_objectives")
+                conn.execute("DROP TABLE course_objectives")
+                conn.execute("ALTER TABLE course_objectives_new RENAME TO course_objectives")
 
             # Drop the unused objectives.merged_into column. It carries a self-FK,
             # which a plain DROP COLUMN can't remove, so rebuild the table (FKs are
@@ -118,6 +149,30 @@ def courses(conn):
     return [r["course"] for r in conn.execute(
         "SELECT DISTINCT course FROM course_objectives ORDER BY course"
     )]
+
+
+# A course is backed by two hierarchies: its reference (the CED/syllabus, whose id
+# equals the course id) and its outline (the authored lesson plan). Placement is a
+# coverage edge into the outline; reference coverage is a coverage edge into it.
+
+def outline_hierarchy(conn, course):
+    """The course's outline hierarchy id, or None if no plan exists yet."""
+    row = conn.execute("SELECT outline FROM hierarchy_targets WHERE reference=?",
+                       (course,)).fetchone()
+    return row[0] if row else None
+
+
+def ensure_outline(conn, course):
+    """The course's outline hierarchy id, creating + registering it if needed."""
+    O = outline_hierarchy(conn, course)
+    if O:
+        return O
+    O = course + "-plan"
+    conn.execute("INSERT OR IGNORE INTO hierarchies(hierarchy, kind, title, source)"
+                 " VALUES (?, 'outline', ?, NULL)", (O, course.upper() + " Lesson Plan"))
+    conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference) VALUES (?, ?)",
+                 (O, course))
+    return O
 
 
 def load_course(conn, course):
@@ -144,15 +199,21 @@ def load_course(conn, course):
     ):
         objectives_by_node.setdefault(r["node_id"], []).append(r)
 
-    # A leaf is "planned" once a raw objective covering it is placed in a lesson.
-    planned_leaves = {r["node_id"] for r in conn.execute(
-        """SELECT DISTINCT cv.node_id
-             FROM coverage cv
-             JOIN objectives o         ON o.uuid = cv.uuid AND o.status = 'active'
-             JOIN course_objectives co ON co.uuid = cv.uuid AND co.course = cv.hierarchy
-            WHERE cv.hierarchy = ? AND co.plan_lesson IS NOT NULL""",
-        (course,),
-    )}
+    # A reference leaf is "planned" once a raw objective covering it is also placed
+    # at a leaf (a lesson) of the course's outline hierarchy.
+    O = outline_hierarchy(conn, course)
+    planned_leaves = set()
+    if O:
+        planned_leaves = {r["node_id"] for r in conn.execute(
+            """SELECT DISTINCT cr.node_id
+                 FROM coverage cr
+                 JOIN objectives o  ON o.uuid = cr.uuid AND o.status = 'active'
+                 JOIN coverage co   ON co.uuid = cr.uuid AND co.hierarchy = ?
+                 JOIN nodes onode   ON onode.hierarchy = ? AND onode.node_id = co.node_id
+                                   AND onode.is_leaf = 1
+                WHERE cr.hierarchy = ?""",
+            (O, O, course),
+        )}
     return nodes, objectives_by_node, planned_leaves
 
 
@@ -490,33 +551,57 @@ def export(course):
 # Lesson builder: synthesize raw -> lesson objectives, then schedule into lessons
 
 def worklist_counts(conn, course):
-    """Plan-progress counts: CED gaps, unplaced/rough raws, planned-leaf coverage."""
-    def scalar(sql):
-        return conn.execute(sql, (course,)).fetchone()[0]
+    """Plan-progress counts: reference gaps, unplaced/rough raws, planned coverage.
 
-    leaves = scalar("SELECT count(*) FROM nodes WHERE hierarchy=? AND is_leaf=1")
+    Computed for the course's outline O against its reference R (=course): a
+    reference leaf is planned when an active objective covers it AND is placed at
+    an outline leaf (lesson); a raw is rough when placed at a non-leaf (unit) and
+    unplaced when it has no outline edge.
+    """
+    O = outline_hierarchy(conn, course)
+
+    def scalar(sql, params):
+        return conn.execute(sql, params).fetchone()[0]
+
+    leaves = scalar("SELECT count(*) FROM nodes WHERE hierarchy=? AND is_leaf=1", (course,))
     gaps = scalar("""
         SELECT count(*) FROM nodes n WHERE n.hierarchy=? AND n.is_leaf=1
           AND NOT EXISTS (
             SELECT 1 FROM coverage cv JOIN objectives o
                    ON o.uuid=cv.uuid AND o.status='active'
-             WHERE cv.hierarchy=n.hierarchy AND cv.node_id=n.node_id)""")
-    planned = scalar("""
-        SELECT count(*) FROM nodes n WHERE n.hierarchy=? AND n.is_leaf=1
-          AND EXISTS (
-            SELECT 1 FROM coverage cv
-              JOIN objectives o         ON o.uuid=cv.uuid AND o.status='active'
-              JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=cv.hierarchy
-             WHERE cv.hierarchy=n.hierarchy AND cv.node_id=n.node_id
-               AND co.plan_lesson IS NOT NULL)""")
+             WHERE cv.hierarchy=n.hierarchy AND cv.node_id=n.node_id)""", (course,))
 
-    def raw_count(where):
-        return conn.execute(
-            f"""SELECT count(*) FROM objectives o
-                  JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
-                 WHERE o.status='active' AND {where}""", (course,)).fetchone()[0]
-    unplaced = raw_count("co.plan_unit IS NULL AND co.plan_lesson IS NULL")
-    rough = raw_count("co.plan_unit IS NOT NULL AND co.plan_lesson IS NULL")
+    def raw_total(extra):
+        return scalar(f"""SELECT count(*) FROM objectives o
+              JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
+             WHERE o.status='active'{extra}""", (course,))
+
+    if O:
+        planned = scalar("""
+            SELECT count(*) FROM nodes n WHERE n.hierarchy=? AND n.is_leaf=1
+              AND EXISTS (
+                SELECT 1 FROM coverage cr
+                  JOIN objectives o ON o.uuid=cr.uuid AND o.status='active'
+                  JOIN coverage co  ON co.uuid=cr.uuid AND co.hierarchy=?
+                  JOIN nodes onode  ON onode.hierarchy=? AND onode.node_id=co.node_id
+                                   AND onode.is_leaf=1
+                 WHERE cr.hierarchy=n.hierarchy AND cr.node_id=n.node_id)""",
+            (course, O, O))
+        unplaced = scalar("""SELECT count(*) FROM objectives o
+              JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
+             WHERE o.status='active' AND NOT EXISTS (
+                SELECT 1 FROM coverage cv WHERE cv.hierarchy=? AND cv.uuid=o.uuid)""",
+            (course, O))
+        rough = scalar("""SELECT count(*) FROM objectives o
+              JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
+             WHERE o.status='active' AND EXISTS (
+                SELECT 1 FROM coverage cv
+                  JOIN nodes nn ON nn.hierarchy=cv.hierarchy AND nn.node_id=cv.node_id
+                 WHERE cv.hierarchy=? AND cv.uuid=o.uuid AND nn.is_leaf=0)""",
+            (course, O))
+    else:
+        planned, rough = 0, 0
+        unplaced = raw_total("")
     return {"leaves": leaves, "gaps": gaps, "planned": planned,
             "unplaced": unplaced, "rough": rough,
             "planned_pct": round(100 * planned / leaves) if leaves else 0}
@@ -533,18 +618,44 @@ def _id_list(field="ids"):
 # --------------------------------------------------------------------------
 # The Plan page: Units -> Lessons, with raw objectives placed into them.
 
+def outline_structure(conn, O):
+    """(units, lessons, node_level, learning_objectives) for an outline hierarchy.
+
+    units/lessons are view dicts in sibling order; node_level maps every outline
+    node_id to its level ('unit'|'lesson'); learning_objectives maps lesson id ->
+    its learning-objective text.
+    """
+    units, lessons, node_level = [], [], {}
+    if O:
+        for n in conn.execute(
+            "SELECT node_id, parent_id, level, text FROM nodes "
+            "WHERE hierarchy=? ORDER BY ordinal, node_id", (O,)):
+            node_level[n["node_id"]] = n["level"]
+            if n["level"] == "lesson":
+                lessons.append({"uuid": n["node_id"], "unit_id": n["parent_id"],
+                                "title": n["text"]})
+            elif n["level"] == "unit":
+                units.append({"uuid": n["node_id"], "title": n["text"]})
+    los = {r["node_id"]: r["value"] for r in conn.execute(
+        "SELECT node_id, value FROM node_attr "
+        "WHERE hierarchy=? AND name='learning_objective'", (O,))} if O else {}
+    return units, lessons, node_level, los
+
+
 def plan_data(conn, course):
     """(counts, units[+lessons+rough raws], unassigned lessons, pool raws)."""
     counts = worklist_counts(conn, course)
     order = node_order(conn, course)
     objs = active_objectives(conn, course)
     for r in conn.execute(
-        "SELECT uuid, position, plan_unit, plan_lesson FROM course_objectives "
-        "WHERE course=?", (course,)):
+        "SELECT uuid, position FROM course_objectives WHERE course=?", (course,)):
         if r["uuid"] in objs:
-            o = objs[r["uuid"]]
-            o["position"], o["plan_unit"], o["plan_lesson"] = (
-                r["position"], r["plan_unit"], r["plan_lesson"])
+            objs[r["uuid"]]["position"] = r["position"]
+
+    O = outline_hierarchy(conn, course)
+    units, lessons, node_level, los = outline_structure(conn, O)
+    placed = {r["uuid"]: r["node_id"] for r in conn.execute(
+        "SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (O,))} if O else {}
 
     def rawkey(o):
         p = o.get("position")
@@ -554,23 +665,20 @@ def plan_data(conn, course):
 
     by_lesson, rough_by_unit, pool = {}, {}, []
     for o in sorted(objs.values(), key=rawkey):
-        if o.get("plan_lesson"):
-            by_lesson.setdefault(o["plan_lesson"], []).append(o)
-        elif o.get("plan_unit"):
-            rough_by_unit.setdefault(o["plan_unit"], []).append(o)
+        node = placed.get(o["uuid"])
+        level = node_level.get(node)
+        if level == "lesson":
+            by_lesson.setdefault(node, []).append(o)
+        elif level == "unit":
+            rough_by_unit.setdefault(node, []).append(o)
         else:
             pool.append(o)
 
-    lessons = [dict(r) for r in conn.execute(
-        "SELECT uuid, unit_id, title, learning_objective FROM lessons "
-        "WHERE course=? ORDER BY position, uuid", (course,))]
     lessons_by_unit = {}
     for L in lessons:
+        L["learning_objective"] = los.get(L["uuid"], "")
         L["raws"] = by_lesson.get(L["uuid"], [])
         lessons_by_unit.setdefault(L["unit_id"], []).append(L)
-
-    units = [dict(r) for r in conn.execute(
-        "SELECT uuid, title FROM units WHERE course=? ORDER BY position, uuid", (course,))]
     for u in units:
         u["lessons"] = lessons_by_unit.get(u["uuid"], [])
         u["rough"] = rough_by_unit.get(u["uuid"], [])
@@ -605,11 +713,15 @@ def plan_place(course):
     """
     uuid = request.form.get("uuid")
     to = (request.form.get("to") or "").strip()
-    plan_unit = to[5:] if to.startswith("unit-") else None
-    plan_lesson = to[7:] if to.startswith("lesson-") else None
+    node = to[5:] if to.startswith("unit-") else to[7:] if to.startswith("lesson-") else None
     with db() as conn:
-        conn.execute("UPDATE course_objectives SET plan_unit=?, plan_lesson=? "
-                     "WHERE course=? AND uuid=?", (plan_unit, plan_lesson, course, uuid))
+        O = outline_hierarchy(conn, course)
+        if O:
+            # Single placement per outline: clear this raw's edges, then re-place.
+            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (O, uuid))
+            if node:
+                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
+                             "VALUES (?, ?, ?)", (O, uuid, node))
         if to == "pool":
             for i, u in enumerate(_id_list("ids")):
                 conn.execute("UPDATE course_objectives SET position=? "
@@ -625,10 +737,12 @@ def unit_new(course):
     title = (request.form.get("title") or "").strip()
     if title:
         with db() as conn:
-            nxt = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM units "
-                               "WHERE course=?", (course,)).fetchone()[0]
-            conn.execute("INSERT INTO units(uuid, course, title, position) VALUES (?, ?, ?, ?)",
-                         (str(uuidlib.uuid4()), course, title, nxt))
+            O = ensure_outline(conn, course)
+            nxt = conn.execute("SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
+                               "WHERE hierarchy=? AND level='unit'", (O,)).fetchone()[0]
+            conn.execute("INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf,"
+                         " ordinal, text) VALUES (?, ?, NULL, 'unit', 0, ?, ?)",
+                         (O, str(uuidlib.uuid4()), nxt, title))
             conn.commit()
         flash(f"Added unit: {title}")
     return _back(course)
@@ -639,8 +753,9 @@ def unit_rename(course, unit_id):
     title = (request.form.get("title") or "").strip()
     if title:
         with db() as conn:
-            conn.execute("UPDATE units SET title=? WHERE uuid=? AND course=?",
-                         (title, unit_id, course))
+            O = outline_hierarchy(conn, course)
+            conn.execute("UPDATE nodes SET text=? WHERE hierarchy=? AND node_id=? "
+                         "AND level='unit'", (title, O, unit_id))
             conn.commit()
     if request.headers.get("HX-Request"):
         return ("", 204)
@@ -650,11 +765,13 @@ def unit_rename(course, unit_id):
 @app.route("/<course>/unit/<unit_id>/delete", methods=["POST"])
 def unit_delete(course, unit_id):
     with db() as conn:
+        O = outline_hierarchy(conn, course)
         # Unassign its lessons; return its rough raws to the pool; drop the unit.
-        conn.execute("UPDATE lessons SET unit_id=NULL WHERE unit_id=?", (unit_id,))
-        conn.execute("UPDATE course_objectives SET plan_unit=NULL "
-                     "WHERE course=? AND plan_unit=?", (course, unit_id))
-        conn.execute("DELETE FROM units WHERE uuid=? AND course=?", (unit_id, course))
+        conn.execute("UPDATE nodes SET parent_id=NULL WHERE hierarchy=? AND parent_id=?",
+                     (O, unit_id))
+        conn.execute("DELETE FROM coverage WHERE hierarchy=? AND node_id=?", (O, unit_id))
+        conn.execute("DELETE FROM node_attr WHERE hierarchy=? AND node_id=?", (O, unit_id))
+        conn.execute("DELETE FROM nodes WHERE hierarchy=? AND node_id=?", (O, unit_id))
         conn.commit()
     flash("Deleted unit; lessons moved to Unassigned, rough raws back in the pool.")
     return _back(course)
@@ -664,15 +781,18 @@ def unit_delete(course, unit_id):
 def unit_move(course, unit_id):
     direction = request.form.get("dir")
     with db() as conn:
-        ids = [r["uuid"] for r in conn.execute(
-            "SELECT uuid FROM units WHERE course=? ORDER BY position, uuid", (course,))]
+        O = outline_hierarchy(conn, course)
+        ids = [r["node_id"] for r in conn.execute(
+            "SELECT node_id FROM nodes WHERE hierarchy=? AND level='unit' "
+            "ORDER BY ordinal, node_id", (O,))]
         if unit_id in ids:
             i = ids.index(unit_id)
             j = i - 1 if direction == "up" else i + 1
             if 0 <= j < len(ids):
                 ids[i], ids[j] = ids[j], ids[i]
                 for pos, uid in enumerate(ids):
-                    conn.execute("UPDATE units SET position=? WHERE uuid=?", (pos, uid))
+                    conn.execute("UPDATE nodes SET ordinal=? WHERE hierarchy=? AND node_id=?",
+                                 (pos, O, uid))
                 conn.commit()
     return _back(course)
 
@@ -684,12 +804,13 @@ def lesson_new(course):
     title = (request.form.get("title") or "").strip()
     unit = (request.form.get("unit") or "").strip() or None
     with db() as conn:
+        O = ensure_outline(conn, course)
         nxt = conn.execute(
-            "SELECT COALESCE(MAX(position), -1)+1 FROM lessons "
-            "WHERE course=? AND unit_id IS ?", (course, unit)).fetchone()[0]
+            "SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
+            "WHERE hierarchy=? AND level='lesson' AND parent_id IS ?", (O, unit)).fetchone()[0]
         conn.execute(
-            "INSERT INTO lessons(uuid, course, unit_id, title, learning_objective, position) "
-            "VALUES (?, ?, ?, ?, '', ?)", (str(uuidlib.uuid4()), course, unit, title, nxt))
+            "INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) "
+            "VALUES (?, ?, ?, 'lesson', 1, ?, ?)", (O, str(uuidlib.uuid4()), unit, nxt, title))
         conn.commit()
     flash("Added lesson.")
     return _back(course)
@@ -699,13 +820,22 @@ def lesson_new(course):
 def lesson_edit(course, lesson_id):
     """Edit a lesson's title and/or learning objective (only sent fields change)."""
     with db() as conn:
+        O = outline_hierarchy(conn, course)
         if "title" in request.form:
-            conn.execute("UPDATE lessons SET title=? WHERE uuid=? AND course=?",
-                         ((request.form.get("title") or "").strip(), lesson_id, course))
+            conn.execute("UPDATE nodes SET text=? WHERE hierarchy=? AND node_id=? "
+                         "AND level='lesson'",
+                         ((request.form.get("title") or "").strip(), O, lesson_id))
         if "learning_objective" in request.form:
-            conn.execute(
-                "UPDATE lessons SET learning_objective=? WHERE uuid=? AND course=?",
-                ((request.form.get("learning_objective") or "").strip(), lesson_id, course))
+            lo = (request.form.get("learning_objective") or "").strip()
+            if lo:
+                conn.execute(
+                    "INSERT INTO node_attr(hierarchy, node_id, name, value) "
+                    "VALUES (?, ?, 'learning_objective', ?) "
+                    "ON CONFLICT(hierarchy, node_id, name) DO UPDATE SET value=excluded.value",
+                    (O, lesson_id, lo))
+            else:
+                conn.execute("DELETE FROM node_attr WHERE hierarchy=? AND node_id=? "
+                             "AND name='learning_objective'", (O, lesson_id))
         conn.commit()
     if request.headers.get("HX-Request"):
         return ("", 204)
@@ -715,10 +845,11 @@ def lesson_edit(course, lesson_id):
 @app.route("/<course>/lesson/<lesson_id>/delete", methods=["POST"])
 def lesson_delete(course, lesson_id):
     with db() as conn:
+        O = outline_hierarchy(conn, course)
         # Return its raws to the pool, then drop the lesson.
-        conn.execute("UPDATE course_objectives SET plan_unit=NULL, plan_lesson=NULL "
-                     "WHERE course=? AND plan_lesson=?", (course, lesson_id))
-        conn.execute("DELETE FROM lessons WHERE uuid=? AND course=?", (lesson_id, course))
+        conn.execute("DELETE FROM coverage WHERE hierarchy=? AND node_id=?", (O, lesson_id))
+        conn.execute("DELETE FROM node_attr WHERE hierarchy=? AND node_id=?", (O, lesson_id))
+        conn.execute("DELETE FROM nodes WHERE hierarchy=? AND node_id=?", (O, lesson_id))
         conn.commit()
     flash("Deleted lesson; its raws returned to the pool.")
     return _back(course)
@@ -730,9 +861,10 @@ def lesson_arrange(course):
     unit = (request.form.get("unit") or "").strip()
     unit_id = None if unit in ("", "none") else unit
     with db() as conn:
+        O = outline_hierarchy(conn, course)
         for pos, lid in enumerate(_id_list("ids")):
-            conn.execute("UPDATE lessons SET unit_id=?, position=? WHERE uuid=? AND course=?",
-                         (unit_id, pos, lid, course))
+            conn.execute("UPDATE nodes SET parent_id=?, ordinal=? WHERE hierarchy=? "
+                         "AND node_id=? AND level='lesson'", (unit_id, pos, O, lid))
         conn.commit()
     return ("", 204)
 

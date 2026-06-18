@@ -15,26 +15,47 @@ import sqlite3
 
 def fetch(conn, course):
     conn.row_factory = sqlite3.Row
+    # Reference coverage (course == reference hierarchy id) annotates each raw.
     coverage = {}
     for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (course,)):
         coverage.setdefault(r["uuid"], []).append(r["node_id"])
 
+    # The course's outline hierarchy: its unit/lesson nodes, learning objectives,
+    # and the placement (outline coverage) edges.
+    O = conn.execute("SELECT outline FROM hierarchy_targets WHERE reference=?",
+                     (course,)).fetchone()
+    O = O[0] if O else None
+    node_level, lessons, units = {}, [], []
+    if O:
+        for n in conn.execute(
+            "SELECT node_id, parent_id, level, text FROM nodes "
+            "WHERE hierarchy=? ORDER BY ordinal, node_id", (O,)):
+            node_level[n["node_id"]] = n["level"]
+            if n["level"] == "lesson":
+                lessons.append({"uuid": n["node_id"], "unit_id": n["parent_id"],
+                                "title": n["text"], "lo": ""})
+            elif n["level"] == "unit":
+                units.append({"uuid": n["node_id"], "title": n["text"]})
+    los = {r["node_id"]: r["value"] for r in conn.execute(
+        "SELECT node_id, value FROM node_attr "
+        "WHERE hierarchy=? AND name='learning_objective'", (O,))} if O else {}
+    for L in lessons:
+        L["lo"] = los.get(L["uuid"], "")
+    placed = {r["uuid"]: r["node_id"] for r in conn.execute(
+        "SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (O,))} if O else {}
+
     raws = {}
     for r in conn.execute(
-        """SELECT o.uuid, o.text, co.plan_unit, co.plan_lesson
+        """SELECT o.uuid, o.text
              FROM objectives o
              JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
             WHERE o.status='active'""", (course,)):
+        node = placed.get(r["uuid"])
+        level = node_level.get(node)
         raws[r["uuid"]] = {"uuid": r["uuid"], "text": r["text"],
                            "nodes": sorted(coverage.get(r["uuid"], [])),
-                           "plan_unit": r["plan_unit"], "plan_lesson": r["plan_lesson"]}
-
-    lessons = [{"uuid": r["uuid"], "unit_id": r["unit_id"], "title": r["title"],
-                "lo": r["learning_objective"]} for r in conn.execute(
-                    "SELECT uuid, unit_id, title, learning_objective FROM lessons "
-                    "WHERE course=? ORDER BY position, uuid", (course,))]
-    units = [{"uuid": r["uuid"], "title": r["title"]} for r in conn.execute(
-        "SELECT uuid, title FROM units WHERE course=? ORDER BY position, uuid", (course,))]
+                           "plan_unit": node if level == "unit" else None,
+                           "plan_lesson": node if level == "lesson" else None}
 
     by_lesson, rough_by_unit = {}, {}
     for o in sorted(raws.values(), key=lambda o: o["text"].lower()):
@@ -58,7 +79,7 @@ def fetch(conn, course):
     covered_any = {r["node_id"] for r in conn.execute(
         """SELECT DISTINCT cv.node_id FROM coverage cv
              JOIN objectives o ON o.uuid=cv.uuid AND o.status='active'
-            WHERE cv.course=?""", (course,))}
+            WHERE cv.hierarchy=?""", (course,))}
     return units, unassigned, leaves, covered_any, raws
 
 
