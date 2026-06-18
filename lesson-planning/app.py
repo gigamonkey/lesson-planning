@@ -395,7 +395,7 @@ def objective_new(course):
         u = str(uuidlib.uuid4())
         with db() as conn:
             conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
-            conn.execute("INSERT INTO course_objectives VALUES (?, ?)", (course, u))
+            conn.execute("INSERT INTO course_objectives(course, uuid) VALUES (?, ?)", (course, u))
             if node:
                 conn.execute("INSERT OR IGNORE INTO coverage VALUES (?, ?, ?)",
                              (course, u, node))
