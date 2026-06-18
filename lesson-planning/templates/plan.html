@@ -118,7 +118,9 @@
       new Sortable(el, {
         group: 'raws', draggable: 'li.rawitem',
         animation: 120, ghostClass: 'sortable-ghost',
+        onStart: function () { document.body.classList.add('dragging'); },
         onEnd: function (evt) {
+          document.body.classList.remove('dragging');
           const body = new URLSearchParams();
           body.set('uuid', evt.item.dataset.uuid);
           body.set('to', evt.to.dataset.to);
