@@ -1,24 +1,27 @@
 {# Leaf objectives box. Shared by the outline tree and the htmx add/edit
-   responses, so an add/edit swaps in markup identical to a fresh render --
-   including the `.empty` class (red border) flipping off once objectives exist.
-   Forms target the enclosing .leafbox (node ids contain dots, so an #id CSS
-   selector won't work); they keep `action`/`method` so they still work without
-   htmx. The "+ add objective" button clones the <template> row to the end of the
-   list (see addObjective() in the outline); the row is an ordinary edit form, so
-   the same focus-reveal Save button applies. #}
+   responses (and the drag/recategorize refresh), so a change swaps in markup
+   identical to a fresh render -- including the `.empty` class (red border)
+   flipping with the objective count. Forms target the enclosing .leafbox (node
+   ids contain dots, so an #id CSS selector won't work) and keep `action`/`method`
+   so they work without htmx. Each objective li carries data-uuid and a .grip drag
+   handle; the ul carries data-node-id -- used to recategorize an objective by
+   dragging it to another leaf. #}
 <div class="leafbox{% if not objectives %} empty{% endif %}">
-  <ul class="objlist">
+  <ul class="objlist" data-node-id="{{ node_id }}">
     {% for o in objectives %}
-      <li>
-        <form method="post" class="objedit"
-              action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
-              hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
-              hx-target="closest .leafbox" hx-swap="outerHTML">
-          <input type="hidden" name="node_id" value="{{ node_id }}">
-          <input type="hidden" name="anchor" value="n-{{ node_id }}">
-          <input type="text" name="text" value="{{ o.text }}">
-          <button type="submit" title="Save edit">Save</button>
-        </form>
+      <li class="obj" data-uuid="{{ o.uuid }}">
+        <div class="objrow">
+          <span class="grip" title="drag to another node to recategorize">⠿</span>
+          <form method="post" class="objedit"
+                action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
+                hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
+                hx-target="closest .leafbox" hx-swap="outerHTML">
+            <input type="hidden" name="node_id" value="{{ node_id }}">
+            <input type="hidden" name="anchor" value="n-{{ node_id }}">
+            <input type="text" name="text" value="{{ o.text }}">
+            <button type="submit" title="Save edit">Save</button>
+          </form>
+        </div>
       </li>
     {% endfor %}
   </ul>
@@ -27,15 +30,18 @@
 
   <template class="newobj-tpl">
     <li class="newobj">
-      <form method="post" class="objedit"
-            action="{{ url_for('objective_new', course=course) }}"
-            hx-post="{{ url_for('objective_new', course=course) }}"
-            hx-target="closest .leafbox" hx-swap="outerHTML">
-        <input type="hidden" name="node_id" value="{{ node_id }}">
-        <input type="hidden" name="anchor" value="n-{{ node_id }}">
-        <input type="text" name="text" placeholder="New objective…" required>
-        <button type="submit" title="Save">Save</button>
-      </form>
+      <div class="objrow">
+        <span class="grip" style="visibility:hidden">⠿</span>
+        <form method="post" class="objedit"
+              action="{{ url_for('objective_new', course=course) }}"
+              hx-post="{{ url_for('objective_new', course=course) }}"
+              hx-target="closest .leafbox" hx-swap="outerHTML">
+          <input type="hidden" name="node_id" value="{{ node_id }}">
+          <input type="hidden" name="anchor" value="n-{{ node_id }}">
+          <input type="text" name="text" placeholder="New objective…" required>
+          <button type="submit" title="Save">Save</button>
+        </form>
+      </div>
     </li>
   </template>
 </div>

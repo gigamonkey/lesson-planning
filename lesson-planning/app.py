@@ -286,6 +286,29 @@ def leafbox_response(course, node_id):
                            node_id=node_id, objectives=objs)
 
 
+@app.route("/<course>/leafbox/<node_id>")
+def leafbox(course, node_id):
+    """The objectives box partial for one leaf (used to refresh after a drag)."""
+    return leafbox_response(course, node_id)
+
+
+@app.route("/<course>/objective/<uuid>/recategorize", methods=["POST"])
+def recategorize(course, uuid):
+    """Move an objective's coverage from one leaf to another (drag/drop)."""
+    from_node = (request.form.get("from_node") or "").strip()
+    to_node = (request.form.get("to_node") or "").strip()
+    with db() as conn:
+        valid = conn.execute("SELECT 1 FROM nodes WHERE course=? AND node_id=?",
+                             (course, to_node)).fetchone()
+        if to_node and valid and to_node != from_node:
+            conn.execute("INSERT OR IGNORE INTO coverage VALUES (?, ?, ?)",
+                         (course, uuid, to_node))
+            conn.execute("DELETE FROM coverage WHERE course=? AND uuid=? AND node_id=?",
+                         (course, uuid, from_node))
+            conn.commit()
+    return ("", 204)
+
+
 @app.route("/<course>/objective/new", methods=["POST"])
 def objective_new(course):
     text = (request.form.get("text") or "").strip()

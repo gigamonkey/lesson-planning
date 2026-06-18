@@ -5,6 +5,8 @@
 {% macro node(n) %}
 <li class="node lvl-{{ n.level }}" id="n-{{ n.id }}">
   <div class="row">
+    {% if n.children %}<span class="toggle" onclick="toggleNode(event, this)">▾</span>
+    {% else %}<span class="toggle-spacer"></span>{% endif %}
     <span class="nid">{{ n.id }}</span>{{ n.label|inline }}
     {% if n.is_leaf and n.status == 'planned' %}<span class="badge planned">planned</span>{% endif %}
   </div>
@@ -33,7 +35,16 @@
     <ul class="tree">{% for n in tree %}{{ node(n) }}{% endfor %}</ul>
   {% endif %}
 
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script>
+    const course = "{{ course }}";
+
+    // Collapse / expand a node's subtree (the triangle on non-leaf headers).
+    function toggleNode(ev, el) {
+      ev.stopPropagation();
+      el.closest('.node').classList.toggle('collapsed');
+    }
+
     // Add a new objective row at the end of a leaf's list: clone the template,
     // focus it so you can type right away, Escape cancels. Saving htmx-swaps the
     // whole leafbox. Re-clicking just focuses the pending row.
@@ -56,5 +67,53 @@
       }
       li.querySelector('input[name=text]').focus();
     }
+
+    // Re-fetch a leaf's objectives box and replace it in place (used after a
+    // drag, so the box's `.empty` state and the moved row's form node are right).
+    function refreshLeaf(node) {
+      return fetch('/' + course + '/leafbox/' + encodeURIComponent(node))
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+          const ul = document.querySelector('ul.objlist[data-node-id="' + node + '"]');
+          if (!ul) return;
+          const tmp = document.createElement('div');
+          tmp.innerHTML = html.trim();
+          const box = tmp.firstElementChild;
+          ul.closest('.leafbox').replaceWith(box);
+          if (window.htmx) htmx.process(box);
+          initObjlists(box);
+        });
+    }
+
+    // Make each leaf's objectives list a drag source/target. Dragging an
+    // objective (by its grip) to another leaf recategorizes it: the coverage
+    // edge moves from the source node to the target node.
+    function initObjlists(root) {
+      root.querySelectorAll('ul.objlist').forEach(function (ul) {
+        if (ul._sortable) return;
+        ul._sortable = new Sortable(ul, {
+          group: 'objectives', handle: '.grip', draggable: 'li.obj',
+          animation: 120, ghostClass: 'sortable-ghost',
+          onEnd: function (evt) {
+            if (evt.from === evt.to) return;  // reorder within a leaf: no-op
+            const uuid = evt.item.dataset.uuid;
+            const fromNode = evt.from.dataset.nodeId;
+            const toNode = evt.to.dataset.nodeId;
+            const body = new URLSearchParams();
+            body.set('from_node', fromNode);
+            body.set('to_node', toNode);
+            fetch('/' + course + '/objective/' + uuid + '/recategorize',
+                  { method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: body })
+              .then(function () { return Promise.all([refreshLeaf(fromNode), refreshLeaf(toNode)]); });
+          }
+        });
+      });
+    }
+
+    initObjlists(document);
+    // htmx swaps a leafbox on add/edit; re-init drag on the new list.
+    document.body.addEventListener('htmx:afterSwap', function () { initObjlists(document); });
   </script>
 {% endblock %}
