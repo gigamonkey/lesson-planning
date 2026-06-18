@@ -15,16 +15,19 @@ import sqlite3
 
 def fetch(conn, course):
     conn.row_factory = sqlite3.Row
-    # Reference coverage (course == reference hierarchy id) annotates each raw.
-    coverage = {}
-    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (course,)):
-        coverage.setdefault(r["uuid"], []).append(r["node_id"])
-
-    # The course's outline hierarchy: its unit/lesson nodes, learning objectives,
-    # and the placement (outline coverage) edges.
-    O = conn.execute("SELECT outline FROM hierarchy_targets WHERE reference=?",
+    # Resolve the course's reference (CED) and outline (plan) hierarchies by column.
+    R = conn.execute("SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0 "
+                     "ORDER BY (kind='ced') DESC, hierarchy LIMIT 1", (course,)).fetchone()
+    R = R[0] if R else course
+    O = conn.execute("SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
+                     "ORDER BY (kind='lesson-plan') DESC, hierarchy LIMIT 1",
                      (course,)).fetchone()
     O = O[0] if O else None
+
+    # Reference coverage annotates each raw with its CED nodes.
+    coverage = {}
+    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (R,)):
+        coverage.setdefault(r["uuid"], []).append(r["node_id"])
     node_level, lessons, units = {}, [], []
     if O:
         for n in conn.execute(
@@ -75,11 +78,11 @@ def fetch(conn, course):
 
     leaves = [{"node_id": r["node_id"], "text": (r["text"] or "").split("\n", 1)[0]}
               for r in conn.execute("SELECT node_id, text FROM nodes "
-                                    "WHERE hierarchy=? AND is_leaf=1 ORDER BY ordinal", (course,))]
+                                    "WHERE hierarchy=? AND is_leaf=1 ORDER BY ordinal", (R,))]
     covered_any = {r["node_id"] for r in conn.execute(
         """SELECT DISTINCT cv.node_id FROM coverage cv
              JOIN objectives o ON o.uuid=cv.uuid AND o.status='active'
-            WHERE cv.hierarchy=?""", (course,))}
+            WHERE cv.hierarchy=?""", (R,))}
     return units, unassigned, leaves, covered_any, raws
 
 

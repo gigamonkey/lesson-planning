@@ -5,12 +5,13 @@ objective) and loads it into the lesson-planning database's raw-objective tables
 
     objectives(uuid, text, status)                -- the objective text
     course_objectives(course, uuid)               -- which course it belongs to
-    coverage(hierarchy, uuid, node_id)            -- the CED node it covers
+    coverage(hierarchy, uuid, node_id)            -- the reference (CED) node it covers
 
-Each row's ek (the leaf id) becomes one coverage edge; rows mapped to 'none' get
-no edge. Coverage node_ids are checked against the `nodes` table (load that
-first with load_nodes.py) and any that don't resolve are reported -- they are
-still inserted, but flag a mislabeled objective or a hierarchy change.
+Each row's ek (the leaf id) becomes one coverage edge into the course's reference
+hierarchy (its CED, resolved from the `hierarchies` table, default '<course>-ced');
+rows mapped to 'none' get no edge. Coverage node_ids are checked against the
+`nodes` table (load that first with load_nodes.py) and any that don't resolve are
+reported -- they are still inserted, but flag a mislabeled objective or a change.
 
 The load is course-scoped: re-running replaces only this course's objectives,
 course links, and coverage, so several courses can share one database.
@@ -48,11 +49,27 @@ def read_rows(path):
         return list(csv.DictReader(f, delimiter="\t"))
 
 
+def reference_slug(conn, course):
+    """The course's reference (CED) hierarchy slug; load_nodes registers it.
+
+    Falls back to the conventional '<course>-ced' if the hierarchy isn't loaded
+    yet (the coverage edges still record where the objectives belong).
+    """
+    try:
+        row = conn.execute(
+            "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0 "
+            "ORDER BY (kind='ced') DESC, hierarchy LIMIT 1", (course,)).fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    return row[0] if row else f"{course}-ced"
+
+
 def load(db_path, course, rows):
     conn = sqlite3.connect(db_path)
     try:
         for statement in DDL:
             conn.execute(statement)
+        ref = reference_slug(conn, course)
 
         # Replace only this course's rows so multiple courses can share the db.
         old = [u for (u,) in conn.execute(
@@ -71,7 +88,7 @@ def load(db_path, course, rows):
             [(course, r["uuid"]) for r in rows],
         )
         edges = [
-            (course, r["uuid"], r["ek"])
+            (ref, r["uuid"], r["ek"])
             for r in rows
             if r["ek"] and r["ek"] != "none"
         ]
@@ -81,7 +98,7 @@ def load(db_path, course, rows):
 
         # Report coverage edges whose node_id is not in the loaded hierarchy.
         known = {n for (n,) in conn.execute(
-            "SELECT node_id FROM nodes WHERE hierarchy = ?", (course,)
+            "SELECT node_id FROM nodes WHERE hierarchy = ?", (ref,)
         )}
         dangling = sorted({e[2] for e in edges if known and e[2] not in known})
         conn.commit()

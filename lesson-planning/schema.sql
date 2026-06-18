@@ -12,14 +12,23 @@
 -- the authored, in-sync description of the whole schema and can be applied to a
 -- fresh database to create every table up front.
 
+-- Courses are the top-level organizing principle: a short human id (also the
+-- /<course> URL) and a title. Every hierarchy belongs to a course.
+CREATE TABLE IF NOT EXISTS courses (
+  course TEXT PRIMARY KEY,            -- 'csa', 'csp', 'ib'
+  title  TEXT NOT NULL               -- 'AP Computer Science A'
+);
+
 -- Registry of every hierarchy (a tree of nodes): the CED/IB/book references and
--- authored outlines like a course lesson plan. Reference hierarchies are
--- regenerated from markdown; outline hierarchies are authored in-app.
+-- authored outlines like a course lesson plan. The slug is an opaque-but-readable
+-- handle (never parsed -- the course/kind/editable columns carry the meaning).
 CREATE TABLE IF NOT EXISTS hierarchies (
-  hierarchy TEXT PRIMARY KEY,        -- 'csa', 'csp', 'ib', ... and outlines 'csa-plan'
-  kind      TEXT NOT NULL,           -- 'reference' (from markdown) | 'outline' (authored)
+  hierarchy TEXT PRIMARY KEY,         -- readable handle: 'csa-ced', 'csa-plan' (opaque)
+  course    TEXT NOT NULL REFERENCES courses(course),
+  kind      TEXT NOT NULL,            -- WHAT it is: 'ced'|'ib-syllabus'|'lesson-plan'|'book'
+  editable  INTEGER NOT NULL,         -- 0 = reference (external, read-only) | 1 = authored
   title     TEXT NOT NULL,
-  source    TEXT                     -- reference: the markdown path; outline: NULL
+  source    TEXT                      -- reference: the markdown path; authored: NULL
 );
 
 -- Nodes of any hierarchy (one row per node), keyed by hierarchy (not course).

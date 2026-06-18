@@ -22,11 +22,11 @@ import sqlite3
 # Planning tables to export: columns to dump, columns to sort by (stable diff),
 # and an optional WHERE clause. `nodes` and `hierarchies` are exported only for
 # OUTLINE hierarchies -- reference rows are regenerated from markdown by load_nodes.
-OUTLINE = "hierarchy IN (SELECT hierarchy FROM hierarchies WHERE kind='outline')"
+OUTLINE = "hierarchy IN (SELECT hierarchy FROM hierarchies WHERE editable=1)"
 TABLES = {
     "objectives": (["uuid", "text", "status"], ["uuid"], None),
-    "hierarchies": (["hierarchy", "kind", "title", "source"], ["hierarchy"],
-                    "kind='outline'"),
+    "hierarchies": (["hierarchy", "course", "kind", "editable", "title", "source"],
+                    ["hierarchy"], "editable=1"),
     "hierarchy_targets": (["outline", "reference"], ["outline", "reference"], None),
     "course_objectives": (["course", "uuid", "position"], ["course", "uuid"], None),
     "nodes": (["hierarchy", "node_id", "parent_id", "level", "is_leaf", "ordinal", "text"],
