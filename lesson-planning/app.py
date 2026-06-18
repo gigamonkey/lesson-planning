@@ -22,6 +22,7 @@ import uuid as uuidlib
 
 from flask import (Flask, abort, flash, redirect, render_template, request,
                    url_for)
+from markupsafe import Markup
 
 # Import the sibling repo-root module (export_planning).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -126,6 +127,7 @@ def build_tree(nodes, objectives_by_node, planned_leaves, gaps_only=False):
             "id": nid,
             "level": n["level"],
             "label": (n["text"] or "").split("\n", 1)[0],
+            "text": n["text"] or "",
             "is_leaf": bool(n["is_leaf"]),
             "status": leaf_status(n, objectives_by_node, planned_leaves)
                       if n["is_leaf"] else None,
@@ -156,18 +158,49 @@ def summary(nodes, objectives_by_node, planned_leaves):
 
 
 INLINE = re.compile(r"`([^`]+)`|\*([^*]+)\*")
+BULLET = re.compile(r"^\s*-\s+(.*)$")
 
 
-@app.template_filter("inline")
-def inline(text):
-    """Escape HTML, then render markdown `code` and *emphasis* inline."""
-    out = INLINE.sub(
+def _inline(text):
+    """Escape HTML, then render markdown `code` and *emphasis* inline -> str."""
+    return INLINE.sub(
         lambda m: f"<code>{html.escape(m.group(1))}</code>" if m.group(1)
         else f"<em>{html.escape(m.group(2))}</em>",
         html.escape(text or ""),
     )
-    from markupsafe import Markup
-    return Markup(out)
+
+
+@app.template_filter("inline")
+def inline(text):
+    return Markup(_inline(text))
+
+
+@app.template_filter("blocks")
+def blocks(text):
+    """Render multi-line node text: paragraphs and `- ` bullet lists, with inline
+    code/em -- so a leaf's full text (a sentence plus a bulleted list) shows."""
+    out, para, items = [], [], []
+
+    def flush_para():
+        if para:
+            out.append("<p>" + "<br>".join(para) + "</p>")
+            para.clear()
+
+    def flush_list():
+        if items:
+            out.append("<ul>" + "".join(f"<li>{it}</li>" for it in items) + "</ul>")
+            items.clear()
+
+    for line in (text or "").split("\n"):
+        if not line.strip():
+            flush_para(); flush_list(); continue
+        m = BULLET.match(line)
+        if m:
+            flush_para(); items.append(_inline(m.group(1)))
+        else:
+            flush_list(); para.append(_inline(line))
+    flush_para(); flush_list()
+    return Markup("".join(out))
 
 
 @app.route("/")

@@ -11,7 +11,11 @@
       <span class="nid">{{ n.id }}</span>
     </span>
     <div class="content">
-      <span class="label">{{ n.label|inline }}{% if n.is_leaf and n.status == 'planned' %} <span class="badge planned">planned</span>{% endif %}</span>
+      {% if n.is_leaf %}
+        <div class="label leaftext">{{ n.text|blocks }}{% if n.status == 'planned' %}<span class="badge planned">planned</span>{% endif %}</div>
+      {% else %}
+        <span class="label">{{ n.label|inline }}</span>
+      {% endif %}
       {% if n.is_leaf %}
         {% with node_id = n.id, objectives = n.objectives %}
           {% include "_leafbox.html" %}

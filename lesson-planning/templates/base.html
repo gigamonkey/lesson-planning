@@ -64,6 +64,12 @@
     .nid { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--muted); }
     .lvl-unit > .row, .lvl-theme > .row, .lvl-big-idea > .row { font-weight: 700; font-size: 1.05rem; }
     .lvl-topic > .row, .lvl-essential-understanding > .row { font-weight: 600; }
+    /* Full multi-line leaf text: tight paragraphs + bulleted sub-lists. */
+    .leaftext p { margin: 0; }
+    .leaftext > * + * { margin-top: .25rem; }
+    ul.tree .leaftext ul { list-style: disc; margin: 0; padding-left: 1.2rem; }
+    .leaftext li { margin: .05rem 0; }
+    .leaftext .badge { margin-left: .3rem; }
     .leafbox { position: relative; border: 1px solid var(--line); border-radius: 6px;
                background: #fff; margin: .3rem 0 .45rem;
                padding: .35rem 2.1rem .35rem .55rem; }
