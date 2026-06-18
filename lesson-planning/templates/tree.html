@@ -49,6 +49,16 @@
                                  { target: '#outline-stats', swap: 'outerHTML' });
     }
 
+    // Grow an objective textarea to fit its wrapped text (fallback for browsers
+    // without CSS field-sizing).
+    function autosize(ta) {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    }
+    function autosizeAll(root) {
+      root.querySelectorAll('.objedit textarea').forEach(autosize);
+    }
+
     // Clicking anywhere in an empty leaf's box opens a new objective row,
     // like the + button -- but not when clicking the input/button themselves.
     function boxClick(ev) {
@@ -63,8 +73,8 @@
     }
 
     // Add a new objective row at the end of a leaf's list: clone the template,
-    // focus it so you can type right away, Escape cancels. Saving htmx-swaps the
-    // whole leafbox. Re-clicking just focuses the pending row.
+    // focus it so you can type right away (Enter saves, Escape cancels -- both
+    // handled by the delegated listeners below). Re-clicking focuses the pending row.
     function addObjective(btn) {
       const box = btn.closest('.leafbox');
       const ul = box.querySelector('ul.objlist');
@@ -75,14 +85,10 @@
         ul.appendChild(li);
         if (window.htmx) htmx.process(li);
         if (noobj) noobj.hidden = true;
-        li.querySelector('input[name=text]').addEventListener('keydown', function (e) {
-          if (e.key === 'Escape') {
-            li.remove();
-            if (noobj && !ul.children.length) noobj.hidden = false;
-          }
-        });
       }
-      li.querySelector('input[name=text]').focus();
+      const ta = li.querySelector('[name=text]');
+      autosize(ta);
+      ta.focus();
     }
 
     // Re-fetch a leaf's objectives box and replace it in place (used after a
@@ -99,6 +105,7 @@
           ul.closest('.leafbox').replaceWith(box);
           if (window.htmx) htmx.process(box);
           initObjlists(box);
+          autosizeAll(box);
         });
     }
 
@@ -130,14 +137,36 @@
       });
     }
 
+    // Objective textareas grow as you type; Enter saves, Escape cancels a new row.
+    document.addEventListener('input', function (e) {
+      if (e.target.matches && e.target.matches('.objedit textarea')) autosize(e.target);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (!e.target.matches || !e.target.matches('.objedit textarea')) return;
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        e.target.form.requestSubmit();
+      } else if (e.key === 'Escape') {
+        const li = e.target.closest('li.newobj');
+        if (li) {
+          const ul = li.parentElement, box = li.closest('.leafbox');
+          li.remove();
+          const noobj = box && box.querySelector('.noobj');
+          if (noobj && ul && !ul.children.length) noobj.hidden = false;
+        }
+      }
+    });
+
     initObjlists(document);
-    // htmx swaps a leafbox on add/edit; re-init drag and refresh the stats bar.
-    // Skip when the swap *was* our own stats refresh, to avoid an infinite loop
-    // (guard on the request path, which is reliable for outerHTML swaps).
+    autosizeAll(document);
+    // htmx swaps a leafbox on add/edit; re-init drag, autosize, refresh the stats
+    // bar. Skip when the swap *was* our own stats refresh, to avoid an infinite
+    // loop (guard on the request path, reliable for outerHTML swaps).
     document.body.addEventListener('htmx:afterSwap', function (e) {
       var path = (e.detail && e.detail.requestConfig && e.detail.requestConfig.path) || '';
       if (path.indexOf('/outline-stats') !== -1) return;
       initObjlists(document);
+      autosizeAll(document);
       refreshStats();
     });
   </script>

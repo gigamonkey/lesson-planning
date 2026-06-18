@@ -19,7 +19,7 @@
                 hx-target="closest .leafbox" hx-swap="outerHTML">
             <input type="hidden" name="node_id" value="{{ node_id }}">
             <input type="hidden" name="anchor" value="n-{{ node_id }}">
-            <input type="text" name="text" value="{{ o.text }}">
+            <textarea name="text" rows="1">{{ o.text }}</textarea>
             <button type="submit" title="Save edit">Save</button>
           </form>
         </div>
@@ -39,7 +39,7 @@
               hx-target="closest .leafbox" hx-swap="outerHTML">
           <input type="hidden" name="node_id" value="{{ node_id }}">
           <input type="hidden" name="anchor" value="n-{{ node_id }}">
-          <input type="text" name="text" placeholder="New objective…" required>
+          <textarea name="text" rows="1" placeholder="New objective…" required></textarea>
           <button type="submit" title="Save">Save</button>
         </form>
       </div>
