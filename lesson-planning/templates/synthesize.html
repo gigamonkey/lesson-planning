@@ -2,62 +2,88 @@
 {% from "_worklist.html" import worklist %}
 {% block title %}{{ course|upper }} synthesize{% endblock %}
 
+{% macro rawitem(o) %}
+<li class="rawitem" data-uuid="{{ o.uuid }}">
+  <span class="grip" title="drag">⠿</span>
+  <span class="rawtext">{{ o.text|inline }}</span>
+  <span class="sim">{{ o.nodes|join(', ') }}</span>
+</li>
+{% endmacro %}
+
 {% block body %}
-  {{ worklist(course, counts) }}
-  <p>Distill raw objectives into <b>lesson objectives</b> — the whiteboard
-     statement. Check the raw objectives a lesson objective covers, write its
-     text, and create it. This is where duplicates collapse: several overlapping
-     raw objectives roll up into one.</p>
+  {{ worklist(course, counts, id='synth-worklist') }}
+  <p>Distill raw objectives into <b>learning objectives</b> — the student-facing
+     statement. Drag raw objectives from the right into a learning objective on the
+     left (which rolls them up and removes them from the raw list); drag them back
+     to un-roll. Reorder the raw list by dragging too.</p>
 
   <div class="cols">
     <section class="col">
-      <h2>Unsynthesized raw objectives ({{ unsynth|length }})</h2>
-      {% if unsynth %}
-        <form method="post" action="{{ url_for('lesson_objective_new', course=course) }}">
-          <div class="obj">
-            <div class="edit">
-              <input type="text" name="text" placeholder="New lesson objective text…" required>
-              <button type="submit" class="primary">Create from checked</button>
-            </div>
+      <h2>Learning objectives (<span id="lo-count">{{ los|length }}</span>)</h2>
+      <form method="post" action="{{ url_for('lesson_objective_new', course=course) }}" class="addlo">
+        <input type="text" name="text" placeholder="New learning objective… (or add empty and drag raws in)">
+        <button type="submit" class="primary">Add</button>
+      </form>
+      {% for lo in los %}
+        <div class="locard">
+          <div class="loedit">
+            <form method="post" class="edit"
+                  action="{{ url_for('lesson_objective_edit', course=course, lo_id=lo.id) }}">
+              <input type="text" name="text" value="{{ lo.text }}" placeholder="Learning objective…">
+              <button type="submit">Save</button>
+            </form>
+            {% if lo.scheduled %}<span class="badge planned">scheduled</span>{% endif %}
+            <form method="post"
+                  action="{{ url_for('lesson_objective_delete', course=course, lo_id=lo.id) }}">
+              <button type="submit" class="danger" title="Delete">✕</button>
+            </form>
           </div>
-          <ul class="objlist plain">
-            {% for o in unsynth %}
-              <li>
-                <label>
-                  <input type="checkbox" name="objective_uuid" value="{{ o.uuid }}">
-                  {{ o.text|inline }}
-                  <span class="sim">{{ o.nodes|join(', ') }}</span>
-                </label>
-              </li>
-            {% endfor %}
+          <ul class="sortable lorolls" data-container="lo-{{ lo.id }}">
+            {% for r in lo.raws %}{{ rawitem(r) }}{% endfor %}
           </ul>
-        </form>
+        </div>
       {% else %}
-        <p>All raw objectives have been synthesized. 🎉</p>
-      {% endif %}
+        <p class="noobj">No learning objectives yet — add one, then drag raws in.</p>
+      {% endfor %}
     </section>
 
     <section class="col">
-      <h2>Lesson objectives ({{ los|length }})</h2>
-      {% for lo in los %}
-        <div class="obj">
-          <form method="post" class="edit"
-                action="{{ url_for('lesson_objective_edit', course=course, lo_id=lo.id) }}">
-            <input type="text" name="text" value="{{ lo.text }}">
-            <button type="submit">Save</button>
-            {% if lo.scheduled %}<span class="badge planned">scheduled</span>{% endif %}
-          </form>
-          <ul class="objlist">
-            {% for r in lo.raws %}<li class="sim">{{ r.text|inline }}</li>{% endfor %}
-          </ul>
-          <form method="post"
-                action="{{ url_for('lesson_objective_delete', course=course, lo_id=lo.id) }}">
-            <button type="submit" class="danger">Delete</button>
-          </form>
-        </div>
-      {% else %}
-        <p class="noobj">No lesson objectives yet.</p>
-      {% endfor %}
+      <h2>Raw objectives (<span id="raw-count">{{ unsynth|length }}</span>)</h2>
+      <ul class="sortable rawpool" data-container="pool">
+        {% for o in unsynth %}{{ rawitem(o) }}{% endfor %}
+      </ul>
     </section>
   </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+  <script>
+    const course = "{{ course }}";
+
+    function refreshSynthStats() {
+      if (window.htmx) htmx.ajax('GET', '/' + course + '/synthesize-stats',
+                                 { target: '#synth-worklist', swap: 'outerHTML' });
+    }
+
+    document.querySelectorAll('.sortable').forEach(function (el) {
+      new Sortable(el, {
+        group: 'raws', handle: '.grip', draggable: 'li.rawitem',
+        animation: 120, ghostClass: 'sortable-ghost',
+        onEnd: function (evt) {
+          const body = new URLSearchParams();
+          body.set('uuid', evt.item.dataset.uuid);
+          body.set('from', evt.from.dataset.container);
+          body.set('to', evt.to.dataset.container);
+          if (evt.to.dataset.container === 'pool') {
+            const ids = Array.from(evt.to.querySelectorAll('.rawitem')).map(li => li.dataset.uuid);
+            body.set('ids', ids.join(','));
+          }
+          fetch('/' + course + '/synthesize/move',
+                { method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: body })
+            .then(refreshSynthStats);
+        }
+      });
+    });
+  </script>
 {% endblock %}

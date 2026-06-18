@@ -23,7 +23,7 @@ TABLES = {
     # merged_into is omitted: it is reserved/always-empty (explicit merge was
     # dropped), and a trailing empty column just leaves a trailing tab per row.
     "objectives": (["uuid", "text", "status"], ["uuid"]),
-    "course_objectives": (["course", "uuid"], ["course", "uuid"]),
+    "course_objectives": (["course", "uuid", "position"], ["course", "uuid"]),
     "coverage": (["course", "uuid", "node_id"], ["course", "node_id", "uuid"]),
     "lessons": (["id", "course", "title", "position"], ["course", "position", "id"]),
     "lesson_objectives": (

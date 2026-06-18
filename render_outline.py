@@ -1,6 +1,6 @@
 """Render a course's lesson plan from the lesson-planning database to markdown.
 
-The deliverable: an ordered list of lessons, each with its lesson objectives and
+The deliverable: an ordered list of lessons, each with its learning objectives and
 the raw objectives (and CED nodes) they roll up, followed by a traceability
 appendix (every leaf node -> the lesson(s) that cover it) and a gap list. This is
 the proof that the teacher's own lesson structure still covers the whole official
@@ -70,17 +70,17 @@ def render(course, lessons, unscheduled, leaves, covered_any):
 
     out = [f"# {course.upper()} lesson plan", ""]
     out.append(
-        f"_{len(lessons)} lessons · {n_lo} lesson objectives · "
+        f"_{len(lessons)} lessons · {n_lo} learning objectives · "
         f"{planned}/{len(leaves)} leaves planned "
         f"({round(100 * planned / len(leaves)) if leaves else 0}%) · "
-        f"{len(gaps)} gaps · {len(unscheduled)} unscheduled lesson objectives._")
+        f"{len(gaps)} gaps · {len(unscheduled)} unscheduled learning objectives._")
     out.append("")
 
     for i, L in enumerate(lessons, 1):
         out.append(f"## Lesson {i}: {L['title']}")
         out.append("")
         if not L["objectives"]:
-            out.append("_(no lesson objectives yet)_")
+            out.append("_(no learning objectives yet)_")
             out.append("")
         for lo in L["objectives"]:
             out.append(f"### {lo['text']}")
@@ -97,7 +97,7 @@ def render(course, lessons, unscheduled, leaves, covered_any):
                 out.append("")
 
     if unscheduled:
-        out.append("## Unscheduled lesson objectives")
+        out.append("## Unscheduled learning objectives")
         out.append("")
         for lo in unscheduled:
             tag = f"  (covers `{'`, `'.join(lo['nodes'])}`)" if lo["nodes"] else ""
@@ -138,7 +138,7 @@ def main():
         f.write(md)
     lessons, unscheduled, leaves, covered_any = data
     print(f"wrote {args.output}: {len(lessons)} lessons, "
-          f"{len(unscheduled)} unscheduled lesson objectives")
+          f"{len(unscheduled)} unscheduled learning objectives")
 
 
 if __name__ == "__main__":

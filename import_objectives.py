@@ -32,6 +32,7 @@ DDL = [
     """CREATE TABLE IF NOT EXISTS course_objectives (
          course TEXT NOT NULL,
          uuid TEXT NOT NULL REFERENCES objectives(uuid),
+         position INTEGER,
          PRIMARY KEY (course, uuid)
        )""",
     """CREATE TABLE IF NOT EXISTS coverage (
@@ -67,7 +68,7 @@ def load(db_path, course, rows):
             [(r["uuid"], r["objective"]) for r in rows],
         )
         conn.executemany(
-            "INSERT INTO course_objectives VALUES (?, ?)",
+            "INSERT INTO course_objectives(course, uuid) VALUES (?, ?)",
             [(course, r["uuid"]) for r in rows],
         )
         edges = [

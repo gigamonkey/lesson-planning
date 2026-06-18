@@ -153,6 +153,28 @@
     ul.objlist.plain li { padding: .1rem 0; }
     ul.objlist.plain label { display: flex; gap: .4rem; align-items: baseline; cursor: pointer; }
 
+    /* Synthesize drag board: learning-objective cards + raw-objective pool. */
+    .addlo { display: flex; gap: .4rem; margin-bottom: .7rem; }
+    .addlo input { flex: 1; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 4px; }
+    .locard { background: #fff; border: 1px solid var(--line); border-radius: 6px;
+              padding: .5rem .6rem; margin-bottom: .6rem; }
+    .loedit { display: flex; gap: .4rem; align-items: center; }
+    .loedit .edit { flex: 1; display: flex; gap: .35rem; margin: 0; }
+    .loedit .edit input { flex: 1; min-width: 0; padding: .25rem .4rem;
+              border: 1px solid var(--line); border-radius: 4px; }
+    .loedit form { margin: 0; }
+    ul.sortable.lorolls, ul.sortable.rawpool { list-style: none; margin: .4rem 0 0;
+              padding: .2rem; min-height: 2.4rem; border: 1px dashed var(--line);
+              border-radius: 5px; background: var(--bg); }
+    ul.sortable.rawpool { margin-top: 0; min-height: 4rem; }
+    li.rawitem { display: flex; gap: .4rem; align-items: baseline; background: #fff;
+              border: 1px solid var(--line); border-radius: 4px; padding: .25rem .45rem;
+              margin: .25rem 0; font-size: .9rem; }
+    li.rawitem .grip { cursor: grab; }
+    li.rawitem .grip:active { cursor: grabbing; }
+    li.rawitem .rawtext { flex: 1; min-width: 0; }
+    li.rawitem.sortable-ghost { opacity: .4; }
+
     /* Lessons board */
     .board { display: grid; grid-template-columns: 280px 1fr; gap: 1rem; align-items: start; }
     .pool, .lessoncard { background: #fff; border: 1px solid var(--line);

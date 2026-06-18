@@ -34,8 +34,9 @@ CREATE TABLE IF NOT EXISTS objectives (
 );
 
 CREATE TABLE IF NOT EXISTS course_objectives (
-  course TEXT NOT NULL,
-  uuid   TEXT NOT NULL REFERENCES objectives(uuid),
+  course   TEXT NOT NULL,
+  uuid     TEXT NOT NULL REFERENCES objectives(uuid),
+  position INTEGER,                              -- per-course raw-objective order (NULL = unsorted)
   PRIMARY KEY (course, uuid)
 );
 

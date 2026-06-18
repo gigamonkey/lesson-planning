@@ -1,0 +1,4 @@
+{% from "_worklist.html" import worklist %}{{ worklist(course, counts, id='synth-worklist') }}
+{# Out-of-band: refresh the two column counts after a drag. #}
+<span id="raw-count" hx-swap-oob="true">{{ raw_count }}</span>
+<span id="lo-count" hx-swap-oob="true">{{ lo_count }}</span>

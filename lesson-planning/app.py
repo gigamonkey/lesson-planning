@@ -52,6 +52,18 @@ def db():
     return conn
 
 
+def ensure_schema():
+    """Idempotent migrations for an existing working-copy db."""
+    try:
+        with db() as conn:
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(course_objectives)")]
+            if "position" not in cols:
+                conn.execute("ALTER TABLE course_objectives ADD COLUMN position INTEGER")
+                conn.commit()
+    except sqlite3.OperationalError:
+        pass  # table not created yet (unseeded db)
+
+
 def courses(conn):
     return [r["course"] for r in conn.execute(
         "SELECT DISTINCT course FROM nodes ORDER BY course"
@@ -473,48 +485,92 @@ def _id_list(field="ids"):
     return [v for v in (s.strip() for s in vals) if v]
 
 
+def synth_data(conn, course):
+    """(counts, ordered unsynthesized raws, learning objectives with their raws)."""
+    counts = worklist_counts(conn, course)
+    order = node_order(conn, course)
+    objs = active_objectives(conn, course)
+    rolled = rolled_uuids(conn, course)
+    pos = {r["uuid"]: r["position"] for r in conn.execute(
+        "SELECT uuid, position FROM course_objectives WHERE course=?", (course,))}
+    los = []
+    for lo in conn.execute(
+        "SELECT id, text, lesson_id FROM lesson_objectives WHERE course=? "
+        "ORDER BY position IS NULL, position, id", (course,)):
+        raws = [objs.get(r["objective_uuid"],
+                         {"uuid": r["objective_uuid"], "text": "(missing)", "nodes": []})
+                for r in conn.execute(
+                    "SELECT objective_uuid FROM objective_rollup "
+                    "WHERE lesson_objective_id=?", (lo["id"],))]
+        los.append({"id": lo["id"], "text": lo["text"],
+                    "scheduled": lo["lesson_id"] is not None, "raws": raws})
+
+    def key(o):
+        p = pos.get(o["uuid"])
+        ords = [order.get(n, 10**9) for n in o["nodes"]]
+        fallback = min(ords) if ords else 10**9
+        return (0, p, "") if p is not None else (1, fallback, o["text"].lower())
+    unsynth = sorted((o for o in objs.values() if o["uuid"] not in rolled), key=key)
+    return counts, unsynth, los
+
+
 @app.route("/<course>/synthesize")
 def synthesize(course):
     with db() as conn:
         cs = courses(conn)
-        counts = worklist_counts(conn, course)
-        order = node_order(conn, course)
-        objs = active_objectives(conn, course)
-        rolled = rolled_uuids(conn, course)
-        los = []
-        for lo in conn.execute(
-            "SELECT id, text, lesson_id FROM lesson_objectives "
-            "WHERE course=? ORDER BY id", (course,)):
-            raws = [objs.get(r["objective_uuid"],
-                             {"uuid": r["objective_uuid"], "text": "(missing)", "nodes": []})
-                    for r in conn.execute(
-                        "SELECT objective_uuid FROM objective_rollup "
-                        "WHERE lesson_objective_id=?", (lo["id"],))]
-            los.append({"id": lo["id"], "text": lo["text"],
-                        "scheduled": lo["lesson_id"] is not None, "raws": raws})
-
-    def key(o):
-        ords = [order.get(n, 10**9) for n in o["nodes"]]
-        return (min(ords) if ords else 10**9, o["text"].lower())
-    unsynth = sorted((o for o in objs.values() if o["uuid"] not in rolled), key=key)
+        counts, unsynth, los = synth_data(conn, course)
     return render_template("synthesize.html", course=course, courses=cs,
                            counts=counts, unsynth=unsynth, los=los)
 
 
+@app.route("/<course>/synthesize-stats")
+def synthesize_stats(course):
+    """The synth worklist bar + OOB column counts (refreshed after a drag)."""
+    with db() as conn:
+        counts, unsynth, los = synth_data(conn, course)
+    return render_template("_synth_stats.html", course=course, counts=counts,
+                           raw_count=len(unsynth), lo_count=len(los))
+
+
+@app.route("/<course>/synthesize/move", methods=["POST"])
+def synthesize_move(course):
+    """Drag a raw objective between the pool and learning objectives.
+
+    `uuid` moved; `from`/`to` are container keys ("pool" or "lo-<id>"). Moving
+    into a learning objective rolls the raw up; moving to the pool un-rolls it.
+    When the target is the pool, `ids` is its new order -> course_objectives.position.
+    """
+    uuid = request.form.get("uuid")
+    frm = (request.form.get("from") or "").strip()
+    to = (request.form.get("to") or "").strip()
+    with db() as conn:
+        if frm.startswith("lo-"):
+            conn.execute("DELETE FROM objective_rollup WHERE lesson_objective_id=? "
+                         "AND objective_uuid=?", (int(frm[3:]), uuid))
+        if to.startswith("lo-"):
+            conn.execute("INSERT OR IGNORE INTO objective_rollup(lesson_objective_id, "
+                         "objective_uuid) VALUES (?, ?)", (int(to[3:]), uuid))
+        if to == "pool":
+            for i, u in enumerate(_id_list("ids")):
+                conn.execute("UPDATE course_objectives SET position=? "
+                             "WHERE course=? AND uuid=?", (i, course, u))
+        conn.commit()
+    return ("", 204)
+
+
 @app.route("/<course>/lesson-objective/new", methods=["POST"])
 def lesson_objective_new(course):
+    """Create a learning objective (optionally from checked raws; may be empty)."""
     text = (request.form.get("text") or "").strip()
     uuids = request.form.getlist("objective_uuid")
-    if text:
-        with db() as conn:
-            cur = conn.execute(
-                "INSERT INTO lesson_objectives(course, text, lesson_id, position) "
-                "VALUES (?, ?, NULL, NULL)", (course, text))
-            for u in uuids:
-                conn.execute("INSERT OR IGNORE INTO objective_rollup VALUES (?, ?)",
-                             (cur.lastrowid, u))
-            conn.commit()
-        flash(f"Created lesson objective from {len(uuids)} raw objective(s).")
+    with db() as conn:
+        cur = conn.execute(
+            "INSERT INTO lesson_objectives(course, text, lesson_id, position) "
+            "VALUES (?, ?, NULL, NULL)", (course, text))
+        for u in uuids:
+            conn.execute("INSERT OR IGNORE INTO objective_rollup VALUES (?, ?)",
+                         (cur.lastrowid, u))
+        conn.commit()
     return _back(course)
 
 
@@ -535,7 +591,7 @@ def lesson_objective_delete(course, lo_id):
         conn.execute("DELETE FROM objective_rollup WHERE lesson_objective_id=?", (lo_id,))
         conn.execute("DELETE FROM lesson_objectives WHERE id=? AND course=?", (lo_id, course))
         conn.commit()
-    flash("Deleted lesson objective (its raw objectives return to the pool).")
+    flash("Deleted learning objective (its raw objectives return to the pool).")
     return _back(course)
 
 
@@ -634,6 +690,9 @@ def schedule(course):
                 "WHERE id=? AND course=?", (lesson_id, pos, lo_id, course))
         conn.commit()
     return ("", 204)
+
+
+ensure_schema()
 
 
 if __name__ == "__main__":
