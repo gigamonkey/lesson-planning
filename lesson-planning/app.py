@@ -393,6 +393,20 @@ def index():
     return redirect(url_for("tree", course=cs[0]))
 
 
+@app.route("/help")
+def help_page():
+    """A static explainer: the data model, the lifecycle, and how to add material."""
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT c.course, c.title, "
+            "  (SELECT count(*) FROM hierarchies h WHERE h.course=c.course AND h.editable=0) refs, "
+            "  (SELECT count(*) FROM hierarchies h WHERE h.course=c.course AND h.editable=1) plans "
+            "FROM courses c ORDER BY c.course").fetchall()
+    cs = [r["course"] for r in rows]
+    return render_template("help.html", courses=cs, course=(cs[0] if cs else None),
+                           course_rows=rows)
+
+
 @app.route("/<course>")
 def tree(course):
     gaps_only = request.args.get("filter") == "gaps"

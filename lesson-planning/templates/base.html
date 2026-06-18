@@ -254,6 +254,26 @@
     .units .roughzone { margin: .15rem 0 .15rem 1rem; }
     body.dragging .units ul.rawzone { outline: 1px dashed #b9cbe0; background: #f5f9fe; }
     body.dragging .units ul.rawzone.rough { outline-color: #d9cfa0; background: #fbf8ee; }
+
+    /* Help page */
+    .help { max-width: 760px; }
+    .help h2 { font-size: 1.15rem; }
+    .help h3 { font-size: .98rem; margin: 1.1rem 0 .2rem; }
+    .help p, .help li { color: #333; }
+    .help dl { margin: .4rem 0; }
+    .help dt { font-weight: 700; margin-top: .6rem; }
+    .help dd { margin: .1rem 0 0; color: #444; }
+    .help ol { padding-left: 1.3rem; }
+    .help ol > li { margin: .35rem 0; }
+    .help .flow { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem;
+            background: #fff; border: 1px solid var(--line); border-radius: 6px;
+            padding: .7rem .9rem; margin: .6rem 0 1rem; }
+    .help .flow .step { background: #eef3f8; border: 1px solid #d6e2ee; border-radius: 4px;
+            padding: .15rem .5rem; font-weight: 600; font-size: .9rem; }
+    .help .flow .arrow { color: var(--muted); }
+    .help .note { background: #fffbe6; border: 1px solid #f0e0a0; border-radius: 6px;
+            padding: .5rem .8rem; margin: .8rem 0; font-size: .92rem; }
+    .help table.report td { font-size: .92rem; }
   </style>
 </head>
 <body>
@@ -266,14 +286,20 @@
       {% endfor %}
     </nav>
     <nav style="margin-left:auto">
+      {% if course %}
       <a href="{{ url_for('tree', course=course) }}">Outline</a>
       <a href="{{ url_for('objectives', course=course) }}">Objectives</a>
       <a href="{{ url_for('plan', course=course) }}">Plan</a>
       <a href="{{ url_for('report', course=course) }}">Report</a>
+      {% endif %}
+      <a href="{{ url_for('help_page') }}"
+         class="{{ 'active' if request.endpoint == 'help_page' else '' }}">Help</a>
     </nav>
+    {% if course %}
     <form method="post" action="{{ url_for('export', course=course) }}" style="margin:0">
       <button type="submit">Export snapshot</button>
     </form>
+    {% endif %}
   </header>
   <main>
     {% with msgs = get_flashed_messages() %}

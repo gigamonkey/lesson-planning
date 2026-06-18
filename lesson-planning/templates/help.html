@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Help — Lesson Planning{% endblock %}
+
+{% block body %}
+<div class="help">
+  <h1>How this works</h1>
+  <p>This tool helps you take an official curriculum outline (an AP <b>CED</b> or
+     the <b>IB syllabus</b>), draft your own <b>raw objectives</b>, map them onto
+     that outline so you can see what's covered and what's missing, and organize
+     them into a traceable <b>lesson plan</b>.</p>
+
+  <div class="flow">
+    <span class="step">Load a reference</span><span class="arrow">→</span>
+    <span class="step">Draft objectives</span><span class="arrow">→</span>
+    <span class="step">Map coverage</span><span class="arrow">→</span>
+    <span class="step">Build the plan</span><span class="arrow">→</span>
+    <span class="step">Check gaps &amp; trace</span>
+  </div>
+
+  <h2>The pieces</h2>
+  <dl>
+    <dt>Course</dt>
+    <dd>The top-level thing you're planning (CSA, CSP, IB). Each course has a
+        reference hierarchy and, once you start planning, an outline.</dd>
+
+    <dt>Reference hierarchy</dt>
+    <dd>The official outline — an AP Course &amp; Exam Description or the IB
+        syllabus — loaded from a markdown file and treated as <b>read-only</b>.
+        Its <b>leaves</b> (the deepest items, e.g. essential-knowledge statements)
+        are the things you must cover.</dd>
+
+    <dt>Raw objective</dt>
+    <dd>An atom you draft — one concrete thing students should be able to do. Raw
+        objectives live in a per-course <b>pool</b> until you place them.</dd>
+
+    <dt>Coverage</dt>
+    <dd>A link saying “this objective covers that reference leaf.” One objective
+        can cover several leaves and a leaf can be covered by several objectives.</dd>
+
+    <dt>Outline (the plan)</dt>
+    <dd>Your authored lesson plan: <b>units</b> that contain <b>lessons</b>.
+        Dropping a raw objective into a lesson is <b>placement</b> — and placement
+        is just coverage into the plan, so the same objective ties your lesson
+        back to the official leaf it covers.</dd>
+
+    <dt>Learning objective</dt>
+    <dd>The single whiteboard statement for a lesson, authored from the raw
+        objectives you placed in it.</dd>
+  </dl>
+
+  <h2>Reading a leaf's status</h2>
+  <p>On the <b>Outline</b> page every reference leaf is badged with where it is in
+     the lifecycle:</p>
+  <table class="report">
+    <tr><td><span class="badge gap">gap</span></td>
+        <td>No objective covers this leaf yet — a hole in your coverage.</td></tr>
+    <tr><td><span class="badge objective">objective</span></td>
+        <td>An objective covers it, but that objective isn't scheduled in a lesson yet.</td></tr>
+    <tr><td><span class="badge planned">planned</span></td>
+        <td>An objective covers it <i>and</i> is placed in a lesson — fully planned.</td></tr>
+  </table>
+
+  <h2>The pages</h2>
+  <dl>
+    <dt>Outline</dt>
+    <dd>The official outline as a collapsible tree, each leaf badged and showing
+        the objectives mapped to it. Click an empty (red) leaf to add an objective
+        right there. <code>?filter=gaps</code> (the “Gaps only” toolbar link)
+        prunes to just the uncovered leaves.</dd>
+
+    <dt>Objectives</dt>
+    <dd>The raw-objective pool. Edit objective text inline, and add or remove the
+        reference nodes each one covers (the chips).</dd>
+
+    <dt>Plan</dt>
+    <dd>Build the lesson plan: create units, add lessons, and drag raw objectives
+        from the pool into a lesson — or onto a unit's <i>rough</i> zone if you
+        haven't picked the lesson yet. Give each lesson its learning objective.</dd>
+
+    <dt>Report</dt>
+    <dd>The traceability report: summary stats, the full gap list, and every
+        covered leaf with its objective → lesson chain. Proof your plan covers the
+        official outline.</dd>
+  </dl>
+
+  <h2>Adding material in the app</h2>
+  <ol>
+    <li><b>Draft an objective.</b> On <b>Outline</b>, click a leaf's box and use
+        its <span style="font-weight:700">+</span> to add an objective already
+        mapped to that leaf; or add one on the <b>Objectives</b> page.</li>
+    <li><b>Map coverage.</b> On <b>Objectives</b>, add a node chip to map an
+        objective to another leaf, or remove one to unmap it. On <b>Outline</b>
+        you can drag an objective from one leaf to another to recategorize it.</li>
+    <li><b>Build the plan.</b> On <b>Plan</b>, “Add unit”, then <b>+ lesson</b>,
+        then drag raws from the pool into lessons. Write each lesson's learning
+        objective in its italic field.</li>
+    <li><b>Everything auto-saves</b> to the live working database as you type or
+        drag — there are no Save buttons.</li>
+  </ol>
+
+  <div class="note">
+    Edits go to the live database immediately. To capture a reviewable, committable
+    snapshot, click <b>Export snapshot</b> in the header — it writes the
+    git-diffable <code>.tsv</code> files under <code>lesson-planning/export/</code>.
+  </div>
+
+  <h2>Loading a new reference or course</h2>
+  <p>Reference hierarchies and courses come from markdown files, loaded from the
+     command line (they're regenerated from those files, not authored in the app):</p>
+  <ol>
+    <li><b>Load the outline.</b> <code>uv run load_nodes.py csp/ced-hierarchy.md
+        lesson-planning/db.db</code> — it auto-detects the flavor, registers the
+        course (e.g. <code>csp</code>) and its reference hierarchy
+        (e.g. <code>csp-ced</code>), and loads the nodes. The course then appears
+        in the top nav.</li>
+    <li><b>Seed objectives (optional).</b> <code>uv run import_objectives.py
+        &lt;objectives.tsv&gt; lesson-planning/db.db --course csp</code> bulk-loads
+        raw objectives and their coverage from a TSV.</li>
+    <li><b>Then plan in the app</b> as above.</li>
+  </ol>
+
+  <h2>Saving &amp; version control</h2>
+  <p>The database (<code>db.db</code>) is the live working copy and is not checked
+     in. The committed state is the export directory of <code>.tsv</code> files.
+     <b>Export snapshot</b> writes them; <code>uv run rebuild_db.py</code>
+     reconstructs the database from scratch out of the schema, the hierarchy
+     markdown, and that export — so the whole thing is reproducible from
+     version-controlled inputs.</p>
+
+  {% if course_rows %}
+  <h2>Currently loaded</h2>
+  <table class="report">
+    <tr><th>Course</th><th>Title</th><th>Reference(s)</th><th>Plan?</th></tr>
+    {% for r in course_rows %}
+    <tr>
+      <td><a href="{{ url_for('tree', course=r['course']) }}">{{ r['course']|upper }}</a></td>
+      <td>{{ r['title'] }}</td>
+      <td>{{ r['refs'] }}</td>
+      <td>{{ 'yes' if r['plans'] else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}
