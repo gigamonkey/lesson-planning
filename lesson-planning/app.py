@@ -255,14 +255,44 @@ def ensure_outline(conn, course):
     return O
 
 
-def load_course(conn, course):
-    """Return (nodes, objectives_by_node, planned_leaves) for a course.
+@app.context_processor
+def inject_nav():
+    """Sidebar data for every page: courses -> their hierarchies (references then
+    outlines), plus the course/hierarchy the current request is showing."""
+    nav, active = [], None
+    va = request.view_args or {}
+    nav_course = va.get("course")
+    try:
+        with db() as conn:
+            cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
+            by_course = {}
+            for h in conn.execute(
+                "SELECT hierarchy, course, kind, editable, title FROM hierarchies "
+                "ORDER BY course, editable, (kind='ced') DESC, hierarchy"):
+                by_course.setdefault(h["course"], []).append(h)
+            nav = [{"course": c["course"], "title": c["title"],
+                    "hierarchies": by_course.get(c["course"], [])} for c in cs]
+            if "hierarchy" in va:
+                active = va["hierarchy"]
+            elif nav_course and request.endpoint == "plan":
+                active = outline_hierarchy(conn, nav_course)
+            elif nav_course and request.endpoint == "tree":
+                active = reference_hierarchy(conn, nav_course)
+    except sqlite3.OperationalError:
+        pass
+    return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}
+
+
+def load_course(conn, course, R=None):
+    """Return (nodes, objectives_by_node, planned_leaves) for a reference.
+
+    R is the reference hierarchy to render (default: the course's primary one).
 
     nodes: list of sqlite Rows ordered by document position.
     objectives_by_node: node_id -> list of active raw objectives covering it.
     planned_leaves: set of leaf node_ids that a scheduled lesson traces back to.
     """
-    R = reference_hierarchy(conn, course)
+    R = R or reference_hierarchy(conn, course)
     nodes = conn.execute(
         "SELECT * FROM nodes WHERE hierarchy = ? ORDER BY ordinal", (R,)
     ).fetchall()
@@ -430,19 +460,40 @@ def help_page():
                            course_rows=rows)
 
 
-@app.route("/<course>")
-def tree(course):
-    gaps_only = request.args.get("filter") == "gaps"
+def render_tree(course, R, gaps_only):
+    """Render the read-only tree view of reference hierarchy R."""
     with db() as conn:
-        cs = courses(conn)
-        nodes, obn, planned = load_course(conn, course)
+        nodes, obn, planned = load_course(conn, course, R)
+        title = conn.execute("SELECT title FROM hierarchies WHERE hierarchy=?", (R,)).fetchone()
     return render_template(
         "tree.html",
-        course=course, courses=cs, gaps_only=gaps_only,
+        course=course, ref=R, hierarchy_title=title["title"] if title else R,
+        gaps_only=gaps_only,
         stats=summary(nodes, obn, planned),
         tree=build_tree(nodes, obn, planned, gaps_only),
         STATUS=STATUS,
     )
+
+
+@app.route("/<course>")
+def tree(course):
+    with db() as conn:
+        R = reference_hierarchy(conn, course)
+    return render_tree(course, R, request.args.get("filter") == "gaps")
+
+
+@app.route("/<course>/h/<hierarchy>")
+def hierarchy_view(course, hierarchy):
+    """Canonical per-hierarchy URL: a reference renders its tree; an outline (the
+    plan) redirects to the outline editor."""
+    with db() as conn:
+        h = conn.execute("SELECT editable FROM hierarchies WHERE hierarchy=? AND course=?",
+                         (hierarchy, course)).fetchone()
+    if not h:
+        abort(404, f"no hierarchy {hierarchy!r} for course {course!r}")
+    if h["editable"]:
+        return redirect(url_for("plan", course=course))
+    return render_tree(course, hierarchy, request.args.get("filter") == "gaps")
 
 
 @app.route("/<course>/report")
@@ -528,29 +579,38 @@ def _back(course):
     return redirect(target)
 
 
-def leafbox_response(course, node_id):
+def active_ref(conn, course):
+    """The reference hierarchy this request targets (a `ref` arg/field), else the
+    course's primary reference -- so the tree view and its AJAX endpoints all act
+    on whichever hierarchy is being shown (e.g. csa-ced vs csa-book)."""
+    return (request.values.get("ref") or "").strip() or reference_hierarchy(conn, course)
+
+
+def leafbox_response(course, node_id, R):
     """Render the leaf's objectives box partial (the htmx swap target)."""
     with db() as conn:
         objs = conn.execute(
             """SELECT o.uuid, o.text FROM coverage cv
                  JOIN objectives o ON o.uuid = cv.uuid AND o.status = 'active'
                 WHERE cv.hierarchy = ? AND cv.node_id = ? ORDER BY o.text""",
-            (reference_hierarchy(conn, course), node_id)).fetchall()
-    return render_template("_leafbox.html", course=course,
+            (R, node_id)).fetchall()
+    return render_template("_leafbox.html", course=course, ref=R,
                            node_id=node_id, objectives=objs)
 
 
 @app.route("/<course>/leafbox/<node_id>")
 def leafbox(course, node_id):
     """The objectives box partial for one leaf (used to refresh after a drag)."""
-    return leafbox_response(course, node_id)
+    with db() as conn:
+        R = active_ref(conn, course)
+    return leafbox_response(course, node_id, R)
 
 
 @app.route("/<course>/outline-stats")
 def outline_stats(course):
     """The outline's coverage stats bar partial (refreshed after add/recategorize)."""
     with db() as conn:
-        nodes, obn, planned = load_course(conn, course)
+        nodes, obn, planned = load_course(conn, course, active_ref(conn, course))
     return render_template("_outline_stats.html", stats=summary(nodes, obn, planned))
 
 
@@ -560,7 +620,7 @@ def recategorize(course, uuid):
     from_node = (request.form.get("from_node") or "").strip()
     to_node = (request.form.get("to_node") or "").strip()
     with db() as conn:
-        R = reference_hierarchy(conn, course)
+        R = active_ref(conn, course)
         valid = conn.execute("SELECT 1 FROM nodes WHERE hierarchy=? AND node_id=?",
                              (R, to_node)).fetchone()
         if to_node and valid and to_node != from_node:
@@ -576,8 +636,10 @@ def recategorize(course, uuid):
 def objective_new(course):
     text = (request.form.get("text") or "").strip()
     node = (request.form.get("node_id") or "").strip()
+    R = None
     if text:
         with db() as conn:
+            R = active_ref(conn, course)
             # Intern by text: reuse the existing objective, or create a new one.
             row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
             u = row[0] if row else str(uuidlib.uuid4())
@@ -587,11 +649,13 @@ def objective_new(course):
                          (course, u))
             if node:
                 conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
-                             "VALUES (?, ?, ?)", (reference_hierarchy(conn, course), u, node))
+                             "VALUES (?, ?, ?)", (R, u, node))
             conn.commit()
     # htmx (outline): swap just this leaf's box; otherwise PRG back to the page.
     if request.headers.get("HX-Request"):
-        return leafbox_response(course, node)
+        with db() as conn:
+            R = R or active_ref(conn, course)
+        return leafbox_response(course, node, R)
     if text:
         flash(f"Added objective: {text}")
     return _back(course)

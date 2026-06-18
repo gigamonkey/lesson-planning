@@ -30,11 +30,12 @@
 {% endmacro %}
 
 {% block body %}
+  <h2 class="hiername">{{ hierarchy_title }}</h2>
   {{ statbar(stats, id='outline-stats') }}
   <div class="toolbar">
-    <a href="{{ url_for('tree', course=course) }}"
+    <a href="{{ url_for('hierarchy_view', course=course, hierarchy=ref) }}"
        class="{{ '' if gaps_only else 'active' }}">All nodes</a>
-    <a href="{{ url_for('tree', course=course, filter='gaps') }}"
+    <a href="{{ url_for('hierarchy_view', course=course, hierarchy=ref, filter='gaps') }}"
        class="{{ 'active' if gaps_only else '' }}">Gaps only (<span id="toolbar-gaps">{{ stats.gaps }}</span>)</a>
   </div>
   {% if gaps_only and stats.gaps == 0 %}
@@ -46,10 +47,12 @@
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script>
     const course = "{{ course }}";
+    const ref = "{{ ref }}";
+    const refQ = '?ref=' + encodeURIComponent(ref);  // which reference this view shows
 
     // Refresh the header coverage stats bar (htmx GET + outerHTML swap).
     function refreshStats() {
-      if (window.htmx) htmx.ajax('GET', '/' + course + '/outline-stats',
+      if (window.htmx) htmx.ajax('GET', '/' + course + '/outline-stats' + refQ,
                                  { target: '#outline-stats', swap: 'outerHTML' });
     }
 
@@ -98,7 +101,7 @@
     // Re-fetch a leaf's objectives box and replace it in place (used after a
     // drag, so the box's `.empty` state and the moved row's form node are right).
     function refreshLeaf(node) {
-      return fetch('/' + course + '/leafbox/' + encodeURIComponent(node))
+      return fetch('/' + course + '/leafbox/' + encodeURIComponent(node) + refQ)
         .then(function (r) { return r.text(); })
         .then(function (html) {
           const ul = document.querySelector('ul.objlist[data-node-id="' + node + '"]');
@@ -130,6 +133,7 @@
             const body = new URLSearchParams();
             body.set('from_node', fromNode);
             body.set('to_node', toNode);
+            body.set('ref', ref);
             fetch('/' + course + '/objective/' + uuid + '/recategorize',
                   { method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

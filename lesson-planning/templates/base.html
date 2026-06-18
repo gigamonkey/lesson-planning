@@ -14,13 +14,39 @@
     * { box-sizing: border-box; }
     body { font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 0;
            color: #222; background: var(--bg); }
-    header { background: #fff; border-bottom: 1px solid var(--line);
-             padding: .6rem 1.2rem; display: flex; align-items: center;
-             gap: 1.2rem; position: sticky; top: 0; z-index: 5; }
-    header h1 { font-size: 1rem; margin: 0; font-weight: 700; }
-    header nav a { margin-right: .8rem; text-decoration: none; color: #2b6cb0; }
-    header nav a.active { font-weight: 700; color: #222; }
-    main { max-width: 1000px; margin: 0 auto; padding: 1.2rem; }
+    .layout { display: flex; align-items: flex-start; }
+    main { flex: 1; min-width: 0; max-width: 1000px; margin: 0 auto; padding: 1.2rem; }
+
+    /* Left sidebar: courses -> their hierarchies (references then the outline). */
+    .sidebar { width: 230px; flex: none; background: #fff; border-right: 1px solid var(--line);
+               padding: .8rem .9rem; position: sticky; top: 0; height: 100vh;
+               overflow-y: auto; }
+    .sidebar h1 { font-size: 1rem; margin: 0 0 1rem; font-weight: 700; }
+    .sidebar .course { margin-bottom: 1rem; }
+    .sidebar .coursename { font-weight: 700; color: #222; text-decoration: none; font-size: .95rem; }
+    .sidebar .course.active .coursename { color: #2b6cb0; }
+    .sidebar .ctitle { display: block; font-size: .7rem; color: var(--muted); margin: 0 0 .3rem; }
+    .sidebar ul.hiers { list-style: none; margin: .2rem 0; padding: 0; }
+    .sidebar ul.hiers li { display: flex; align-items: center; gap: .35rem; padding: .13rem 0; }
+    .sidebar ul.hiers a { text-decoration: none; color: #2b6cb0; font-size: .88rem; flex: 1;
+                          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar ul.hiers li.active a { font-weight: 700; color: #222; }
+    .sidebar .courseactions { font-size: .78rem; margin-top: .25rem; }
+    .sidebar .courseactions a { color: var(--muted); text-decoration: none; margin-right: .6rem; }
+    .sidebar .courseactions a:hover { color: #2b6cb0; }
+    .sidebar-foot { border-top: 1px solid var(--line); padding-top: .7rem; margin-top: .5rem;
+                    display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+    .sidebar-foot a { color: #2b6cb0; text-decoration: none; }
+    .sidebar-foot a.active { font-weight: 700; color: #222; }
+    .sidebar-foot button { font-size: .8rem; padding: .2rem .5rem; }
+    .pill { font-size: .58rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+            padding: .04rem .32rem; border-radius: 8px; flex: none;
+            background: #eef1f4; color: #555; border: 1px solid #e0e4e8; }
+    .pill-ced { background: #eaf3ff; color: #2b6cb0; border-color: #cfe0f5; }
+    .pill-book { background: #f3eefe; color: #6b46c1; border-color: #e0d4f5; }
+    .pill-lesson-plan { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
+    .pill-ib-syllabus { background: #fff4e6; color: #b7791f; border-color: #f0dcc0; }
+    .hiername { margin-top: 0; }
 
     .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0 0 1rem;
              padding: .8rem 1rem; background: #fff; border: 1px solid var(--line);
@@ -182,7 +208,7 @@
     /* Lessons board */
     .board { display: grid; grid-template-columns: 280px 1fr; gap: 1rem; align-items: start; }
     .pool { background: #fff; border: 1px solid var(--line);
-            border-radius: 6px; padding: .5rem .6rem; position: sticky; top: 60px; }
+            border-radius: 6px; padding: .5rem .6rem; position: sticky; top: 1rem; }
     .pool h2 { margin: .1rem 0 .4rem; font-size: 1rem; }
     .addlesson { display: flex; gap: .4rem; margin-bottom: .7rem; }
     .addlesson input { flex: 1; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 4px; }
@@ -222,7 +248,7 @@
     .lessoncard input, .lessoncard textarea { cursor: text; }
     /* Plan page: outline (left) + raw pool (right). */
     .plan-board { grid-template-columns: 1fr 300px; }
-    .plan-board .pool { position: sticky; top: 60px; }
+    .plan-board .pool { position: sticky; top: 1rem; }
     ul.rawzone { list-style: none; margin: .3rem 0 0; padding: .2rem; min-height: 2.2rem;
             border: 1px dashed var(--line); border-radius: 5px; background: var(--bg); }
     ul.rawzone.rawpool { min-height: 6rem; }
@@ -277,36 +303,49 @@
   </style>
 </head>
 <body>
-  <header>
-    <h1>Lesson Planning</h1>
-    <nav>
-      {% for c in courses %}
-        <a href="{{ url_for('tree', course=c) }}"
-           class="{{ 'active' if c == course else '' }}">{{ c|upper }}</a>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>Lesson Planning</h1>
+      {% for c in course_nav %}
+        <div class="course {{ 'active' if c.course == nav_course else '' }}">
+          <a class="coursename" href="{{ url_for('tree', course=c.course) }}">{{ c.course|upper }}</a>
+          <span class="ctitle">{{ c.title }}</span>
+          <ul class="hiers">
+            {% for h in c.hierarchies %}
+              {% if h.editable %}
+                {% set href = url_for('plan', course=c.course) %}
+              {% else %}
+                {% set href = url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) %}
+              {% endif %}
+              <li class="{{ 'active' if h.hierarchy == active_hierarchy else '' }}">
+                <a href="{{ href }}" title="{{ h.title }}">{{ h.title }}</a>
+                <span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+          <div class="courseactions">
+            <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
+            <a href="{{ url_for('report', course=c.course) }}">Report</a>
+          </div>
+        </div>
       {% endfor %}
-    </nav>
-    <nav style="margin-left:auto">
-      {% if course %}
-      <a href="{{ url_for('tree', course=course) }}">Outline</a>
-      <a href="{{ url_for('objectives', course=course) }}">Objectives</a>
-      <a href="{{ url_for('plan', course=course) }}">Plan</a>
-      <a href="{{ url_for('report', course=course) }}">Report</a>
-      {% endif %}
-      <a href="{{ url_for('help_page') }}"
-         class="{{ 'active' if request.endpoint == 'help_page' else '' }}">Help</a>
-    </nav>
-    {% if course %}
-    <form method="post" action="{{ url_for('export', course=course) }}" style="margin:0">
-      <button type="submit">Export snapshot</button>
-    </form>
-    {% endif %}
-  </header>
-  <main>
-    {% with msgs = get_flashed_messages() %}
-      {% if msgs %}<div class="flash">{% for m in msgs %}<div>{{ m }}</div>{% endfor %}</div>{% endif %}
-    {% endwith %}
-    {% block body %}{% endblock %}
-  </main>
+      <div class="sidebar-foot">
+        <a href="{{ url_for('help_page') }}"
+           class="{{ 'active' if request.endpoint == 'help_page' else '' }}">Help</a>
+        {% if course_nav %}
+        <form method="post" action="{{ url_for('export', course=nav_course or course_nav[0].course) }}">
+          <button type="submit">Export snapshot</button>
+        </form>
+        {% endif %}
+      </div>
+    </aside>
+    <main>
+      {% with msgs = get_flashed_messages() %}
+        {% if msgs %}<div class="flash">{% for m in msgs %}<div>{{ m }}</div>{% endfor %}</div>{% endif %}
+      {% endwith %}
+      {% block body %}{% endblock %}
+    </main>
+  </div>
   <script>
     // Auto-save: an inline field in a `.autosave` form saves on blur if it
     // changed (Enter still saves too). Those forms are htmx (hx-post) so saving

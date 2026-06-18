@@ -38,6 +38,7 @@
               hx-target="closest .leafbox" hx-swap="outerHTML">
           <input type="hidden" name="node_id" value="{{ node_id }}">
           <input type="hidden" name="anchor" value="n-{{ node_id }}">
+          <input type="hidden" name="ref" value="{{ ref|default('') }}">
           <textarea name="text" rows="1" placeholder="New objective…" required></textarea>
         </form>
       </div>
