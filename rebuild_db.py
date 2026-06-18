@@ -21,14 +21,19 @@ import import_planning
 import load_nodes
 from hierarchy import parse_sections
 
+# Each spec is a markdown `path` plus optional overrides for the flavor-derived
+# defaults (course, kind, hierarchy slug, course_title) -- needed when a file's
+# course/slug isn't implied by its flavor, e.g. a course's book outline.
 DEFAULT_HIERARCHIES = [
-    "csa/ced-2025-hierarchy.md",
-    "csp/ced-hierarchy.md",
-    "ib/ib-hierarchy.md",
+    {"path": "csa/ced-2025-hierarchy.md"},
+    {"path": "csp/ced-hierarchy.md"},
+    {"path": "ib/ib-hierarchy.md"},
+    {"path": "csa/bhsawesome-outline.md", "hierarchy": "csa-book", "course": "csa",
+     "course_title": "AP Computer Science A"},
 ]
 
 
-def rebuild(db_path, schema_path, export_dir, hierarchies):
+def rebuild(db_path, schema_path, export_dir, specs):
     if os.path.exists(db_path):
         os.remove(db_path)
     conn = sqlite3.connect(db_path)
@@ -36,13 +41,16 @@ def rebuild(db_path, schema_path, export_dir, hierarchies):
     conn.close()
     print(f"applied {schema_path} -> fresh {db_path}")
 
-    for hf in hierarchies:
+    for spec in specs:
+        hf = spec["path"]
         if not os.path.exists(hf):
             print(f"  skip nodes (missing): {hf}")
             continue
         with open(hf) as f:
             flavor, sections = parse_sections(f.read())
-        m = load_nodes.meta_for(flavor)
+        m = load_nodes.meta_for(flavor, course=spec.get("course"), kind=spec.get("kind"),
+                                slug=spec.get("hierarchy"),
+                                course_title=spec.get("course_title"))
         rows = load_nodes.build_rows(m["slug"], flavor, sections)
         load_nodes.load(db_path, m["slug"], m["course"], m["kind"], m["course_title"],
                         rows, source=hf)
@@ -57,14 +65,14 @@ def rebuild(db_path, schema_path, export_dir, hierarchies):
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("hierarchy", nargs="*", default=None,
-                   help="hierarchy markdown file(s) for the nodes table "
-                        "(default: the known CED/IB files that exist)")
+                   help="hierarchy markdown file(s) for the nodes table, with "
+                        "flavor-derived course/slug (default: the known CED/IB/book files)")
     p.add_argument("--db", default="lesson-planning/db.db")
     p.add_argument("--schema", default="lesson-planning/schema.sql")
     p.add_argument("--export", default="lesson-planning/export/")
     args = p.parse_args()
-    hierarchies = args.hierarchy or DEFAULT_HIERARCHIES
-    rebuild(args.db, args.schema, args.export, hierarchies)
+    specs = [{"path": h} for h in args.hierarchy] if args.hierarchy else DEFAULT_HIERARCHIES
+    rebuild(args.db, args.schema, args.export, specs)
 
 
 if __name__ == "__main__":
