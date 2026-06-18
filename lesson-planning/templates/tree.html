@@ -31,7 +31,7 @@
     <a href="{{ url_for('tree', course=course) }}"
        class="{{ '' if gaps_only else 'active' }}">All nodes</a>
     <a href="{{ url_for('tree', course=course, filter='gaps') }}"
-       class="{{ 'active' if gaps_only else '' }}">Gaps only ({{ stats.gaps }})</a>
+       class="{{ 'active' if gaps_only else '' }}">Gaps only (<span id="toolbar-gaps">{{ stats.gaps }}</span>)</a>
   </div>
   {% if gaps_only and stats.gaps == 0 %}
     <p>No gaps — every leaf has at least one objective. 🎉</p>

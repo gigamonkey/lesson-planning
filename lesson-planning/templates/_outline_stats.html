@@ -1,1 +1,3 @@
 {% from "_stats.html" import statbar %}{{ statbar(stats, id='outline-stats') }}
+{# Out-of-band: also refresh the toolbar's "Gaps only (N)" count. #}
+<span id="toolbar-gaps" hx-swap-oob="true">{{ stats.gaps }}</span>
