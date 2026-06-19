@@ -26,7 +26,7 @@
             <textarea name="text" rows="1">{{ o.text }}</textarea>
           </form>
           {% for id, kind, title in o.tags %}<span class="otag pill-{{ kind }}"
-                title="{{ id }} — {{ title }}">{{ id }}</span>{% endfor %}
+                data-tip="{{ id }} — {{ title }}">{{ id }}</span>{% endfor %}
         </div>
       </li>
     {% endfor %}
