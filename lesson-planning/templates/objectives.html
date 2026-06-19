@@ -25,7 +25,7 @@
                 hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}" hx-swap="none">
             <textarea name="text" rows="1">{{ o.text }}</textarea>
           </form>
-          {% for t in o.tags %}<span class="otag">{{ t }}</span>{% endfor %}
+          {% for id, kind in o.tags %}<span class="otag pill-{{ kind }}">{{ id }}</span>{% endfor %}
         </div>
       </li>
     {% endfor %}

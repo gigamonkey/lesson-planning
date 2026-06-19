@@ -623,8 +623,8 @@ def objectives(course):
     """A compact, lexically-sorted list of the course's objectives, each tagged
     with the reference node ids it covers (outline placements omitted -- uuids)."""
     with db() as conn:
-        refs = {r[0] for r in conn.execute(
-            "SELECT hierarchy FROM hierarchies WHERE editable=0")}
+        ref_kind = {r["hierarchy"]: r["kind"] for r in conn.execute(
+            "SELECT hierarchy, kind FROM hierarchies WHERE editable=0")}
         objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "tags": []}
                 for r in conn.execute(
                     "SELECT o.uuid, o.text FROM objectives o JOIN course_objectives co "
@@ -633,8 +633,9 @@ def objectives(course):
             "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv "
             "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?", (course,)):
             o = objs.get(r["uuid"])
-            if o and r["hierarchy"] in refs:
-                o["tags"].append(r["node_id"])
+            if o and r["hierarchy"] in ref_kind:
+                o["tags"].append((r["node_id"], ref_kind[r["hierarchy"]]))
+        # Each tag is (node_id, kind); kind colors it to match the sidebar pills.
         for o in objs.values():
             o["tags"] = sorted(set(o["tags"]))
     # Sort by the VISIBLE text -- ignore the markdown markers (`code`, *em*).
