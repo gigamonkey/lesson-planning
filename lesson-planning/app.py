@@ -25,16 +25,24 @@ from flask import (Flask, Response, abort, flash, redirect, render_template,
                    request, url_for)
 from markupsafe import Markup
 
-# Import sibling repo-root modules (export_planning, import_objectives).
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Import sibling repo-root modules (the lesson-planning scripts). The app wires
+# their library functions to routes -- it never reimplements their logic -- so the
+# CLI and the app stay in lockstep.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
 import export_planning  # noqa: E402
 import import_objectives  # noqa: E402
+import import_planning  # noqa: E402
+import load_nodes  # noqa: E402
+import rebuild_db  # noqa: E402
+import render_outline  # noqa: E402
 from hierarchy import hierarchy_title  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
 )
 EXPORT_DIR = os.path.join(os.path.dirname(__file__), "export")
+SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 app = Flask(__name__)
 app.secret_key = "lesson-planning-dev"  # local single-user app; not security-sensitive
@@ -60,9 +68,19 @@ def db():
 
 
 def ensure_schema():
-    """Idempotent migrations for an existing working-copy db."""
+    """Apply the canonical schema to a fresh/empty db, then run idempotent
+    migrations on an existing working-copy db.
+
+    A first run (no db.db) thus boots into a valid, empty database -- ready to be
+    populated from the app (Data page: load a reference, or restore a snapshot) --
+    instead of dead-ending at "no courses loaded". schema.sql is the same canonical
+    file rebuild_db applies, so this adds no second source of truth.
+    """
     try:
         with db() as conn:
+            if "courses" not in {r[0] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'")}:
+                conn.executescript(open(SCHEMA_PATH).read())
             # Generalize nodes/coverage: course -> hierarchy, and a registry.
             ncols = [r[1] for r in conn.execute("PRAGMA table_info(nodes)")]
             if ncols and "course" in ncols:
@@ -482,7 +500,7 @@ def index():
     with db() as conn:
         cs = courses(conn)
     if not cs:
-        abort(404, "no courses loaded -- run load_nodes.py first")
+        return redirect(url_for("data"))  # empty db: land on the setup/Data page
     return redirect(url_for("plan", course=cs[0]))   # land on the course outline
 
 
@@ -504,6 +522,84 @@ def help_page():
     cs = [r["course"] for r in rows]
     return render_template("help.html", courses=cs, course=(cs[0] if cs else None),
                            course_rows=rows)
+
+
+# --------------------------------------------------------------------------
+# Data: bootstrap & populate from files / version control. These wire the
+# load_nodes / import_planning / rebuild_db library functions to the UI so the
+# whole lifecycle -- start empty, load real data, snapshot -- happens in the app.
+
+@app.route("/data")
+def data():
+    """Setup / data page: load a reference hierarchy (and so a course), restore the
+    committed snapshot, export. Also the empty-db landing page (see `index`)."""
+    with db() as conn:
+        cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
+        hs = conn.execute(
+            "SELECT hierarchy, course, kind, editable, title, source FROM hierarchies "
+            "ORDER BY course, editable, hierarchy").fetchall()
+        n_obj = conn.execute("SELECT count(*) FROM objectives").fetchone()[0]
+    return render_template("data.html", courses=cs, hierarchies=hs, n_obj=n_obj,
+                           export_dir=os.path.relpath(EXPORT_DIR, REPO_ROOT),
+                           page_title="Data")
+
+
+@app.route("/data/hierarchy/load", methods=["POST"])
+def hierarchy_load():
+    """Load an uploaded hierarchy markdown file as a reference hierarchy (load_nodes):
+    auto-detect the flavor, register the course + reference, and load the nodes.
+    Optional form fields (course/kind/hierarchy/course_title) override the
+    flavor-derived defaults, mirroring load_nodes' CLI flags."""
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("No file chosen.")
+        return redirect(url_for("data"))
+    try:
+        flavor, sections = load_nodes.parse_sections(f.read().decode("utf-8", "replace"))
+    except (Exception, SystemExit) as e:  # parse_sections sys.exit()s on no top-level heading
+        flash(f"Could not parse {f.filename!r}: {e}")
+        return redirect(url_for("data"))
+    over = lambda k: (request.form.get(k) or "").strip() or None
+    m = load_nodes.meta_for(flavor, course=over("course"), kind=over("kind"),
+                            slug=over("hierarchy"), course_title=over("course_title"))
+    rows = load_nodes.build_rows(m["slug"], flavor, sections)
+    # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage
+    # edges into node ids that the new version no longer has, so a renamed/removed
+    # id surfaces instead of silently stranding a mapping.
+    new_ids = {r[1] for r in rows}
+    with db() as conn:
+        existing = {r[0] for r in conn.execute(
+            "SELECT DISTINCT node_id FROM coverage WHERE hierarchy=?", (m["slug"],))}
+    orphaned = sorted(existing - new_ids)
+    load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], m["course_title"],
+                    rows, source=f.filename)
+    leaves = sum(r[4] for r in rows)
+    msg = (f"Loaded {f.filename!r} ({flavor}) as {m['slug']} for course {m['course']}: "
+           f"{len(rows)} nodes, {leaves} leaves.")
+    if orphaned:
+        msg += (f" · warning: {len(orphaned)} existing coverage edge(s) now point to "
+                f"node ids not in this version: {', '.join(orphaned[:6])}"
+                f"{'…' if len(orphaned) > 6 else ''}")
+    flash(msg)
+    return redirect(url_for("data"))
+
+
+@app.route("/data/restore", methods=["POST"])
+def data_restore():
+    """Restore everything from version control: load reference nodes from the known
+    hierarchy markdown files, then the planning tables from the export dir
+    (rebuild_db's populate step -- WITHOUT the destructive db-file delete)."""
+    specs = [dict(s, path=os.path.join(REPO_ROOT, s["path"]))
+             for s in rebuild_db.DEFAULT_HIERARCHIES]
+    node_loads, table_loads = rebuild_db.populate(DB_PATH, EXPORT_DIR, specs)
+    refs = ", ".join(f"{slug} ({n})" for _, slug, _, n in node_loads if slug) or "none"
+    tables = ", ".join(f"{t} ({n})" for t, n in table_loads) or "none"
+    missing = [os.path.relpath(p, REPO_ROOT) for p, slug, _, _ in node_loads if slug is None]
+    msg = f"Restored from version control · references: {refs} · planning: {tables}"
+    if missing:
+        msg += f" · skipped missing file(s): {', '.join(missing)}"
+    flash(msg)
+    return redirect(url_for("data"))
 
 
 def workspace_data(conn, course, H):
@@ -737,6 +833,18 @@ def objectives_tsv(course):
     return Response(
         buf.getvalue(), mimetype="text/tab-separated-values",
         headers={"Content-Disposition": f'attachment; filename="{course}-objectives.tsv"'})
+
+
+@app.route("/<course>/outline.md")
+def outline_md(course):
+    """Download the course's rendered plan (the deliverable) as markdown -- the
+    render_outline script, in the app."""
+    with db() as conn:
+        data = render_outline.fetch(conn, course)
+    md = render_outline.render(course, *data)
+    return Response(
+        md, mimetype="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{course}-plan.md"'})
 
 
 @app.route("/<course>/objectives/upload", methods=["POST"])

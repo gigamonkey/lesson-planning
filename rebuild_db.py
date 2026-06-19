@@ -33,18 +33,17 @@ DEFAULT_HIERARCHIES = [
 ]
 
 
-def rebuild(db_path, schema_path, export_dir, specs):
-    if os.path.exists(db_path):
-        os.remove(db_path)
-    conn = sqlite3.connect(db_path)
-    conn.executescript(open(schema_path).read())
-    conn.close()
-    print(f"applied {schema_path} -> fresh {db_path}")
+def load_reference_nodes(db_path, specs):
+    """Load each spec's hierarchy markdown into `nodes` (via load_nodes).
 
+    Returns a list of (path, slug, course, n_rows) for what loaded; a missing file
+    yields (path, None, None, None) so callers can report the skip.
+    """
+    loaded = []
     for spec in specs:
         hf = spec["path"]
         if not os.path.exists(hf):
-            print(f"  skip nodes (missing): {hf}")
+            loaded.append((hf, None, None, None))
             continue
         with open(hf) as f:
             flavor, sections = parse_sections(f.read())
@@ -54,10 +53,39 @@ def rebuild(db_path, schema_path, export_dir, specs):
         rows = load_nodes.build_rows(m["slug"], flavor, sections)
         load_nodes.load(db_path, m["slug"], m["course"], m["kind"], m["course_title"],
                         rows, source=hf)
-        print(f"  nodes: {hf} -> hierarchy {m['slug']!r} (course {m['course']!r}, "
-              f"{len(rows)} nodes)")
+        loaded.append((hf, m["slug"], m["course"], len(rows)))
+    return loaded
 
-    for table, n in import_planning.load(db_path, export_dir):
+
+def populate(db_path, export_dir, specs):
+    """Load reference nodes from the markdown `specs`, then the planning tables from
+    `export_dir` -- the NON-destructive half of a rebuild (no file delete). Safe to
+    run against an already-schema'd db (fresh or live). The app calls this for its
+    "Restore from version control"; `rebuild` adds the delete + schema around it.
+
+    Returns (node_loads, table_loads) as produced by load_reference_nodes and
+    import_planning.load.
+    """
+    node_loads = load_reference_nodes(db_path, specs)
+    table_loads = import_planning.load(db_path, export_dir)
+    return node_loads, table_loads
+
+
+def rebuild(db_path, schema_path, export_dir, specs):
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    conn = sqlite3.connect(db_path)
+    conn.executescript(open(schema_path).read())
+    conn.close()
+    print(f"applied {schema_path} -> fresh {db_path}")
+
+    node_loads, table_loads = populate(db_path, export_dir, specs)
+    for hf, slug, course, n in node_loads:
+        if slug is None:
+            print(f"  skip nodes (missing): {hf}")
+        else:
+            print(f"  nodes: {hf} -> hierarchy {slug!r} (course {course!r}, {n} nodes)")
+    for table, n in table_loads:
         print(f"  {table}: {n} rows")
     print(f"rebuilt {db_path}")
 

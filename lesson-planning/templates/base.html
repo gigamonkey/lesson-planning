@@ -45,6 +45,7 @@
     .sidebar ul.hiers li.objitem { margin-bottom: .3rem; }
     .sidebar-foot { border-top: 1px solid var(--line); padding-top: .7rem; margin-top: .5rem;
                     display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+    .sidebar-foot .footlinks { display: flex; gap: .8rem; }
     .sidebar-foot a { color: #2b6cb0; text-decoration: none; }
     .sidebar-foot a.active { font-weight: 700; color: #222; }
     .sidebar-foot button { font-size: .8rem; padding: .2rem .5rem; }
@@ -146,6 +147,7 @@
     .addbtn:hover { background: #eef3f8; }
     code { background: #f0f0f0; padding: 0 .2rem; border-radius: 3px;
            font-family: ui-monospace, monospace; font-size: .9em; }
+    .hint { color: var(--muted); font-size: .85rem; }
 
     table.report { border-collapse: collapse; width: 100%; background: #fff; }
     table.report th, table.report td { border: 1px solid var(--line);
@@ -447,8 +449,12 @@
         </div>
       {% endfor %}
       <div class="sidebar-foot">
-        <a href="{{ url_for('help_page') }}"
-           class="{{ 'active' if request.endpoint == 'help_page' else '' }}">Help</a>
+        <span class="footlinks">
+          <a href="{{ url_for('help_page') }}"
+             class="{{ 'active' if request.endpoint == 'help_page' else '' }}">Help</a>
+          <a href="{{ url_for('data') }}"
+             class="{{ 'active' if request.endpoint == 'data' else '' }}">Data</a>
+        </span>
         {% if course_nav %}
         <form method="post" action="{{ url_for('export', course=nav_course or course_nav[0].course) }}">
           <button type="submit">Export snapshot</button>

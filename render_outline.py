@@ -20,7 +20,7 @@ def fetch(conn, course):
                      "ORDER BY (kind='ced') DESC, hierarchy LIMIT 1", (course,)).fetchone()
     R = R[0] if R else course
     O = conn.execute("SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
-                     "ORDER BY (kind='lesson-plan') DESC, hierarchy LIMIT 1",
+                     "ORDER BY (kind='course-outline') DESC, hierarchy LIMIT 1",
                      (course,)).fetchone()
     O = O[0] if O else None
 

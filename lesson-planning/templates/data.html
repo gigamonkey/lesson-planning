@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Data — Lesson Planning{% endblock %}
+
+{% block body %}
+<div class="help">
+  <p>Load and manage the data behind the app. References and courses come from
+     hierarchy markdown files; a committed snapshot restores everything you've
+     authored. The live database is rebuilt from these version-controlled inputs,
+     so anything here is reproducible.</p>
+
+  {% if not courses %}
+  <div class="note">This database is empty. Load a reference hierarchy below (which
+     also creates its course), or restore the last committed snapshot, to get
+     started.</div>
+  {% endif %}
+
+  <h2>Add a reference hierarchy (or course)</h2>
+  <p>Upload a hierarchy markdown file (an AP CED, the IB syllabus, or a book
+     outline). The flavor is auto-detected; the course and reference are registered
+     and the nodes loaded — exactly like <code>load_nodes.py</code>. Re-uploading a
+     file replaces that hierarchy's nodes.</p>
+  <form method="post" action="{{ url_for('hierarchy_load') }}" enctype="multipart/form-data"
+        class="dataform">
+    <p><input type="file" name="file" accept=".md,.markdown,.txt" required></p>
+    <details>
+      <summary>Override the auto-detected course / kind / slug (optional)</summary>
+      <p class="hint">Needed only when the flavor doesn't imply the right values —
+         e.g. loading a book as a course's <code>*-book</code> reference. Leave
+         blank to auto-detect.</p>
+      <div class="grid2">
+        <label>Course <input type="text" name="course" placeholder="auto (e.g. csa)"></label>
+        <label>Kind <input type="text" name="kind" placeholder="auto (e.g. ced)"></label>
+        <label>Hierarchy slug <input type="text" name="hierarchy" placeholder="auto (e.g. csa-ced)"></label>
+        <label>Course title <input type="text" name="course_title" placeholder="auto"></label>
+      </div>
+    </details>
+    <p><button type="submit" class="primary">Load hierarchy</button></p>
+  </form>
+
+  <h2>Restore from version control</h2>
+  <p>Load reference nodes from the known hierarchy markdown files, then the
+     authored planning tables from the export snapshot
+     (<code>{{ export_dir }}</code>). This is the non-destructive equivalent of
+     <code>rebuild_db.py</code> — it doesn't delete the database.</p>
+  {% if n_obj %}
+  <div class="note">There are <b>{{ n_obj }}</b> objective(s) in the live database
+     already. Restoring replaces the authored planning tables with the committed
+     snapshot — any un-exported edits are lost. Export first if you want to keep
+     them.</div>
+  {% endif %}
+  <form method="post" action="{{ url_for('data_restore') }}"
+        onsubmit="return {{ 'confirm(\"Replace authored data with the committed snapshot? Un-exported edits will be lost.\")' if n_obj else 'true' }};">
+    <button type="submit" class="{{ 'danger' if n_obj else 'primary' }}">Restore from version control</button>
+  </form>
+
+  {% if courses %}
+  <h2>Export snapshot</h2>
+  <p>Write the live database's authored tables to the git-diffable
+     <code>.tsv</code> files under <code>{{ export_dir }}</code> — the committable
+     state.</p>
+  <form method="post" action="{{ url_for('export', course=courses[0]['course']) }}">
+    <button type="submit">Export snapshot</button>
+  </form>
+  {% endif %}
+
+  {% if hierarchies %}
+  <h2>Currently loaded</h2>
+  <table class="report">
+    <tr><th>Course</th><th>Hierarchy</th><th>Kind</th><th>Editable</th><th>Title</th><th>Source</th></tr>
+    {% for h in hierarchies %}
+    <tr>
+      <td><a href="{{ url_for('tree', course=h['course']) }}">{{ h['course']|upper }}</a></td>
+      <td><code>{{ h['hierarchy'] }}</code></td>
+      <td><span class="pill pill-{{ h['kind'] }}">{{ h['kind'] }}</span></td>
+      <td>{{ 'authored' if h['editable'] else 'reference' }}</td>
+      <td>{{ h['title'] }}</td>
+      <td>{{ h['source'] or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+<style>
+  .dataform { background: #fff; border: 1px solid var(--line); border-radius: 6px;
+              padding: .8rem 1rem; margin: .5rem 0 1rem; max-width: var(--content-max); }
+  .dataform p { margin: .5rem 0; }
+  .dataform summary { cursor: pointer; color: #2b6cb0; font-size: .9rem; }
+  .dataform .hint { color: var(--muted); font-size: .85rem; }
+  .dataform .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem .8rem; margin: .4rem 0; }
+  .dataform label { display: flex; flex-direction: column; gap: .15rem; font-size: .82rem;
+                    color: var(--muted); }
+  .dataform input[type=text] { padding: .25rem .4rem; border: 1px solid var(--line);
+                    border-radius: 4px; font: inherit; }
+</style>
+{% endblock %}

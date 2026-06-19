@@ -105,27 +105,36 @@
   </div>
 
   <h2>Loading a new reference or course</h2>
-  <p>Reference hierarchies and courses come from markdown files, loaded from the
-     command line (they're regenerated from those files, not authored in the app):</p>
+  <p>References and courses come from hierarchy markdown files. Load them right in
+     the app on the <b><a href="{{ url_for('data') }}">Data</a></b> page:</p>
   <ol>
-    <li><b>Load the outline.</b> <code>uv run load_nodes.py csp/ced-hierarchy.md
-        lesson-planning/db.db</code> — it auto-detects the flavor, registers the
-        course (e.g. <code>csp</code>) and its reference hierarchy
-        (e.g. <code>csp-ced</code>), and loads the nodes. The course then appears
-        in the top nav.</li>
-    <li><b>Seed objectives (optional).</b> <code>uv run import_objectives.py
-        &lt;objectives.tsv&gt; lesson-planning/db.db --course csp</code> bulk-loads
-        raw objectives and their coverage from a TSV.</li>
+    <li><b>Add a reference.</b> On <b>Data</b>, upload a hierarchy markdown file
+        (an AP CED, the IB syllabus, a book outline). The flavor is auto-detected;
+        it registers the course (e.g. <code>csp</code>) and its reference
+        (e.g. <code>csp-ced</code>) and loads the nodes — the course then appears
+        in the sidebar.</li>
+    <li><b>Seed objectives (optional).</b> On the <b>Objectives</b> page, upload a
+        plain-text list or a uuid/objective/node_id TSV to bulk-load raw objectives
+        and their coverage.</li>
     <li><b>Then plan in the app</b> as above.</li>
   </ol>
+  <p class="hint">Equivalent from a terminal:
+     <code>uv run load_nodes.py csp/ced-hierarchy.md lesson-planning/db.db</code>
+     and <code>uv run import_objectives.py &lt;objectives.tsv&gt;
+     lesson-planning/db.db --course csp</code>.</p>
 
   <h2>Saving &amp; version control</h2>
   <p>The database (<code>db.db</code>) is the live working copy and is not checked
      in. The committed state is the export directory of <code>.tsv</code> files.
-     <b>Export snapshot</b> writes them; <code>uv run rebuild_db.py</code>
-     reconstructs the database from scratch out of the schema, the hierarchy
-     markdown, and that export — so the whole thing is reproducible from
-     version-controlled inputs.</p>
+     <b>Export snapshot</b> writes them. Starting the app with no database creates
+     an empty one; the <b><a href="{{ url_for('data') }}">Data</a></b> page's
+     <b>Restore from version control</b> then reloads the references and that
+     export — so the whole thing is reproducible from version-controlled inputs.
+     (<code>uv run rebuild_db.py</code> does the same from a terminal, rebuilding
+     from scratch.)</p>
+  <p>Get the finished plan out with <b>Plan (.md)</b> on a course's
+     <b>Course outline</b> page — the rendered deliverable (units, lessons,
+     traceability, and gaps) as markdown.</p>
 
   {% if course_rows %}
   <h2>Currently loaded</h2>

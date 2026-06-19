@@ -72,6 +72,9 @@
         <input type="text" name="title" placeholder="New unit title…" required>
         <button type="submit" class="primary">Add unit</button>
       </form>
+      <a class="dlbtn" href="{{ url_for('outline_md', course=course) }}"
+         title="Download the rendered plan (the deliverable) as markdown">
+        <i class="bi bi-download"></i>&nbsp;Plan (.md)</a>
     </div>
   {% else %}
     <p>Drag raw objectives from the pool onto the nodes they belong to (or write new
