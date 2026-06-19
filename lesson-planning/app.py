@@ -625,6 +625,13 @@ def objectives(course):
     with db() as conn:
         ref_kind = {r["hierarchy"]: r["kind"] for r in conn.execute(
             "SELECT hierarchy, kind FROM hierarchies WHERE editable=0")}
+        # First line of each reference node's text -> the tag's hover title
+        # (markdown markers stripped for a clean plain-text tooltip).
+        node_title = {(r["hierarchy"], r["node_id"]):
+                      re.sub(r"[`*]", "", (r["text"] or "").split("\n", 1)[0])
+                      for r in conn.execute(
+                          "SELECT n.hierarchy, n.node_id, n.text FROM nodes n "
+                          "JOIN hierarchies h ON h.hierarchy=n.hierarchy AND h.editable=0")}
         objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "tags": []}
                 for r in conn.execute(
                     "SELECT o.uuid, o.text FROM objectives o JOIN course_objectives co "
@@ -634,8 +641,10 @@ def objectives(course):
             "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?", (course,)):
             o = objs.get(r["uuid"])
             if o and r["hierarchy"] in ref_kind:
-                o["tags"].append((r["node_id"], ref_kind[r["hierarchy"]]))
-        # Each tag is (node_id, kind); kind colors it to match the sidebar pills.
+                o["tags"].append((r["node_id"], ref_kind[r["hierarchy"]],
+                                  node_title.get((r["hierarchy"], r["node_id"]), "")))
+        # Each tag is (node_id, kind, title): kind colors it (matching the sidebar
+        # pills), title is the node's statement shown on hover.
         for o in objs.values():
             o["tags"] = sorted(set(o["tags"]))
     # Sort by the VISIBLE text -- ignore the markdown markers (`code`, *em*).
