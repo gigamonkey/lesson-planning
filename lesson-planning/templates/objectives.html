@@ -1,49 +1,50 @@
 {% extends "base.html" %}
 {% block title %}{{ course|upper }} objectives{% endblock %}
 
-{% macro nodepicker(action, label) %}
-<form method="post" action="{{ action }}" class="inline-add">
-  <input type="text" name="node_id" list="leaf-nodes" placeholder="node id">
-  <button type="submit">{{ label }}</button>
-</form>
-{% endmacro %}
-
 {% block body %}
-  <p><b>{{ total }}</b> active objectives. Edit text in place; map/unmap coverage
-     nodes; add new objectives. (Duplicates are collapsed later when raw
-     objectives are distilled into learning objectives.)</p>
-
-  <div class="obj">
-    <form method="post" action="{{ url_for('objective_new', course=course) }}" class="edit">
-      <input type="text" name="text" placeholder="New objective…" required>
-      <input type="text" name="node_id" list="leaf-nodes" placeholder="node id (optional)" style="flex:0 0 9rem">
+  <div class="objbar">
+    <form method="post" action="{{ url_for('objective_new', course=course) }}" class="objnew">
+      <input type="text" name="text" placeholder="Write a new objective…"
+             autocomplete="off" required>
       <button type="submit" class="primary">Add</button>
     </form>
+    <input type="search" id="obj-search" class="objsearch" autocomplete="off"
+           placeholder="filter… (substring or regex)">
   </div>
 
-  {% for o in objectives %}
-    <div class="obj">
-      <form method="post" class="edit autosave"
-            action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
-            hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}" hx-swap="none">
-        <input type="text" name="text" value="{{ o.text }}">
-      </form>
-      <div class="chips">
-        {% if not o.nodes %}<span class="chip unmapped">unmapped</span>{% endif %}
-        {% for n in o.nodes %}
-          <span class="chip">{{ n }}
-            <form method="post" action="{{ url_for('coverage_remove', course=course, uuid=o.uuid) }}">
-              <input type="hidden" name="node_id" value="{{ n }}">
-              <button type="submit" title="remove">×</button>
-            </form>
-          </span>
-        {% endfor %}
-        {{ nodepicker(url_for('coverage_add', course=course, uuid=o.uuid), '+ map') }}
-      </div>
-    </div>
-  {% endfor %}
+  <p class="objcount"><b id="obj-count">{{ total }}</b> objectives</p>
 
-  <datalist id="leaf-nodes">
-    {% for nid, label in leaves %}<option value="{{ nid }}">{{ nid }} — {{ label }}</option>{% endfor %}
-  </datalist>
+  <ul class="objlist-compact">
+    {% for o in objectives %}
+      <li>
+        <span class="otext">{{ o.text|inline }}</span>
+        {% for t in o.tags %}<span class="otag">{{ t }}</span>{% endfor %}
+      </li>
+    {% endfor %}
+  </ul>
+
+  <script>
+    // Live filter: case-insensitive regex when it compiles, else substring.
+    const search = document.getElementById('obj-search');
+    const count = document.getElementById('obj-count');
+    const items = Array.from(document.querySelectorAll('ul.objlist-compact > li'));
+    function apply() {
+      const q = search.value.trim();
+      let test = function () { return true; };
+      if (q) {
+        let re = null;
+        try { re = new RegExp(q, 'i'); } catch (e) { re = null; }
+        test = re ? function (t) { return re.test(t); }
+                  : function (t) { return t.toLowerCase().includes(q.toLowerCase()); };
+      }
+      let shown = 0;
+      items.forEach(function (li) {
+        const ok = test(li.textContent);
+        li.style.display = ok ? '' : 'none';
+        if (ok) shown++;
+      });
+      count.textContent = shown;
+    }
+    search.addEventListener('input', apply);
+  </script>
 {% endblock %}

@@ -618,19 +618,26 @@ def node_order(conn, course):
 
 @app.route("/<course>/objectives")
 def objectives(course):
+    """A compact, lexically-sorted list of the course's objectives, each tagged
+    with the reference node ids it covers (outline placements omitted -- uuids)."""
     with db() as conn:
-        cs = courses(conn)
-        objs = active_objectives(conn, course)
-        order = node_order(conn, course)
-        leaves = leaf_choices(conn, course)
-    # Sort by earliest covered node (CED order), unmapped last, then text.
-    def key(o):
-        ords = [order.get(n, 10**9) for n in o["nodes"]]
-        return (min(ords) if ords else 10**9, o["text"].lower())
-    rows = sorted(objs.values(), key=key)
-    return render_template(
-        "objectives.html", course=course, courses=cs,
-        objectives=rows, leaves=leaves, total=len(rows))
+        refs = {r[0] for r in conn.execute(
+            "SELECT hierarchy FROM hierarchies WHERE editable=0")}
+        objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "tags": []}
+                for r in conn.execute(
+                    "SELECT o.uuid, o.text FROM objectives o JOIN course_objectives co "
+                    "ON co.uuid=o.uuid AND co.course=? WHERE o.status='active'", (course,))}
+        for r in conn.execute(
+            "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv "
+            "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?", (course,)):
+            o = objs.get(r["uuid"])
+            if o and r["hierarchy"] in refs:
+                o["tags"].append(r["node_id"])
+        for o in objs.values():
+            o["tags"] = sorted(set(o["tags"]))
+    rows = sorted(objs.values(), key=lambda o: o["text"].lower())
+    return render_template("objectives.html", course=course,
+                           objectives=rows, total=len(rows))
 
 
 def _back(course):

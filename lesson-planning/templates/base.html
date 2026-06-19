@@ -318,6 +318,21 @@
     .nodeadd.open input[type=text] { display: inline-block; }
     .nodeadd input:focus { border-color: #bcd; outline: none; }
 
+    /* Objectives page: compact, lexically-sorted bulleted list. */
+    .objbar { display: flex; gap: .6rem; align-items: center; margin-bottom: .4rem; }
+    .objnew { display: flex; gap: .4rem; flex: 1; max-width: 40rem; margin: 0; }
+    .objnew input { flex: 1; padding: .35rem .5rem; border: 1px solid var(--line);
+            border-radius: 4px; font: inherit; }
+    .objsearch { flex: 1; max-width: 18rem; padding: .35rem .5rem; border: 1px solid var(--line);
+            border-radius: 4px; font: inherit; }
+    .objnew input:focus, .objsearch:focus { border-color: #bcd; outline: none; }
+    .objcount { color: var(--muted); font-size: .85rem; margin: .1rem 0 .5rem; }
+    ul.objlist-compact { margin: 0; padding-left: 1.2rem; }
+    ul.objlist-compact li { padding: .12rem 0; }
+    ul.objlist-compact .otag { font-family: ui-monospace, monospace; font-size: .72rem;
+            color: var(--muted); margin-left: .35rem; background: #f3f5f7;
+            border: 1px solid #eaedf0; border-radius: 3px; padding: 0 .25rem; white-space: nowrap; }
+
     /* Help page */
     .help { max-width: 760px; }
     .help h2 { font-size: 1.15rem; }
