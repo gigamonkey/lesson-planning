@@ -18,9 +18,8 @@
     body { font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 0;
            color: #222; background: var(--bg); }
     .layout { display: flex; align-items: flex-start; }
-    /* Flush-left content (a small gap after the sidebar), not centered -- leaves
-       room on the right so tag tooltips don't run off-screen. */
-    main { flex: 1; min-width: 0; max-width: 1000px; margin: 0; padding: 1.2rem 1.2rem 1.2rem 1.5rem; }
+    /* Fill the available width after the sidebar (flush-left, not centered). */
+    main { flex: 1; min-width: 0; margin: 0; padding: 1.2rem 1.5rem; }
 
     /* Left sidebar: courses -> their hierarchies (references then the outline). */
     .sidebar { width: 230px; flex: none; background: #fff; border-right: 1px solid var(--line);
