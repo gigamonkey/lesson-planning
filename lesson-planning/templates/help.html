@@ -14,8 +14,8 @@
     <span class="step">Load a reference</span><span class="arrow">→</span>
     <span class="step">Draft objectives</span><span class="arrow">→</span>
     <span class="step">Map coverage</span><span class="arrow">→</span>
-    <span class="step">Build the plan</span><span class="arrow">→</span>
-    <span class="step">Check gaps &amp; trace</span>
+    <span class="step">Build the outline</span><span class="arrow">→</span>
+    <span class="step">Download the plan</span>
   </div>
 
   <h2>The pieces</h2>
@@ -34,15 +34,15 @@
     <dd>Granular statements of things students should be able to do. Raw
         objectives can be associated with one or more hierarchies and provide
         the tracing between the reference hierarchy for a course and its course
-        outline..</dd>
+        outline.</dd>
 
     <dt>Coverage</dt>
     <dd>A link saying “this objective covers that reference leaf.” One objective
         can cover several leaves and a leaf can be covered by several objectives.</dd>
 
     <dt>Course outline</dt>
-    <dd>The outline of the course made up of: <b>units</b> that
-        contain <b>lessons</b>. Raw objectives should eventually be associated
+    <dd>The outline of the course, made up of <b>units</b> that
+        contain <b>lessons</b>. Raw objectives should eventually be associated with
         specific lessons so we can link the lesson to the parts of the reference
         hierarchy that that raw objective is linked to.</dd>
 
@@ -51,30 +51,33 @@
         whiteboard at the beginning of class.</dd>
   </dl>
 
-  <h2>Reading a leaf's status</h2>
-  <p>On the <b>Outline</b> page every reference leaf is badged with where it is in
-     the lifecycle:</p>
-  <table class="report">
-    <tr><td><span class="badge gap">gap</span></td>
-        <td>No objective covers this leaf yet — a hole in your coverage.</td></tr>
-    <tr><td><span class="badge objective">objective</span></td>
-        <td>An objective covers it, but that objective isn't scheduled in a lesson yet.</td></tr>
-    <tr><td><span class="badge planned">planned</span></td>
-        <td>An objective covers it <i>and</i> is placed in a lesson — fully planned.</td></tr>
-  </table>
+  <h2>Reading coverage</h2>
+  <p>Every hierarchy page (a reference or the course outline) has the same shape: a
+     tree of nodes on the left with a drop zone under each, the raw-objective pool
+     on the right, and a <b>coverage bar</b> across the top counting its
+     <b>leaf nodes</b>, how many are <b>covered</b> (have at least one objective on
+     them) and how many are still <b>uncovered</b> — the gaps. A node with
+     objectives beneath it is covered; an empty drop zone is a gap.</p>
+  <p>An objective moves through a lifecycle: <b>drafted</b> in the pool →
+     <b>mapped</b> onto the reference leaves it covers → <b>placed</b> in a lesson
+     of the course outline. The downloadable plan (below) reports, per reference
+     leaf, the lesson(s) that reach it and the leaves still uncovered.</p>
 
-  <h2>The pages (under each course in the sidebar)</h2>
+  <h2>The pages</h2>
+  <p>Under each course in the sidebar:</p>
   <dl>
     <dt>Course outline</dt>
-    <dd>The course you're authoring (the first item under each course): create
+    <dd>The outline you're authoring (the first item under each course): create
         units, add lessons, and drag raw objectives from the pool into a lesson —
         or onto a unit's <i>rough</i> zone if you haven't picked the lesson yet.
-        Give each lesson its learning objective.</dd>
+        Give each lesson its learning objective. <b>Plan (.md)</b> downloads the
+        rendered deliverable.</dd>
 
     <dt>Objectives</dt>
     <dd>A compact, sortable table of every raw objective in the course, with a
         column per hierarchy showing the node ids it covers — your at-a-glance view
-        of what's mapped where. Edit objective text inline; upload/download the set.</dd>
+        of what's mapped where (the id pills are read-only; hover for the node's
+        text). Edit objective text inline; add new ones; upload/download the set.</dd>
 
     <dt>Reference hierarchies</dt>
     <dd>Each official hierarchy (CED, book, syllabus) as a node tree with the
@@ -82,25 +85,31 @@
         it covers (or write a new one in the pool and drag it in); drag between
         nodes to recategorize. The tree itself is fixed — it comes from the source.</dd>
   </dl>
+  <p>And in the sidebar footer, two course-independent pages: <b>Help</b> (this
+     page) and <b><a href="{{ url_for('data') }}">Data</a></b> (load references,
+     restore a snapshot, export).</p>
 
   <h2>Adding material in the app</h2>
   <ol>
-    <li><b>Draft an objective.</b> On <b>Outline</b>, click a leaf's box and use
-        its <span style="font-weight:700">+</span> to add an objective already
-        mapped to that leaf; or add one on the <b>Objectives</b> page.</li>
-    <li><b>Map coverage.</b> On <b>Objectives</b>, add a node chip to map an
-        objective to another leaf, or remove one to unmap it. On <b>Outline</b>
-        you can drag an objective from one leaf to another to recategorize it.</li>
-    <li><b>Build the plan.</b> On <b>Plan</b>, “Add unit”, then <b>+ lesson</b>,
-        then drag raws from the pool into lessons. Write each lesson's learning
-        objective in its italic field.</li>
+    <li><b>Draft an objective.</b> Type one into the <b>New objective…</b> box at
+        the top of the pool on any hierarchy page, or use the <b>+ objective</b>
+        link under a node to add one already mapped/placed there; or add one on the
+        <b>Objectives</b> page.</li>
+    <li><b>Map coverage.</b> On a <b>reference hierarchy</b> page, drag an objective
+        from the pool onto the node it covers; drag it between nodes to
+        recategorize. The <b>Objectives</b> page then shows that mapping in the
+        hierarchy's column.</li>
+    <li><b>Build the outline.</b> On the <b>Course outline</b> page, “Add unit”,
+        then <b>+ lesson</b>, then drag raws from the pool into lessons (or a unit's
+        <i>rough</i> zone). Write each lesson's learning objective in its italic
+        field.</li>
     <li><b>Everything auto-saves</b> to the live working database as you type or
         drag — there are no Save buttons.</li>
   </ol>
 
   <div class="note">
     Edits go to the live database immediately. To capture a reviewable, committable
-    snapshot, click <b>Export snapshot</b> in the header — it writes the
+    snapshot, click <b>Export snapshot</b> in the sidebar — it writes the
     git-diffable <code>.tsv</code> files under <code>lesson-planning/export/</code>.
   </div>
 
