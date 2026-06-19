@@ -257,7 +257,7 @@
     ul.rawzone { list-style: none; margin: .3rem 0 0; padding: .2rem; min-height: 2.2rem;
             border: 1px dashed var(--line); border-radius: 5px; background: var(--bg); }
     ul.rawzone.rawpool { min-height: 6rem; }
-    .poolsearch { width: 100%; margin: 0 0 .4rem; padding: .3rem .5rem; font: inherit;
+    .poolsearch { width: 100%; padding: .3rem .5rem; font: inherit;
             border: 1px solid var(--line); border-radius: 4px; }
     .poolsearch:focus { border-color: #bcd; outline: none; }
     ul.rawzone.rough { min-height: 1.7rem; background: #fbfaf3; }
@@ -287,13 +287,17 @@
     body.dragging .units ul.rawzone.rough { outline-color: #d9cfa0; background: #fbf8ee; }
 
     /* Unified workspace: hierarchy (left) + raw pool (right). */
-    .workspace-board { grid-template-columns: 1fr 300px; }
+    .workspace-board { grid-template-columns: 1fr 380px; }
     .workspace-board .pool { position: sticky; top: 1rem; }
     .nodes { min-width: 0; }
     .poolhead { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
     .poolhead h2 { margin: .1rem 0 .4rem; }
     .poolhead .dlbtn { padding: .2rem .45rem; font-size: .95rem; }
-    .poolnew input { width: 100%; padding: .3rem .5rem; margin-bottom: .4rem; font: inherit;
+    /* New-objective box + search share a row. */
+    .poolrow { display: flex; gap: .4rem; margin-bottom: .4rem; }
+    .poolrow .poolnew { display: flex; flex: 1.3; min-width: 0; margin: 0; }
+    .poolrow .poolsearch { flex: 1; min-width: 0; }
+    .poolnew input { width: 100%; flex: 1; min-width: 0; padding: .3rem .5rem; font: inherit;
             border: 1px solid var(--line); border-radius: 4px; }
     .poolnew input:focus { border-color: #bcd; outline: none; }
     /* Reference hierarchy as a table: an auto-sized id column (no magic width) so

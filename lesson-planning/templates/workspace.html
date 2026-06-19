@@ -145,16 +145,18 @@
           </label>
         </form>
       </div>
-      <form class="poolnew" method="post" action="{{ url_for('objective_new', course=course) }}"
-            hx-post="{{ url_for('objective_new', course=course) }}"
-            hx-target="#rawpool" hx-swap="afterbegin"
-            hx-on::after-request="this.reset()">
-        <input type="hidden" name="ref" value="{{ ref }}">
-        <input type="hidden" name="as" value="item">
-        <input type="text" name="text" placeholder="Write a new objective…" autocomplete="off">
-      </form>
-      <input type="search" id="raw-search" class="poolsearch" autocomplete="off"
-             placeholder="filter… (substring or regex)">
+      <div class="poolrow">
+        <form class="poolnew" method="post" action="{{ url_for('objective_new', course=course) }}"
+              hx-post="{{ url_for('objective_new', course=course) }}"
+              hx-target="#rawpool" hx-swap="afterbegin"
+              hx-on::after-request="this.reset()">
+          <input type="hidden" name="ref" value="{{ ref }}">
+          <input type="hidden" name="as" value="item">
+          <input type="text" name="text" placeholder="New objective…" autocomplete="off">
+        </form>
+        <input type="search" id="raw-search" class="poolsearch" autocomplete="off"
+               placeholder="filter…">
+      </div>
       <ul class="sortable rawzone rawpool" id="rawpool" data-to="pool">
         {% for o in pool %}{% include "_rawitem.html" %}{% endfor %}
       </ul>
