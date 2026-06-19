@@ -36,9 +36,11 @@
     .sidebar ul.hiers a { text-decoration: none; color: #2b6cb0; font-size: .88rem; flex: 1;
                           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sidebar ul.hiers li.active a { font-weight: 700; color: #222; }
-    .sidebar .courseactions { font-size: .78rem; margin-top: .25rem; }
-    .sidebar .courseactions a { color: var(--muted); text-decoration: none; margin-right: .6rem; }
-    .sidebar .courseactions a:hover { color: #2b6cb0; }
+    /* Objectives: first-class first item under the course. */
+    .sidebar ul.hiers li.objitem { padding-bottom: .25rem; margin-bottom: .3rem;
+                                   border-bottom: 1px solid var(--line); }
+    .sidebar ul.hiers li.objitem a { font-weight: 700; color: #222; }
+    .sidebar ul.hiers li.objitem.active a { color: #2b6cb0; }
     .sidebar-foot { border-top: 1px solid var(--line); padding-top: .7rem; margin-top: .5rem;
                     display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
     .sidebar-foot a { color: #2b6cb0; text-decoration: none; }
@@ -405,9 +407,12 @@
       <h1>Lesson Planning</h1>
       {% for c in course_nav %}
         <div class="course {{ 'active' if c.course == nav_course else '' }}">
-          <a class="coursename" href="{{ url_for('tree', course=c.course) }}">{{ c.course|upper }}</a>
+          <div class="coursename">{{ c.course|upper }}</div>
           <span class="ctitle">{{ c.title }}</span>
           <ul class="hiers">
+            <li class="objitem {{ 'active' if request.endpoint == 'objectives' and c.course == nav_course else '' }}">
+              <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
+            </li>
             {% for h in c.hierarchies %}
               <li class="{{ 'active' if h.hierarchy == active_hierarchy else '' }}">
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
@@ -416,10 +421,6 @@
               </li>
             {% endfor %}
           </ul>
-          <div class="courseactions">
-            <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
-            <a href="{{ url_for('report', course=c.course) }}">Report</a>
-          </div>
         </div>
       {% endfor %}
       <div class="sidebar-foot">

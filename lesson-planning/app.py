@@ -1,13 +1,12 @@
-"""Lesson-planning web app (Phase 1: read-only).
+"""Lesson-planning web app over the database seeded by load_nodes.py and
+import_objectives.py. A left sidebar lists courses and, under each, its
+Objectives view and its hierarchies. Main views:
 
-Two views over the lesson-planning database (seeded by load_nodes.py and
-import_objectives.py):
-
-- `/<course>`         the official outline as a tree, every leaf badged with its
-                      coverage status (gap / objective / planned) and the raw
-                      objectives mapped to it. `?filter=gaps` prunes to the gaps.
-- `/<course>/report`  the traceability report: summary stats, the full gap list,
-                      and every covered leaf with its objective -> lesson chain.
+- `/<course>/objectives`        a sortable table of the course's raw objectives,
+                                a column per hierarchy showing the ids it covers.
+- `/<course>/h/<hierarchy>`     the workspace for any hierarchy: its node tree
+                                with a droppable zone per node + the raw-objective
+                                pool. Editable outlines also edit their structure.
 
 Run:  uv run lesson-planning/app.py        (serves on PORT, default 5001)
 The database path defaults to db.db next to this file; override with LESSON_DB.
@@ -626,25 +625,6 @@ def hierarchy_upload(course, hierarchy):
                 f"{', '.join(unknown[:6])}{'…' if len(unknown) > 6 else ''}")
     flash(msg)
     return back
-
-
-@app.route("/<course>/report")
-def report(course):
-    with db() as conn:
-        cs = courses(conn)
-        nodes, obn, planned = load_course(conn, course)
-    leaves = [n for n in nodes if n["is_leaf"]]
-    gaps = [n for n in leaves
-            if leaf_status(n, obn, planned) == "gap"]
-    covered = [(n, obn.get(n["node_id"], []),
-                leaf_status(n, obn, planned))
-               for n in leaves if leaf_status(n, obn, planned) != "gap"]
-    return render_template(
-        "report.html",
-        course=course, courses=cs,
-        stats=summary(nodes, obn, planned),
-        gaps=gaps, covered=covered, STATUS=STATUS,
-    )
 
 
 # --------------------------------------------------------------------------
