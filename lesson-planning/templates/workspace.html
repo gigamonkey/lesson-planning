@@ -65,9 +65,9 @@
   {{ wstatbar(stats, id='wstats') }}
 
   {% if editable %}
-    <p>Edit the plan: create <b>units</b>, add <b>lessons</b>, and drag raw objectives
-       from the pool into a lesson — or onto a unit's <i>rough</i> zone. Each lesson
-       gets one learning objective.</p>
+    <p>Build the course outline: create <b>units</b>, add <b>lessons</b>, and drag raw
+       objectives from the pool into a lesson — or onto a unit's <i>rough</i> zone.
+       Each lesson gets one learning objective.</p>
     <div class="addrow">
       <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addlesson">
         <input type="text" name="title" placeholder="New unit title…" required>

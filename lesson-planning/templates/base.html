@@ -36,9 +36,14 @@
     .sidebar ul.hiers a { text-decoration: none; color: #2b6cb0; font-size: .88rem; flex: 1;
                           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sidebar ul.hiers li.active a { font-weight: 700; color: #222; }
-    /* Objectives: first-class first item under the course -- just bold for
-       prominence; same color convention as the others (blue, black when active). */
+    /* Course outline: the elevated, distinguished first item (bold + an outline
+       icon). Objectives is also bold; both use the normal color convention (blue,
+       black when active). A touch of space sets them off from the references. */
+    .sidebar ul.hiers li.outlineitem a { font-weight: 700; display: flex;
+            align-items: center; gap: .3rem; }
+    .sidebar ul.hiers li.outlineitem .bi { color: #2f855a; font-size: .92em; flex: none; }
     .sidebar ul.hiers li.objitem a { font-weight: 700; }
+    .sidebar ul.hiers li.objitem { margin-bottom: .3rem; }
     .sidebar-foot { border-top: 1px solid var(--line); padding-top: .7rem; margin-top: .5rem;
                     display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
     .sidebar-foot a { color: #2b6cb0; text-decoration: none; }
@@ -49,7 +54,7 @@
             background: #eef1f4; color: #555; border: 1px solid #e0e4e8; }
     .pill-ced { background: #eaf3ff; color: #2b6cb0; border-color: #cfe0f5; }
     .pill-book { background: #f3eefe; color: #6b46c1; border-color: #e0d4f5; }
-    .pill-lesson-plan { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
+    .pill-course-outline { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
     .pill-ib-syllabus { background: #fff4e6; color: #b7791f; border-color: #f0dcc0; }
     .hiername { margin-top: 0; }
 
@@ -385,7 +390,7 @@
     .objtable .otag.pill-ced { background: #eaf3ff; color: #2b6cb0; border-color: #cfe0f5; }
     .objtable .otag.pill-book { background: #f3eefe; color: #6b46c1; border-color: #e0d4f5; }
     .objtable .otag.pill-ib-syllabus { background: #fff4e6; color: #b7791f; border-color: #f0dcc0; }
-    .objtable .otag.pill-lesson-plan { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
+    .objtable .otag.pill-course-outline { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
     /* Custom tooltip: instant on hover; below the pill, flips above when marked. */
     .objtable .otag[data-tip]:hover::after {
             content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 5px);
@@ -426,6 +431,10 @@
           <div class="coursename">{{ c.course|upper }}</div>
           <span class="ctitle">{{ c.title }}</span>
           <ul class="hiers">
+            <li class="outlineitem {{ 'active' if c.outline and c.outline == active_hierarchy else '' }}">
+              <a href="{{ url_for('plan', course=c.course) }}">
+                <i class="bi bi-list-nested"></i><span>Course outline</span></a>
+            </li>
             <li class="objitem {{ 'active' if request.endpoint == 'objectives' and c.course == nav_course else '' }}">
               <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
             </li>

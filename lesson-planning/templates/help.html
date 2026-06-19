@@ -4,10 +4,11 @@
 {% block body %}
 <div class="help">
   <h1>How this works</h1>
-  <p>This tool helps you take an official curriculum outline (an AP <b>CED</b> or
-     the <b>IB syllabus</b>), draft your own <b>raw objectives</b>, map them onto
-     that outline so you can see what's covered and what's missing, and organize
-     them into a traceable <b>lesson plan</b>.</p>
+  <p>This tool helps you author a <b>course outline</b> with reference to the
+     official curriculum hierarchies (an AP <b>CED</b>, the <b>IB syllabus</b>, a
+     book). You draft your own <b>raw objectives</b>, map them onto those
+     references so you can see what's covered and what's missing, and organize them
+     into the course outline (units and lessons).</p>
 
   <div class="flow">
     <span class="step">Load a reference</span><span class="arrow">→</span>
@@ -62,23 +63,24 @@
         <td>An objective covers it <i>and</i> is placed in a lesson — fully planned.</td></tr>
   </table>
 
-  <h2>The pages</h2>
+  <h2>The pages (under each course in the sidebar)</h2>
   <dl>
-    <dt>Outline</dt>
-    <dd>The official outline as a collapsible tree, each leaf badged and showing
-        the objectives mapped to it. Click an empty (red) leaf to add an objective
-        right there. <code>?filter=gaps</code> (the “Gaps only” toolbar link)
-        prunes to just the uncovered leaves.</dd>
+    <dt>Course outline</dt>
+    <dd>The course you're authoring (the first item under each course): create
+        units, add lessons, and drag raw objectives from the pool into a lesson —
+        or onto a unit's <i>rough</i> zone if you haven't picked the lesson yet.
+        Give each lesson its learning objective.</dd>
 
     <dt>Objectives</dt>
     <dd>A compact, sortable table of every raw objective in the course, with a
         column per hierarchy showing the node ids it covers — your at-a-glance view
         of what's mapped where. Edit objective text inline; upload/download the set.</dd>
 
-    <dt>Plan</dt>
-    <dd>Build the lesson plan: create units, add lessons, and drag raw objectives
-        from the pool into a lesson — or onto a unit's <i>rough</i> zone if you
-        haven't picked the lesson yet. Give each lesson its learning objective.</dd>
+    <dt>Reference hierarchies</dt>
+    <dd>Each official hierarchy (CED, book, syllabus) as a node tree with the
+        raw-objective pool beside it. Drag an objective from the pool onto the node
+        it covers (or write a new one in the pool and drag it in); drag between
+        nodes to recategorize. The tree itself is fixed — it comes from the source.</dd>
   </dl>
 
   <h2>Adding material in the app</h2>

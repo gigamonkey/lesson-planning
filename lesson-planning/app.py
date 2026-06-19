@@ -208,6 +208,11 @@ def ensure_schema():
                         conn.execute("DELETE FROM objectives WHERE uuid=?", (d,))
                 conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS objectives_text_unique"
                              " ON objectives(text)")
+
+            # The lesson plan is elevated to the course outline: rename the kind
+            # and title (idempotent -- a no-op once renamed).
+            conn.execute("UPDATE hierarchies SET kind='course-outline', title='Course outline'"
+                         " WHERE kind='lesson-plan'")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)
@@ -232,10 +237,10 @@ def reference_hierarchy(conn, course):
 
 
 def outline_hierarchy(conn, course):
-    """The slug of the course's outline hierarchy (its plan), or None if none yet."""
+    """The slug of the course's outline hierarchy (its course outline), or None."""
     row = conn.execute(
         "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
-        "ORDER BY (kind='lesson-plan') DESC, hierarchy LIMIT 1", (course,)).fetchone()
+        "ORDER BY (kind='course-outline') DESC, hierarchy LIMIT 1", (course,)).fetchone()
     return row[0] if row else None
 
 
@@ -248,8 +253,8 @@ def ensure_outline(conn, course):
     conn.execute("INSERT OR IGNORE INTO courses(course, title) VALUES (?, ?)",
                  (course, course.upper()))
     conn.execute("INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title,"
-                 " source) VALUES (?, ?, 'lesson-plan', 1, ?, NULL)",
-                 (O, course, course.upper() + " Lesson Plan"))
+                 " source) VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)",
+                 (O, course))
     # Measure the plan against each of the course's references.
     conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
                  " SELECT ?, hierarchy FROM hierarchies WHERE course=? AND editable=0",
@@ -259,11 +264,13 @@ def ensure_outline(conn, course):
 
 @app.context_processor
 def inject_nav():
-    """Sidebar data for every page: courses -> their hierarchies (references then
-    outlines), plus the course/hierarchy the current request is showing."""
-    nav, active = [], None
+    """Sidebar data for every page: courses, each with its course outline pulled
+    out (elevated as the first item) and its other hierarchies, plus the
+    course/hierarchy the current request is showing."""
+    nav = []
     va = request.view_args or {}
     nav_course = va.get("course")
+    active = va.get("hierarchy")  # set only on the workspace (hierarchy_view)
     try:
         with db() as conn:
             cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
@@ -272,14 +279,12 @@ def inject_nav():
                 "SELECT hierarchy, course, kind, editable, title FROM hierarchies "
                 "ORDER BY course, editable, (kind='ced') DESC, hierarchy"):
                 by_course.setdefault(h["course"], []).append(h)
-            nav = [{"course": c["course"], "title": c["title"],
-                    "hierarchies": by_course.get(c["course"], [])} for c in cs]
-            if "hierarchy" in va:
-                active = va["hierarchy"]
-            elif nav_course and request.endpoint == "plan":
-                active = outline_hierarchy(conn, nav_course)
-            elif nav_course and request.endpoint == "tree":
-                active = reference_hierarchy(conn, nav_course)
+            for c in cs:
+                hs = by_course.get(c["course"], [])
+                outline = next((h["hierarchy"] for h in hs
+                                if h["editable"] and h["kind"] == "course-outline"), None)
+                nav.append({"course": c["course"], "title": c["title"], "outline": outline,
+                            "hierarchies": [h for h in hs if h["hierarchy"] != outline]})
     except sqlite3.OperationalError:
         pass
     return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}
@@ -471,7 +476,7 @@ def index():
         cs = courses(conn)
     if not cs:
         abort(404, "no courses loaded -- run load_nodes.py first")
-    return redirect(url_for("tree", course=cs[0]))
+    return redirect(url_for("plan", course=cs[0]))   # land on the course outline
 
 
 @app.route("/favicon.ico")
@@ -533,11 +538,8 @@ def workspace_stats(nodes, by_node, pool):
 
 @app.route("/<course>")
 def tree(course):
-    with db() as conn:
-        R = reference_hierarchy(conn, course)
-    if not R:
-        abort(404, f"no reference hierarchy for course {course!r}")
-    return redirect(url_for("hierarchy_view", course=course, hierarchy=R))
+    """The course landing page is its course outline."""
+    return redirect(url_for("plan", course=course))
 
 
 @app.route("/<course>/h/<hierarchy>")
