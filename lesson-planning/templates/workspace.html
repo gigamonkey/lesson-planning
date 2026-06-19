@@ -18,19 +18,21 @@
 {% endmacro %}
 
 {# A reference node: its drop zone + (optionally) children. Structure is fixed. #}
-{% macro refnode(n, depth=1) %}
-<div class="wnode depth-{{ depth }} lvl-{{ n.level }}">
-  <div class="wnodehead">
-    <span class="nid">{{ n.id }}</span>
-    <span class="wlabel">{{ n.label|inline }}</span>
-  </div>
-  <ul class="sortable rawzone" data-to="node-{{ n.id }}">
-    {% for o in n.objectives %}{% include "_rawitem.html" %}{% endfor %}
-  </ul>
-  {% if n.children %}
-    <div class="wchildren">{% for c in n.children %}{{ refnode(c, depth + 1) }}{% endfor %}</div>
-  {% endif %}
-</div>
+{# A reference hierarchy as a flat table (pre-order rows): an auto-sized id
+   column, then the node text + its objectives. Depth drives the typography. #}
+{% macro reftable(nodes, depth=1) %}
+  {% for n in nodes %}
+    <tr class="depth-{{ depth }} lvl-{{ n.level }}">
+      <td class="nid">{{ n.id }}</td>
+      <td class="rcontent">
+        <div class="wlabel">{{ n.label|inline }}</div>
+        <ul class="sortable rawzone" data-to="node-{{ n.id }}">
+          {% for o in n.objectives %}{% include "_rawitem.html" %}{% endfor %}
+        </ul>
+      </td>
+    </tr>
+    {% if n.children %}{{ reftable(n.children, depth + 1) }}{% endif %}
+  {% endfor %}
 {% endmacro %}
 
 {# An outline lesson: title + learning objective + its raws (editable). #}
@@ -78,7 +80,7 @@
   {% endif %}
 
   <div class="board workspace-board">
-    <section class="nodes {{ 'units' if editable else 'refnodes' }}">
+    <section class="nodes {{ 'units' if editable else 'reftree' }}">
       {% if editable %}
         {% for u in tree if u.level == 'unit' %}
           <section class="unit">
@@ -127,7 +129,7 @@
           </ul>
         </section>
       {% else %}
-        {% for n in tree %}{{ refnode(n) }}{% endfor %}
+        <table class="reftable"><tbody>{{ reftable(tree) }}</tbody></table>
       {% endif %}
     </section>
 
