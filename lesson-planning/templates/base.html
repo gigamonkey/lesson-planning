@@ -15,7 +15,9 @@
     body { font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 0;
            color: #222; background: var(--bg); }
     .layout { display: flex; align-items: flex-start; }
-    main { flex: 1; min-width: 0; max-width: 1000px; margin: 0 auto; padding: 1.2rem; }
+    /* Flush-left content (a small gap after the sidebar), not centered -- leaves
+       room on the right so tag tooltips don't run off-screen. */
+    main { flex: 1; min-width: 0; max-width: 1000px; margin: 0; padding: 1.2rem 1.2rem 1.2rem 1.5rem; }
 
     /* Left sidebar: courses -> their hierarchies (references then the outline). */
     .sidebar { width: 230px; flex: none; background: #fff; border-right: 1px solid var(--line);
@@ -347,10 +349,11 @@
     ul.objlist-compact .otag { font-family: ui-monospace, monospace; font-size: .72rem;
             color: var(--muted); background: #f3f5f7; flex: none; position: relative;
             border: 1px solid #eaedf0; border-radius: 3px; padding: 0 .25rem; white-space: nowrap; }
-    /* Custom tooltip: appears instantly on hover (no native-title delay). */
+    /* Custom tooltip: appears instantly on hover (no native-title delay). Sits
+       BELOW the pill so the first row isn't clipped by the top of the window. */
     ul.objlist-compact .otag[data-tip]:hover::after {
-            content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 5px);
-            z-index: 30; width: max-content; max-width: 360px; white-space: normal;
+            content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 5px);
+            z-index: 30; width: max-content; max-width: 300px; white-space: normal;
             font-family: -apple-system, system-ui, sans-serif; font-size: .8rem;
             font-weight: 400; line-height: 1.35; color: #fff; background: #2d3138;
             border-radius: 5px; padding: .35rem .55rem; box-shadow: 0 3px 12px rgba(0,0,0,.25);
