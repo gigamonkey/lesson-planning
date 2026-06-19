@@ -475,6 +475,12 @@ def index():
     return redirect(url_for("tree", course=cs[0]))
 
 
+@app.route("/favicon.ico")
+def favicon():
+    """Serve the favicon at the root too, for browsers' automatic /favicon.ico probe."""
+    return app.send_static_file("favicon.ico")
+
+
 @app.route("/help")
 def help_page():
     """A static explainer: the data model, the lifecycle, and how to add material."""
