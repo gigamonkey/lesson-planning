@@ -592,6 +592,36 @@ def place(course, hierarchy):
     return ("", 204)
 
 
+@app.route("/<course>/h/<hierarchy>/upload", methods=["POST"])
+def hierarchy_upload(course, hierarchy):
+    """Import an uploaded file (import_objectives) with coverage into THIS hierarchy.
+    Node ids not in the hierarchy are dropped (objective kept in the pool) and
+    reported, so a mis-classified id doesn't strand an objective on a phantom node."""
+    back = redirect(url_for("hierarchy_view", course=course, hierarchy=hierarchy))
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("No file chosen.")
+        return back
+    try:
+        items, mode = import_objectives.parse_text(f.read().decode("utf-8", "replace"))
+    except ValueError as e:
+        flash(f"Upload failed: {e}")
+        return back
+    with db() as conn:
+        known = {r[0] for r in conn.execute(
+            "SELECT node_id FROM nodes WHERE hierarchy=?", (hierarchy,))}
+    unknown = sorted({n for _, _, n in items if n and n not in known})
+    clean = [(u, t, (n if n in known else None)) for u, t, n in items]
+    _, stats, _, _ = import_objectives.load(DB_PATH, course, clean, hierarchy=hierarchy)
+    msg = (f"Imported {f.filename!r} ({mode}) into {hierarchy}: {stats['objectives_new']} "
+           f"new, {stats['pooled']} added to the pool, {stats['coverage']} coverage edges")
+    if unknown:
+        msg += (f" · {len(unknown)} id(s) not in this hierarchy (left in the pool): "
+                f"{', '.join(unknown[:6])}{'…' if len(unknown) > 6 else ''}")
+    flash(msg)
+    return back
+
+
 @app.route("/<course>/report")
 def report(course):
     with db() as conn:

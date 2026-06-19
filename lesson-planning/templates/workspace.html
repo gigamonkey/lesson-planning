@@ -133,7 +133,17 @@
     </section>
 
     <section class="pool">
-      <h2>Raw objectives (<span id="pool-count">{{ pool|length }}</span>)</h2>
+      <div class="poolhead">
+        <h2>Raw objectives (<span id="pool-count">{{ pool|length }}</span>)</h2>
+        <form method="post" action="{{ url_for('hierarchy_upload', course=course, hierarchy=ref) }}"
+              enctype="multipart/form-data" style="display:contents">
+          <label class="dlbtn" title="Upload objectives into this hierarchy (plain text, or a uuid/objective/node_id TSV whose ids match this hierarchy)">
+            <i class="bi bi-upload"></i>
+            <input type="file" name="file" accept=".tsv,.txt,.csv" hidden
+                   onchange="this.form.submit()">
+          </label>
+        </form>
+      </div>
       <form class="poolnew" method="post" action="{{ url_for('objective_new', course=course) }}"
             hx-post="{{ url_for('objective_new', course=course) }}"
             hx-target="#rawpool" hx-swap="afterbegin"
