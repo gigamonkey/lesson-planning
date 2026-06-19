@@ -320,7 +320,7 @@
     .nodeadd.open input[type=text] { display: inline-block; }
     .nodeadd input:focus { border-color: #bcd; outline: none; }
 
-    /* Objectives page: compact, lexically-sorted bulleted list. */
+    /* Objectives page: compact sortable table (text column + one per hierarchy). */
     .objbar { display: flex; gap: .6rem; align-items: center; margin-bottom: .4rem; }
     .objnew { display: flex; gap: .4rem; flex: 1; max-width: 40rem; margin: 0; }
     .objnew input { flex: 1; padding: .35rem .5rem; border: 1px solid var(--line);
@@ -333,40 +333,44 @@
             color: #2b6cb0; background: #fff; text-decoration: none; font-size: 1rem; }
     .dlbtn:hover { background: #eef3f8; }
     .objcount { color: var(--muted); font-size: .85rem; margin: .1rem 0 .5rem; }
-    ul.objlist-compact { margin: 0; padding-left: 1.4rem; }
-    ul.objlist-compact li.oitem { padding: 0; }
-    ul.objlist-compact li.oitem::marker { color: #c4c4c4; }
-    .orow { display: flex; align-items: baseline; gap: .4rem; padding: .1rem .35rem;
-            border-radius: 4px; }
-    .orow:hover { background: #f1f3f5; }
-    .orow .objedit { display: flex; flex: 1; min-width: 0; margin: 0; }
-    .orow .objedit textarea { flex: 1; min-width: 0; font: inherit; line-height: 1.45;
+
+    table.objtable { border-collapse: collapse; width: 100%; }
+    table.objtable th { text-align: left; font-weight: 600; font-size: .78rem; color: var(--muted);
+            border-bottom: 1px solid var(--line); padding: .25rem .45rem; cursor: pointer;
+            white-space: nowrap; user-select: none; position: sticky; top: 0; background: var(--bg); }
+    table.objtable th:hover { color: #222; }
+    table.objtable th.sorted { color: #222; }
+    table.objtable th.sorted::after { content: " ▲"; font-size: .7em; }
+    table.objtable th.sorted.desc::after { content: " ▼"; }
+    table.objtable td { padding: .04rem .45rem; vertical-align: baseline;
+            border-bottom: 1px solid #f3f3f3; }
+    table.objtable tbody tr:hover td { background: #f7f9fa; }
+    .th-hier, td.hcell { white-space: nowrap; width: 1%; }   /* shrink to content */
+    .tcell { width: 100%; }                                   /* text takes the rest */
+    .tcell .objedit { display: flex; margin: 0; }
+    .tcell textarea { width: 100%; font: inherit; font-size: .9rem; line-height: 1.4;
             border: 1px solid transparent; background: transparent; border-radius: 4px;
             padding: .05rem .3rem; resize: none; overflow: hidden; field-sizing: content; }
-    .orow .objedit textarea:hover { border-color: #e2e6ea; }
-    .orow:hover .objedit textarea { cursor: text; }
-    .orow .objedit textarea:focus { border-color: #bcd; background: #fff; outline: none; }
-    ul.objlist-compact .otag { font-family: ui-monospace, monospace; font-size: .72rem;
-            color: var(--muted); background: #f3f5f7; flex: none; position: relative;
+    .tcell textarea:hover { border-color: #e2e6ea; }
+    .tcell textarea:focus { border-color: #bcd; background: #fff; outline: none; }
+
+    .objtable .otag { font-family: ui-monospace, monospace; font-size: .72rem;
+            color: var(--muted); background: #f3f5f7; position: relative; margin-right: .2rem;
             border: 1px solid #eaedf0; border-radius: 3px; padding: 0 .25rem; white-space: nowrap; }
-    /* Custom tooltip: appears instantly on hover (no native-title delay). Sits
-       BELOW the pill so the first row isn't clipped by the top of the window. */
-    ul.objlist-compact .otag[data-tip]:hover::after {
+    /* Color each id tag by its hierarchy kind, matching the sidebar pills. */
+    .objtable .otag.pill-ced { background: #eaf3ff; color: #2b6cb0; border-color: #cfe0f5; }
+    .objtable .otag.pill-book { background: #f3eefe; color: #6b46c1; border-color: #e0d4f5; }
+    .objtable .otag.pill-ib-syllabus { background: #fff4e6; color: #b7791f; border-color: #f0dcc0; }
+    .objtable .otag.pill-lesson-plan { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
+    /* Custom tooltip: instant on hover; below the pill, flips above when marked. */
+    .objtable .otag[data-tip]:hover::after {
             content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 5px);
             z-index: 30; width: max-content; max-width: 300px; white-space: normal;
             font-family: -apple-system, system-ui, sans-serif; font-size: .8rem;
             font-weight: 400; line-height: 1.35; color: #fff; background: #2d3138;
             border-radius: 5px; padding: .35rem .55rem; box-shadow: 0 3px 12px rgba(0,0,0,.25);
             pointer-events: none; }
-    /* Flip above the pill when JS marks it (not enough room below). */
-    ul.objlist-compact .otag.tip-above[data-tip]:hover::after {
-            top: auto; bottom: calc(100% + 5px); }
-    /* Color each id tag by its hierarchy kind, matching the sidebar pills.
-       Scoped under ul.objlist-compact to outrank the neutral .otag rule above. */
-    ul.objlist-compact .otag.pill-ced { background: #eaf3ff; color: #2b6cb0; border-color: #cfe0f5; }
-    ul.objlist-compact .otag.pill-book { background: #f3eefe; color: #6b46c1; border-color: #e0d4f5; }
-    ul.objlist-compact .otag.pill-ib-syllabus { background: #fff4e6; color: #b7791f; border-color: #f0dcc0; }
-    ul.objlist-compact .otag.pill-lesson-plan { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
+    .objtable .otag.tip-above[data-tip]:hover::after { top: auto; bottom: calc(100% + 5px); }
 
     /* Help page */
     .help { max-width: 760px; }

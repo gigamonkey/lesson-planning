@@ -16,31 +16,49 @@
 
   <p class="objcount"><b id="obj-count">{{ total }}</b> objectives</p>
 
-  <ul class="objlist-compact">
-    {% for o in objectives %}
-      <li class="oitem">
-        <div class="orow">
-          <form method="post" class="objedit autosave"
-                action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
-                hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}" hx-swap="none">
-            <textarea name="text" rows="1">{{ o.text }}</textarea>
-          </form>
-          {% for id, kind, title in o.tags %}<span class="otag pill-{{ kind }}"
-                data-tip="{{ id }} — {{ title }}">{{ id }}</span>{% endfor %}
-        </div>
-      </li>
-    {% endfor %}
-  </ul>
+  <table class="objtable">
+    <thead>
+      <tr>
+        <th class="th-text sorted" data-sort="text">Objective</th>
+        {% for h in hierarchies %}
+          <th class="th-hier" data-sort="{{ h.hierarchy }}" title="{{ h.title }}">
+            <span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>
+          </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in objectives %}
+        <tr data-text="{{ o.sort }}">
+          <td class="tcell">
+            <form method="post" class="objedit autosave"
+                  action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
+                  hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}" hx-swap="none">
+              <textarea name="text" rows="1">{{ o.text }}</textarea>
+            </form>
+          </td>
+          {% for h in hierarchies %}
+            {% set cell = o.cells[h.hierarchy] %}
+            <td class="hcell" data-hier="{{ h.hierarchy }}" data-ord="{{ cell.ord }}">
+              {% for t in cell.tags %}<span class="otag pill-{{ h.kind }}"
+                    data-tip="{{ t.id }} — {{ t.title }}">{{ t.id }}</span>{% endfor %}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
   <script>
+    const tbody = document.querySelector('table.objtable tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
     const search = document.getElementById('obj-search');
     const count = document.getElementById('obj-count');
-    const items = Array.from(document.querySelectorAll('ul.objlist-compact > li.oitem'));
 
-    function textOf(li) { const t = li.querySelector('textarea'); return t ? t.value : li.textContent; }
+    function textOf(tr) { const t = tr.querySelector('.tcell textarea'); return t ? t.value : tr.dataset.text; }
 
-    // Live filter: case-insensitive regex when it compiles, else substring.
-    function apply() {
+    // Live filter: regex when it compiles, else substring; on the live text.
+    function applyFilter() {
       const q = search.value.trim();
       let test = function () { return true; };
       if (q) {
@@ -50,32 +68,50 @@
                   : function (t) { return t.toLowerCase().includes(q.toLowerCase()); };
       }
       let shown = 0;
-      items.forEach(function (li) {
-        const ok = test(textOf(li));
-        li.style.display = ok ? '' : 'none';
+      rows.forEach(function (tr) {
+        const ok = test(textOf(tr));
+        tr.style.display = ok ? '' : 'none';
         if (ok) shown++;
       });
       count.textContent = shown;
     }
-    search.addEventListener('input', apply);
+    search.addEventListener('input', applyFilter);
 
-    // Click to edit: each item is a textarea styled as plain text until focused;
-    // it grows to fit, saves on blur (global autosave), and Enter blurs (= save).
+    // Sortable headers: text sorts lexically (visible text); a hierarchy column
+    // sorts by document order (the node ordinal). Re-click toggles direction.
+    let sortKey = 'text', sortDir = 1;
+    function cmp(a, b, key) {
+      if (key === 'text') return a.dataset.text.localeCompare(b.dataset.text);
+      const sel = 'td[data-hier="' + CSS.escape(key) + '"]';
+      const oa = +a.querySelector(sel).dataset.ord, ob = +b.querySelector(sel).dataset.ord;
+      return (oa - ob) || a.dataset.text.localeCompare(b.dataset.text);
+    }
+    function sortBy(key) {
+      sortDir = (key === sortKey) ? -sortDir : 1;
+      sortKey = key;
+      rows.sort(function (a, b) { return sortDir * cmp(a, b, key); });
+      rows.forEach(function (tr) { tbody.appendChild(tr); });
+      document.querySelectorAll('th[data-sort]').forEach(function (th) {
+        th.classList.toggle('sorted', th.dataset.sort === key);
+        th.classList.toggle('desc', th.dataset.sort === key && sortDir < 0);
+      });
+    }
+    document.querySelectorAll('th[data-sort]').forEach(function (th) {
+      th.addEventListener('click', function () { sortBy(th.dataset.sort); });
+    });
+
+    // Click to edit: grow textareas to fit; Enter blurs (= save via autosave).
     function autosize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
-    document.querySelectorAll('.objedit textarea').forEach(autosize);
+    document.querySelectorAll('.tcell textarea').forEach(autosize);
     document.addEventListener('input', function (e) {
-      if (e.target.matches && e.target.matches('.objedit textarea')) autosize(e.target);
+      if (e.target.matches && e.target.matches('.tcell textarea')) autosize(e.target);
     });
     document.addEventListener('keydown', function (e) {
-      if (e.target.matches && e.target.matches('.objedit textarea') &&
-          e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        e.target.blur();
-      }
+      if (e.target.matches && e.target.matches('.tcell textarea') &&
+          e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur(); }
     });
 
-    // Tag tooltips drop below by default; flip above when there isn't room below
-    // (so items near the bottom of the window aren't clipped).
+    // Tag tooltips drop below by default; flip above when there's no room below.
     document.addEventListener('mouseover', function (e) {
       const tag = e.target.closest && e.target.closest('.otag[data-tip]');
       if (!tag) return;

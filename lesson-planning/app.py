@@ -620,19 +620,25 @@ def node_order(conn, course):
 
 @app.route("/<course>/objectives")
 def objectives(course):
-    """A compact, lexically-sorted list of the course's objectives, each tagged
-    with the reference node ids it covers (outline placements omitted -- uuids)."""
+    """A compact table of the course's objectives: a text column plus one column
+    per reference hierarchy, each cell holding the (kind-colored) node ids the
+    objective covers there. Headers sort -- text lexically, a hierarchy column by
+    document order (node ordinal; lexical-by-id does NOT match it)."""
+    BIG = 10 ** 9
     with db() as conn:
-        ref_kind = {r["hierarchy"]: r["kind"] for r in conn.execute(
-            "SELECT hierarchy, kind FROM hierarchies WHERE editable=0")}
-        # First line of each reference node's text -> the tag's hover title
-        # (markdown markers stripped for a clean plain-text tooltip).
-        node_title = {(r["hierarchy"], r["node_id"]):
-                      re.sub(r"[`*]", "", (r["text"] or "").split("\n", 1)[0])
-                      for r in conn.execute(
-                          "SELECT n.hierarchy, n.node_id, n.text FROM nodes n "
-                          "JOIN hierarchies h ON h.hierarchy=n.hierarchy AND h.editable=0")}
-        objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "tags": []}
+        cols = [dict(r) for r in conn.execute(
+            "SELECT hierarchy, kind, title FROM hierarchies WHERE course=? AND editable=0 "
+            "ORDER BY (kind='ced') DESC, hierarchy", (course,))]
+        slugs = [h["hierarchy"] for h in cols]
+        # (hierarchy, node_id) -> (ordinal, statement) for this course's references.
+        node_meta = {(r["hierarchy"], r["node_id"]):
+                     (r["ordinal"], re.sub(r"[`*]", "", (r["text"] or "").split("\n", 1)[0]))
+                     for r in conn.execute(
+                         "SELECT n.hierarchy, n.node_id, n.ordinal, n.text FROM nodes n "
+                         "JOIN hierarchies h ON h.hierarchy=n.hierarchy "
+                         "AND h.editable=0 AND h.course=?", (course,))}
+        objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"],
+                            "cells": {s: {"tags": [], "ord": BIG} for s in slugs}}
                 for r in conn.execute(
                     "SELECT o.uuid, o.text FROM objectives o JOIN course_objectives co "
                     "ON co.uuid=o.uuid AND co.course=? WHERE o.status='active'", (course,))}
@@ -640,17 +646,19 @@ def objectives(course):
             "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv "
             "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?", (course,)):
             o = objs.get(r["uuid"])
-            if o and r["hierarchy"] in ref_kind:
-                o["tags"].append((r["node_id"], ref_kind[r["hierarchy"]],
-                                  node_title.get((r["hierarchy"], r["node_id"]), "")))
-        # Each tag is (node_id, kind, title): kind colors it (matching the sidebar
-        # pills), title is the node's statement shown on hover.
+            if not o or r["hierarchy"] not in slugs:
+                continue
+            ordn, title = node_meta.get((r["hierarchy"], r["node_id"]), (BIG, ""))
+            cell = o["cells"][r["hierarchy"]]
+            cell["tags"].append({"id": r["node_id"], "title": title, "ord": ordn})
+            cell["ord"] = min(cell["ord"], ordn)
         for o in objs.values():
-            o["tags"] = sorted(set(o["tags"]))
-    # Sort by the VISIBLE text -- ignore the markdown markers (`code`, *em*).
-    rows = sorted(objs.values(), key=lambda o: re.sub(r"[`*]", "", o["text"]).lower())
-    return render_template("objectives.html", course=course,
-                           objectives=rows, total=len(rows))
+            o["sort"] = re.sub(r"[`*]", "", o["text"]).lower()  # visible-text sort key
+            for cell in o["cells"].values():
+                cell["tags"].sort(key=lambda t: t["ord"])
+    rows = sorted(objs.values(), key=lambda o: o["sort"])
+    return render_template("objectives.html", course=course, objectives=rows,
+                           hierarchies=cols, total=len(rows))
 
 
 @app.route("/<course>/objectives.tsv")
