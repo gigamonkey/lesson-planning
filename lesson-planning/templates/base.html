@@ -13,6 +13,7 @@
     :root {
       --gap: #c0392b; --objective: #b7791f; --planned: #2f855a;
       --line: #e2e2e2; --muted: #777; --bg: #fafafa;
+      --content-max: 40rem;   /* reading width: workspace nodes, objective column, help */
     }
     * { box-sizing: border-box; }
     body { font: 15px/1.5 -apple-system, system-ui, sans-serif; margin: 0;
@@ -287,7 +288,7 @@
 
     /* Unified workspace: hierarchy (left) + raw pool (right). */
     /* Node content capped at 50rem; the objectives pool takes the rest. */
-    .workspace-board { grid-template-columns: minmax(0, 50rem) minmax(0, 1fr); }
+    .workspace-board { grid-template-columns: minmax(0, var(--content-max)) minmax(0, 1fr); }
     .workspace-board .pool { position: sticky; top: 1rem; }
     .nodes { min-width: 0; }
     .poolhead { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
@@ -366,11 +367,11 @@
             border-bottom: 1px solid #f3f3f3; }
     table.objtable tbody tr:hover td { background: #f7f9fa; }
     .th-hier, td.hcell { white-space: nowrap; }   /* hug the pills (no full-width 1% trick) */
-    .tcell { max-width: 50rem; }                             /* cap; wrap beyond it */
+    .tcell { max-width: var(--content-max); }                /* cap; wrap beyond it */
     .tcell .objedit { display: block; margin: 0; }
     /* No explicit width -- field-sizing sizes the field to its text (a width:100%
        here would override it and force the column full-width); cap at 50rem to wrap. */
-    .tcell textarea { box-sizing: border-box; min-width: 14rem; max-width: 50rem;
+    .tcell textarea { box-sizing: border-box; min-width: 14rem; max-width: var(--content-max);
             font: inherit; font-size: .9rem; line-height: 1.4; border: 1px solid transparent;
             background: transparent; border-radius: 4px; padding: .05rem .3rem; resize: none;
             overflow: hidden; field-sizing: content; }
@@ -396,7 +397,7 @@
     .objtable .otag.tip-above[data-tip]:hover::after { top: auto; bottom: calc(100% + 5px); }
 
     /* Help page */
-    .help { max-width: 760px; }
+    .help { max-width: var(--content-max); }
     .help h2 { font-size: 1.15rem; }
     .help h3 { font-size: .98rem; margin: 1.1rem 0 .2rem; }
     .help p, .help li { color: #333; }
