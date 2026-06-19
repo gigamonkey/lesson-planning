@@ -497,28 +497,20 @@ def help_page():
 def workspace_data(conn, course, H):
     """Node tree of hierarchy H with the raw objectives mapped onto each node, plus
     the unplaced pool. Single placement per hierarchy: an objective sits under one
-    node of H or in the pool. Each objective also carries `tags` -- its node ids in
-    OTHER reference hierarchies -- as cross-reference hints (outline placements are
-    omitted: their node ids are uuids, not meaningful labels)."""
-    refs = {r[0] for r in conn.execute("SELECT hierarchy FROM hierarchies WHERE editable=0")}
+    node of H or in the pool."""
     objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "position": r["position"],
-                        "node": None, "tags": []}
+                        "node": None}
             for r in conn.execute(
                 "SELECT o.uuid, o.text, co.position FROM objectives o "
                 "JOIN course_objectives co ON co.uuid=o.uuid AND co.course=? "
                 "WHERE o.status='active'", (course,))}
     for r in conn.execute(
-        "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv "
-        "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?", (course,)):
+        "SELECT cv.uuid, cv.node_id FROM coverage cv "
+        "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=? "
+        "WHERE cv.hierarchy=?", (course, H)):
         o = objs.get(r["uuid"])
-        if not o:
-            continue
-        if r["hierarchy"] == H:
+        if o:
             o["node"] = r["node_id"]
-        elif r["hierarchy"] in refs:
-            o["tags"].append(r["node_id"])
-    for o in objs.values():
-        o["tags"] = sorted(set(o["tags"]))
 
     by_node = {}
     for o in sorted(objs.values(), key=lambda o: o["text"].lower()):
@@ -848,7 +840,7 @@ def objective_new(course):
     if request.form.get("as") == "item":
         if not text:
             return ("", 204)
-        return render_template("_rawitem.html", o={"uuid": u, "text": text, "tags": []})
+        return render_template("_rawitem.html", o={"uuid": u, "text": text})
     if text:
         flash(f"Added objective: {text}")
     return _back(course)
