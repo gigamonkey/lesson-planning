@@ -71,65 +71,9 @@
     .bar .objective { background: var(--objective); }
     .bar .gap { background: var(--gap); }
 
-    .badge { font-size: .68rem; font-weight: 700; text-transform: uppercase;
-             letter-spacing: .03em; padding: .05rem .4rem; border-radius: 3px;
-             color: #fff; vertical-align: middle; }
-    .badge.gap { background: var(--gap); }
-    .badge.objective { background: var(--objective); }
-    .badge.planned { background: var(--planned); }
-
-    .toolbar { margin-bottom: 1rem; }
-    .toolbar a { text-decoration: none; border: 1px solid var(--line);
-                 padding: .25rem .7rem; border-radius: 4px; color: #2b6cb0;
-                 background: #fff; }
-    .toolbar a.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
-
-    ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 1.1rem; }
-    ul.tree { padding-left: 0; }
-    li.node { padding: .15rem 0 .15rem .8rem; }
-    /* Row = [gutter: toggle + id] [content: text, and the leaf's objectives box].
-       The id sits in the gutter; the content column wraps with a hanging indent,
-       and the objectives box (inside content) aligns with and matches the text. */
-    .row { display: flex; align-items: baseline; gap: .4rem; }
-    .gutter { flex: none; white-space: nowrap; }
-    .content { flex: 1; min-width: 0; }
-    .toggle, .toggle-spacer { display: inline-block; width: .95rem; text-align: center;
-            color: var(--muted); font-size: .7rem; user-select: none; }
-    .toggle { cursor: pointer; transition: transform .12s; }
-    .node.collapsed > .row .toggle { transform: rotate(-90deg); }
-    .node.collapsed > ul { display: none; }
     .nid { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--muted); }
-    .lvl-unit > .row, .lvl-theme > .row, .lvl-big-idea > .row { font-weight: 700; font-size: 1.05rem; }
-    .lvl-topic > .row, .lvl-essential-understanding > .row { font-weight: 600; }
-    /* Full multi-line leaf text: tight paragraphs + bulleted sub-lists. */
-    .leaftext p { margin: 0; }
-    .leaftext > * + * { margin-top: .25rem; }
-    ul.tree .leaftext ul { list-style: disc; margin: 0; padding-left: 1.2rem; }
-    .leaftext li { margin: .05rem 0; }
-    .leaftext .badge { margin-left: .3rem; }
-    .leafbox { position: relative; border: 1px solid var(--line); border-radius: 6px;
-               background: #fff; margin: .3rem 0 .45rem;
-               padding: .35rem 2.1rem .35rem .55rem; }
-    .leafbox.empty { border: 2px solid var(--gap); cursor: pointer; }
-    .noobj { color: var(--muted); font-size: .85rem; font-style: italic; }
-    ul.objlist { list-style: disc; margin: 0; padding-left: 1.2rem; }
-    /* No bullets in the outline -- the drag grip serves as the marker; pull the
-       list flush left so the grips sit where the bullets were. */
-    ul.tree ul.objlist { list-style: none; padding-left: 0; }
-    ul.objlist li { font-size: .9rem; padding: .03rem 0; }
-    ul.objlist li.sortable-ghost { opacity: .4; }
-    /* Outline objective <li>s reuse class "obj" as a drag/JS selector, but must
-       NOT inherit the .obj card styling (border + bottom-only margin) from the
-       objectives/synthesize pages -- that made the box bottom-heavy. Keep them
-       plain, with an even gap so top/inter/bottom spacing all match. */
-    ul.tree ul.objlist li { padding: 0; margin: 0; }
-    ul.tree ul.objlist li + li { margin-top: .35rem; }
-    ul.tree ul.objlist li.obj { background: none; border: 0; border-radius: 0; }
-    .objrow { display: flex; gap: .35rem; align-items: flex-start; }
-    .grip { cursor: grab; color: #c4c4c4; font-size: .85rem; user-select: none; }
-    .grip:active { cursor: grabbing; }
-    /* flex:1 + min-width:0 so the form (nested in .objrow) grows to fill and the
-       input can size below its default width instead of clipping the text. */
+    /* flex:1 + min-width:0 so the inline edit form grows to fill and the input can
+       size below its default width instead of clipping the text. */
     .objedit { display: flex; flex: 1; min-width: 0; gap: .35rem; align-items: flex-start; margin: 0; }
     /* The objective is a textarea so its text wraps; it auto-grows to fit
        (field-sizing in modern browsers, JS autosize() as fallback) and looks
@@ -140,11 +84,6 @@
     .objedit textarea:focus { border-color: #bcd; background: #fcfdff; outline: none; }
     .objedit button { visibility: hidden; font-size: .78rem; padding: .12rem .5rem; }
     .objedit:focus-within button { visibility: visible; }
-    .addbtn { position: absolute; top: .25rem; right: .3rem; width: 1.7rem;
-            height: 1.7rem; padding: 0; font-size: 1.3rem; line-height: 1;
-            cursor: pointer; color: #2b6cb0; background: #fff;
-            border: 1px solid var(--line); border-radius: 4px; }
-    .addbtn:hover { background: #eef3f8; }
     code { background: #f0f0f0; padding: 0 .2rem; border-radius: 3px;
            font-family: ui-monospace, monospace; font-size: .9em; }
     .hint { color: var(--muted); font-size: .85rem; }

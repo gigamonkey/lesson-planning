@@ -32,7 +32,6 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 import export_planning  # noqa: E402
 import import_objectives  # noqa: E402
-import import_planning  # noqa: E402
 import load_nodes  # noqa: E402
 import rebuild_db  # noqa: E402
 import render_outline  # noqa: E402
@@ -46,15 +45,6 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 app = Flask(__name__)
 app.secret_key = "lesson-planning-dev"  # local single-user app; not security-sensitive
-
-# Coverage status -> (label, css class). 'planned' = a scheduled lesson traces
-# back to the leaf; 'objective' = a raw objective covers it but nothing is
-# scheduled yet; 'gap' = no objective at all.
-STATUS = {
-    "gap": ("gap", "gap"),
-    "objective": ("objective", "objective"),
-    "planned": ("planned", "planned"),
-}
 
 # kind_label / hierarchy_title (the page/sidebar titles) live in hierarchy.py so
 # load_nodes.py stores the same clean titles. page_title is an alias for clarity.
@@ -315,51 +305,6 @@ def inject_nav():
     return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}
 
 
-def load_course(conn, course, R=None):
-    """Return (nodes, objectives_by_node, planned_leaves) for a reference.
-
-    R is the reference hierarchy to render (default: the course's primary one).
-
-    nodes: list of sqlite Rows ordered by document position.
-    objectives_by_node: node_id -> list of active raw objectives covering it.
-    planned_leaves: set of leaf node_ids that a scheduled lesson traces back to.
-    """
-    R = R or reference_hierarchy(conn, course)
-    nodes = conn.execute(
-        "SELECT * FROM nodes WHERE hierarchy = ? ORDER BY ordinal", (R,)
-    ).fetchall()
-    if not nodes:
-        abort(404, f"no nodes loaded for course {course!r}")
-
-    objectives_by_node = {}
-    for r in conn.execute(
-        """SELECT cv.node_id, o.uuid, o.text
-             FROM coverage cv
-             JOIN objectives o ON o.uuid = cv.uuid AND o.status = 'active'
-            WHERE cv.hierarchy = ?
-            ORDER BY o.text""",
-        (R,),
-    ):
-        objectives_by_node.setdefault(r["node_id"], []).append(r)
-
-    # A reference leaf is "planned" once a raw objective covering it is also placed
-    # at a leaf (a lesson) of the course's outline hierarchy.
-    O = outline_hierarchy(conn, course)
-    planned_leaves = set()
-    if O:
-        planned_leaves = {r["node_id"] for r in conn.execute(
-            """SELECT DISTINCT cr.node_id
-                 FROM coverage cr
-                 JOIN objectives o  ON o.uuid = cr.uuid AND o.status = 'active'
-                 JOIN coverage co   ON co.uuid = cr.uuid AND co.hierarchy = ?
-                 JOIN nodes onode   ON onode.hierarchy = ? AND onode.node_id = co.node_id
-                                   AND onode.is_leaf = 1
-                WHERE cr.hierarchy = ?""",
-            (O, O, R),
-        )}
-    return nodes, objectives_by_node, planned_leaves
-
-
 def leaf_status(node, objectives_by_node, planned_leaves):
     if node["node_id"] in planned_leaves:
         return "planned"
@@ -431,26 +376,7 @@ def synthetic_ids(nodes):
     return out
 
 
-def summary(nodes, objectives_by_node, planned_leaves):
-    leaves = [n for n in nodes if n["is_leaf"]]
-    counts = {"gap": 0, "objective": 0, "planned": 0}
-    for n in leaves:
-        counts[leaf_status(n, objectives_by_node, planned_leaves)] += 1
-    total = len(leaves)
-    covered = counts["objective"] + counts["planned"]
-    return {
-        "leaves": total,
-        "gaps": counts["gap"],
-        "objective": counts["objective"],
-        "planned": counts["planned"],
-        "covered": covered,
-        "pct_covered": round(100 * covered / total) if total else 0,
-        "pct_planned": round(100 * counts["planned"] / total) if total else 0,
-    }
-
-
 INLINE = re.compile(r"`([^`]+)`|\*([^*]+)\*")
-BULLET = re.compile(r"^\s*-\s+(.*)$")
 
 
 def _inline(text):
@@ -465,34 +391,6 @@ def _inline(text):
 @app.template_filter("inline")
 def inline(text):
     return Markup(_inline(text))
-
-
-@app.template_filter("blocks")
-def blocks(text):
-    """Render multi-line node text: paragraphs and `- ` bullet lists, with inline
-    code/em -- so a leaf's full text (a sentence plus a bulleted list) shows."""
-    out, para, items = [], [], []
-
-    def flush_para():
-        if para:
-            out.append("<p>" + "<br>".join(para) + "</p>")
-            para.clear()
-
-    def flush_list():
-        if items:
-            out.append("<ul>" + "".join(f"<li>{it}</li>" for it in items) + "</ul>")
-            items.clear()
-
-    for line in (text or "").split("\n"):
-        if not line.strip():
-            flush_para(); flush_list(); continue
-        m = BULLET.match(line)
-        if m:
-            flush_para(); items.append(_inline(m.group(1)))
-        else:
-            flush_list(); para.append(_inline(line))
-    flush_para(); flush_list()
-    return Markup("".join(out))
 
 
 @app.route("/")
@@ -728,36 +626,6 @@ def hierarchy_upload(course, hierarchy):
 # --------------------------------------------------------------------------
 # Objectives + mapping (write views)
 
-def active_objectives(conn, course):
-    """Active raw objectives for a course with their coverage node_ids."""
-    objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "nodes": []}
-            for r in conn.execute(
-                """SELECT o.uuid, o.text FROM objectives o
-                     JOIN course_objectives co
-                       ON co.uuid = o.uuid AND co.course = ?
-                    WHERE o.status = 'active'""", (course,))}
-    for r in conn.execute(
-        "SELECT uuid, node_id FROM coverage WHERE hierarchy = ?",
-        (reference_hierarchy(conn, course),)):
-        if r["uuid"] in objs:
-            objs[r["uuid"]]["nodes"].append(r["node_id"])
-    return objs
-
-
-def leaf_choices(conn, course):
-    """(node_id, label) for every leaf node, in document order -- for pickers."""
-    return [(r["node_id"], (r["text"] or "").split("\n", 1)[0])
-            for r in conn.execute(
-                "SELECT node_id, text FROM nodes "
-                "WHERE hierarchy = ? AND is_leaf = 1 ORDER BY ordinal",
-                (reference_hierarchy(conn, course),))]
-
-
-def node_order(conn, course):
-    return {r["node_id"]: r["ordinal"] for r in conn.execute(
-        "SELECT node_id, ordinal FROM nodes WHERE hierarchy = ?",
-        (reference_hierarchy(conn, course),))}
-
 
 @app.route("/<course>/objectives")
 def objectives(course):
@@ -890,52 +758,6 @@ def active_ref(conn, course):
     return (request.values.get("ref") or "").strip() or reference_hierarchy(conn, course)
 
 
-def leafbox_response(course, node_id, R):
-    """Render the leaf's objectives box partial (the htmx swap target)."""
-    with db() as conn:
-        objs = conn.execute(
-            """SELECT o.uuid, o.text FROM coverage cv
-                 JOIN objectives o ON o.uuid = cv.uuid AND o.status = 'active'
-                WHERE cv.hierarchy = ? AND cv.node_id = ? ORDER BY o.text""",
-            (R, node_id)).fetchall()
-    return render_template("_leafbox.html", course=course, ref=R,
-                           node_id=node_id, objectives=objs)
-
-
-@app.route("/<course>/leafbox/<node_id>")
-def leafbox(course, node_id):
-    """The objectives box partial for one leaf (used to refresh after a drag)."""
-    with db() as conn:
-        R = active_ref(conn, course)
-    return leafbox_response(course, node_id, R)
-
-
-@app.route("/<course>/outline-stats")
-def outline_stats(course):
-    """The outline's coverage stats bar partial (refreshed after add/recategorize)."""
-    with db() as conn:
-        nodes, obn, planned = load_course(conn, course, active_ref(conn, course))
-    return render_template("_outline_stats.html", stats=summary(nodes, obn, planned))
-
-
-@app.route("/<course>/objective/<uuid>/recategorize", methods=["POST"])
-def recategorize(course, uuid):
-    """Move an objective's coverage from one leaf to another (drag/drop)."""
-    from_node = (request.form.get("from_node") or "").strip()
-    to_node = (request.form.get("to_node") or "").strip()
-    with db() as conn:
-        R = active_ref(conn, course)
-        valid = conn.execute("SELECT 1 FROM nodes WHERE hierarchy=? AND node_id=?",
-                             (R, to_node)).fetchone()
-        if to_node and valid and to_node != from_node:
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
-                         "VALUES (?, ?, ?)", (R, uuid, to_node))
-            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=? AND node_id=?",
-                         (R, uuid, from_node))
-            conn.commit()
-    return ("", 204)
-
-
 @app.route("/<course>/objective/new", methods=["POST"])
 def objective_new(course):
     text = (request.form.get("text") or "").strip()
@@ -989,35 +811,6 @@ def objective_edit(course, uuid):
     return _back(course)
 
 
-@app.route("/<course>/objective/<uuid>/coverage/add", methods=["POST"])
-def coverage_add(course, uuid):
-    node = (request.form.get("node_id") or "").strip()
-    with db() as conn:
-        R = reference_hierarchy(conn, course)
-        exists = conn.execute(
-            "SELECT 1 FROM nodes WHERE hierarchy = ? AND node_id = ?",
-            (R, node)).fetchone()
-        if not node or not exists:
-            flash(f"No such node: {node!r}")
-        else:
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
-                         "VALUES (?, ?, ?)", (R, uuid, node))
-            conn.commit()
-            flash(f"Mapped to {node}.")
-    return _back(course)
-
-
-@app.route("/<course>/objective/<uuid>/coverage/remove", methods=["POST"])
-def coverage_remove(course, uuid):
-    node = (request.form.get("node_id") or "").strip()
-    with db() as conn:
-        conn.execute("DELETE FROM coverage WHERE hierarchy = ? AND uuid = ? AND node_id = ?",
-                     (reference_hierarchy(conn, course), uuid, node))
-        conn.commit()
-    flash(f"Unmapped from {node}.")
-    return _back(course)
-
-
 @app.route("/<course>/export", methods=["POST"])
 def export(course):
     written, pruned = export_planning.export(DB_PATH, EXPORT_DIR)
@@ -1031,63 +824,6 @@ def export(course):
 # --------------------------------------------------------------------------
 # Lesson builder: synthesize raw -> lesson objectives, then schedule into lessons
 
-def worklist_counts(conn, course):
-    """Plan-progress counts: reference gaps, unplaced/rough raws, planned coverage.
-
-    Computed for the course's outline O against its reference R (=course): a
-    reference leaf is planned when an active objective covers it AND is placed at
-    an outline leaf (lesson); a raw is rough when placed at a non-leaf (unit) and
-    unplaced when it has no outline edge.
-    """
-    R = reference_hierarchy(conn, course)
-    O = outline_hierarchy(conn, course)
-
-    def scalar(sql, params):
-        return conn.execute(sql, params).fetchone()[0]
-
-    leaves = scalar("SELECT count(*) FROM nodes WHERE hierarchy=? AND is_leaf=1", (R,))
-    gaps = scalar("""
-        SELECT count(*) FROM nodes n WHERE n.hierarchy=? AND n.is_leaf=1
-          AND NOT EXISTS (
-            SELECT 1 FROM coverage cv JOIN objectives o
-                   ON o.uuid=cv.uuid AND o.status='active'
-             WHERE cv.hierarchy=n.hierarchy AND cv.node_id=n.node_id)""", (R,))
-
-    def raw_total(extra):
-        return scalar(f"""SELECT count(*) FROM objectives o
-              JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
-             WHERE o.status='active'{extra}""", (course,))
-
-    if O:
-        planned = scalar("""
-            SELECT count(*) FROM nodes n WHERE n.hierarchy=? AND n.is_leaf=1
-              AND EXISTS (
-                SELECT 1 FROM coverage cr
-                  JOIN objectives o ON o.uuid=cr.uuid AND o.status='active'
-                  JOIN coverage co  ON co.uuid=cr.uuid AND co.hierarchy=?
-                  JOIN nodes onode  ON onode.hierarchy=? AND onode.node_id=co.node_id
-                                   AND onode.is_leaf=1
-                 WHERE cr.hierarchy=n.hierarchy AND cr.node_id=n.node_id)""",
-            (R, O, O))
-        unplaced = scalar("""SELECT count(*) FROM objectives o
-              JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
-             WHERE o.status='active' AND NOT EXISTS (
-                SELECT 1 FROM coverage cv WHERE cv.hierarchy=? AND cv.uuid=o.uuid)""",
-            (course, O))
-        rough = scalar("""SELECT count(*) FROM objectives o
-              JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
-             WHERE o.status='active' AND EXISTS (
-                SELECT 1 FROM coverage cv
-                  JOIN nodes nn ON nn.hierarchy=cv.hierarchy AND nn.node_id=cv.node_id
-                 WHERE cv.hierarchy=? AND cv.uuid=o.uuid AND nn.is_leaf=0)""",
-            (course, O))
-    else:
-        planned, rough = 0, 0
-        unplaced = raw_total("")
-    return {"leaves": leaves, "gaps": gaps, "planned": planned,
-            "unplaced": unplaced, "rough": rough,
-            "planned_pct": round(100 * planned / leaves) if leaves else 0}
-
 
 def _id_list(field="ids"):
     """Read an id list sent either as repeated fields or one comma-joined field."""
@@ -1100,73 +836,6 @@ def _id_list(field="ids"):
 # --------------------------------------------------------------------------
 # The Plan page: Units -> Lessons, with raw objectives placed into them.
 
-def outline_structure(conn, O):
-    """(units, lessons, node_level, learning_objectives) for an outline hierarchy.
-
-    units/lessons are view dicts in sibling order; node_level maps every outline
-    node_id to its level ('unit'|'lesson'); learning_objectives maps lesson id ->
-    its learning-objective text.
-    """
-    units, lessons, node_level = [], [], {}
-    if O:
-        for n in conn.execute(
-            "SELECT node_id, parent_id, level, text FROM nodes "
-            "WHERE hierarchy=? ORDER BY ordinal, node_id", (O,)):
-            node_level[n["node_id"]] = n["level"]
-            if n["level"] == "lesson":
-                lessons.append({"uuid": n["node_id"], "unit_id": n["parent_id"],
-                                "title": n["text"]})
-            elif n["level"] == "unit":
-                units.append({"uuid": n["node_id"], "title": n["text"]})
-    los = {r["node_id"]: r["value"] for r in conn.execute(
-        "SELECT node_id, value FROM node_attr "
-        "WHERE hierarchy=? AND name='learning_objective'", (O,))} if O else {}
-    return units, lessons, node_level, los
-
-
-def plan_data(conn, course):
-    """(counts, units[+lessons+rough raws], unassigned lessons, pool raws)."""
-    counts = worklist_counts(conn, course)
-    order = node_order(conn, course)
-    objs = active_objectives(conn, course)
-    for r in conn.execute(
-        "SELECT uuid, position FROM course_objectives WHERE course=?", (course,)):
-        if r["uuid"] in objs:
-            objs[r["uuid"]]["position"] = r["position"]
-
-    O = outline_hierarchy(conn, course)
-    units, lessons, node_level, los = outline_structure(conn, O)
-    placed = {r["uuid"]: r["node_id"] for r in conn.execute(
-        "SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (O,))} if O else {}
-
-    def rawkey(o):
-        p = o.get("position")
-        ords = [order.get(n, 10**9) for n in o["nodes"]]
-        return ((0, p, "") if p is not None
-                else (1, min(ords) if ords else 10**9, o["text"].lower()))
-
-    by_lesson, rough_by_unit, pool = {}, {}, []
-    for o in sorted(objs.values(), key=rawkey):
-        node = placed.get(o["uuid"])
-        level = node_level.get(node)
-        if level == "lesson":
-            by_lesson.setdefault(node, []).append(o)
-        elif level == "unit":
-            rough_by_unit.setdefault(node, []).append(o)
-        else:
-            pool.append(o)
-
-    lessons_by_unit = {}
-    for L in lessons:
-        L["learning_objective"] = los.get(L["uuid"], "")
-        L["raws"] = by_lesson.get(L["uuid"], [])
-        lessons_by_unit.setdefault(L["unit_id"], []).append(L)
-    for u in units:
-        u["lessons"] = lessons_by_unit.get(u["uuid"], [])
-        u["rough"] = rough_by_unit.get(u["uuid"], [])
-    unassigned = lessons_by_unit.get(None, [])
-    return counts, units, unassigned, pool
-
 
 @app.route("/<course>/plan")
 def plan(course):
@@ -1175,41 +844,6 @@ def plan(course):
         O = outline_hierarchy(conn, course) or ensure_outline(conn, course)
         conn.commit()
     return redirect(url_for("hierarchy_view", course=course, hierarchy=O))
-
-
-@app.route("/<course>/plan-stats")
-def plan_stats(course):
-    with db() as conn:
-        counts, units, unassigned, pool = plan_data(conn, course)
-    return render_template("_plan_stats.html", course=course, counts=counts,
-                           pool_count=len(pool))
-
-
-@app.route("/<course>/plan/place", methods=["POST"])
-def plan_place(course):
-    """Place a raw objective via drag.
-
-    Form: `uuid`, `to` container ("pool" | "unit-<uuid>" | "lesson-<uuid>"), and
-    `ids` (the pool's new order, when to == pool). Deeper level wins; the pool
-    clears both placements.
-    """
-    uuid = request.form.get("uuid")
-    to = (request.form.get("to") or "").strip()
-    node = to[5:] if to.startswith("unit-") else to[7:] if to.startswith("lesson-") else None
-    with db() as conn:
-        O = outline_hierarchy(conn, course)
-        if O:
-            # Single placement per outline: clear this raw's edges, then re-place.
-            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (O, uuid))
-            if node:
-                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
-                             "VALUES (?, ?, ?)", (O, uuid, node))
-        if to == "pool":
-            for i, u in enumerate(_id_list("ids")):
-                conn.execute("UPDATE course_objectives SET position=? "
-                             "WHERE course=? AND uuid=?", (i, course, u))
-        conn.commit()
-    return ("", 204)
 
 
 # --- Units ---
