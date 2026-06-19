@@ -286,7 +286,8 @@
     body.dragging .units ul.rawzone.rough { outline-color: #d9cfa0; background: #fbf8ee; }
 
     /* Unified workspace: hierarchy (left) + raw pool (right). */
-    .workspace-board { grid-template-columns: 1fr 380px; }
+    /* Node content capped at 50rem; the objectives pool takes the rest. */
+    .workspace-board { grid-template-columns: minmax(0, 50rem) minmax(0, 1fr); }
     .workspace-board .pool { position: sticky; top: 1rem; }
     .nodes { min-width: 0; }
     .poolhead { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
