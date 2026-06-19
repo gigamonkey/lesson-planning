@@ -36,12 +36,10 @@
     .sidebar ul.hiers a { text-decoration: none; color: #2b6cb0; font-size: .88rem; flex: 1;
                           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sidebar ul.hiers li.active a { font-weight: 700; color: #222; }
-    /* Course outline: the elevated, distinguished first item (bold + an outline
-       icon). Objectives is also bold; both use the normal color convention (blue,
-       black when active). A touch of space sets them off from the references. */
-    .sidebar ul.hiers li.outlineitem a { font-weight: 700; display: flex;
-            align-items: center; gap: .3rem; }
-    .sidebar ul.hiers li.outlineitem .bi { color: #2f855a; font-size: .92em; flex: none; }
+    /* Course outline + Objectives: the two bold, course-level items at the top
+       (normal color convention -- blue, black when active). A touch of space sets
+       them off from the references below. */
+    .sidebar ul.hiers li.outlineitem a,
     .sidebar ul.hiers li.objitem a { font-weight: 700; }
     .sidebar ul.hiers li.objitem { margin-bottom: .3rem; }
     .sidebar-foot { border-top: 1px solid var(--line); padding-top: .7rem; margin-top: .5rem;
@@ -432,8 +430,7 @@
           <span class="ctitle">{{ c.title }}</span>
           <ul class="hiers">
             <li class="outlineitem {{ 'active' if c.outline and c.outline == active_hierarchy else '' }}">
-              <a href="{{ url_for('plan', course=c.course) }}">
-                <i class="bi bi-list-nested"></i><span>Course outline</span></a>
+              <a href="{{ url_for('plan', course=c.course) }}">Course outline</a>
             </li>
             <li class="objitem {{ 'active' if request.endpoint == 'objectives' and c.course == nav_course else '' }}">
               <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
