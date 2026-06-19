@@ -47,6 +47,14 @@ STATUS = {
     "planned": ("planned", "planned"),
 }
 
+# Clean per-kind label for page titles ("CSA CED", "CSA course outline", ...).
+KIND_LABEL = {"ced": "CED", "book": "book", "ib-syllabus": "syllabus",
+              "course-outline": "course outline"}
+
+
+def page_title(course, kind):
+    return f"{course.upper()} {KIND_LABEL.get(kind, kind)}"
+
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -558,6 +566,7 @@ def hierarchy_view(course, hierarchy):
             if h["editable"] else {}
     return render_template(
         "workspace.html", course=course, ref=hierarchy, hierarchy_title=h["title"],
+        page_title=page_title(course, h["kind"]),
         kind=h["kind"], editable=bool(h["editable"]), los=los, pool=pool,
         tree=build_tree(nodes, by_node, set()),
         stats=workspace_stats(nodes, by_node, pool))
@@ -710,7 +719,8 @@ def objectives(course):
                 cell["tags"].sort(key=lambda t: t["ord"])
     rows = sorted(objs.values(), key=lambda o: o["sort"])
     return render_template("objectives.html", course=course, objectives=rows,
-                           hierarchies=cols, total=len(rows))
+                           hierarchies=cols, total=len(rows),
+                           page_title=f"{course.upper()} objectives")
 
 
 @app.route("/<course>/objectives.tsv")

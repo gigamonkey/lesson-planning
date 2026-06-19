@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Lesson Planning{% endblock %}</title>
+  <title>{% block title %}{% if page_title %}{{ page_title }} · {% endif %}Lesson Planning{% endblock %}</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
@@ -21,6 +21,7 @@
     .layout { display: flex; align-items: flex-start; }
     /* Fill the available width after the sidebar (flush-left, not centered). */
     main { flex: 1; min-width: 0; margin: 0; padding: 1.2rem 1.5rem; }
+    .pagetitle { font-size: 1.3rem; font-weight: 700; margin: 0 0 .9rem; }
 
     /* Left sidebar: courses -> their hierarchies (references then the outline). */
     .sidebar { width: 230px; flex: none; background: #fff; border-right: 1px solid var(--line);
@@ -456,6 +457,7 @@
       </div>
     </aside>
     <main>
+      {% if page_title %}<h1 class="pagetitle">{{ page_title }}</h1>{% endif %}
       {% with msgs = get_flashed_messages() %}
         {% if msgs %}<div class="flash">{% for m in msgs %}<div>{{ m }}</div>{% endfor %}</div>{% endif %}
       {% endwith %}
