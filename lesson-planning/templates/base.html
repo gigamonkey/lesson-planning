@@ -296,26 +296,32 @@
     .poolnew input { width: 100%; padding: .3rem .5rem; margin-bottom: .4rem; font: inherit;
             border: 1px solid var(--line); border-radius: 4px; }
     .poolnew input:focus { border-color: #bcd; outline: none; }
-    /* Reference tree: shallow indentation (these hierarchies are deep) -- a thin
-       guide line carries the nesting; typography distinguishes the levels. */
-    .refnodes .wnode { margin: .1rem 0; }
-    .refnodes .wnodehead { display: flex; align-items: baseline; gap: .4rem; padding: .05rem 0; }
+    /* Reference tree: little/no indentation -- typography (by depth) carries the
+       structure, like a document outline; objectives render as bullet lists. */
+    .refnodes .wnode { margin: 0; }
+    .refnodes .wnodehead { display: flex; align-items: baseline; gap: .4rem; }
     .refnodes .nid { font-family: ui-monospace, monospace; font-size: .76rem;
             color: var(--muted); flex: none; }
     .refnodes .wlabel { min-width: 0; }
-    .refnodes .lvl-unit > .wnodehead, .refnodes .lvl-chapter > .wnodehead,
-    .refnodes .lvl-theme > .wnodehead, .refnodes .lvl-big-idea > .wnodehead {
-            font-weight: 700; font-size: 1.05rem; margin-top: .5rem; }
-    .refnodes .lvl-topic > .wnodehead, .refnodes .lvl-section > .wnodehead,
-    .refnodes .lvl-essential-understanding > .wnodehead { font-weight: 600; }
-    .refnodes .wchildren { margin-left: .55rem; padding-left: .6rem;
-            border-left: 1px solid var(--line); }
-    .refnodes ul.rawzone { list-style: none; border: none; background: none; margin: .03rem 0;
-            padding: .03rem 0 .03rem .2rem; min-height: .6rem; }
-    .refnodes li.rawitem { background: none; border: none; padding: .06rem .3rem; margin: 0; }
-    .refnodes li.rawitem:hover { background: #f1f1f1; }
+    .refnodes .wchildren { margin-left: .5rem; }   /* a hair of indent per level */
+    /* Typographic scale by nesting depth. */
+    .refnodes .depth-1 > .wnodehead { font-weight: 700; font-size: 1.15rem;
+            margin: 1.1rem 0 .15rem; padding-bottom: .15rem; border-bottom: 1px solid var(--line); }
+    .refnodes .depth-2 > .wnodehead { font-weight: 700; font-size: 1rem; margin: .7rem 0 .1rem; }
+    .refnodes .depth-3 > .wnodehead { font-weight: 600; font-size: .92rem; margin: .45rem 0 .05rem; }
+    .refnodes .depth-4 > .wnodehead { font-weight: 600; font-size: .85rem; color: #555;
+            margin: .3rem 0 .05rem; }
+    .refnodes .depth-5 > .wnodehead { font-weight: 400; font-size: .82rem; color: #555;
+            margin: .2rem 0 0; }
+    /* Objectives as a bulleted list under their node. */
+    .refnodes ul.rawzone { list-style: disc; border: none; background: none;
+            margin: .05rem 0 .2rem; padding: 0 0 0 1.4rem; min-height: 0; }
+    .refnodes li.rawitem { display: list-item; background: none; border: none;
+            padding: .03rem 0; margin: 0; cursor: grab; }
+    .refnodes li.rawitem::marker { color: #c4c4c4; }
+    .refnodes li.rawitem .rawtext { flex: none; }
     body.dragging .refnodes ul.rawzone { outline: 1px dashed #b9cbe0; background: #f5f9fe;
-            min-height: 1.2rem; }
+            min-height: 1.1rem; list-style-position: inside; }
     /* Inline "+ objective" under a node. */
     .nodeadd { margin: 0 0 .1rem .2rem; }
     .nodeadd .addlink { font-size: .74rem; color: var(--muted); cursor: pointer; }

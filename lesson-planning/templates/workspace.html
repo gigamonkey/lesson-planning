@@ -18,8 +18,8 @@
 {% endmacro %}
 
 {# A reference node: its drop zone + (optionally) children. Structure is fixed. #}
-{% macro refnode(n) %}
-<div class="wnode lvl-{{ n.level }}{{ ' wbranch' if n.children }}">
+{% macro refnode(n, depth=1) %}
+<div class="wnode depth-{{ depth }} lvl-{{ n.level }}">
   <div class="wnodehead">
     <span class="nid">{{ n.id }}</span>
     <span class="wlabel">{{ n.label|inline }}</span>
@@ -27,9 +27,8 @@
   <ul class="sortable rawzone" data-to="node-{{ n.id }}">
     {% for o in n.objectives %}{% include "_rawitem.html" %}{% endfor %}
   </ul>
-  {{ nodeadd(n.id) }}
   {% if n.children %}
-    <div class="wchildren">{% for c in n.children %}{{ refnode(c) }}{% endfor %}</div>
+    <div class="wchildren">{% for c in n.children %}{{ refnode(c, depth + 1) }}{% endfor %}</div>
   {% endif %}
 </div>
 {% endmacro %}
