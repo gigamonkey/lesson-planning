@@ -45,6 +45,22 @@ LEVEL_TAGS = {
 }
 
 
+def kind_label(course, kind):
+    """Short, clean label for a hierarchy's kind. Drops a redundant leading course
+    id (course 'ib' + kind 'ib-syllabus' -> 'syllabus') then tidies ('ced' -> 'CED',
+    dashes -> spaces)."""
+    parts = kind.split("-")
+    if parts[0] == course:
+        parts = parts[1:]
+    k = "-".join(parts)
+    return {"ced": "CED", "course-outline": "course outline"}.get(k, k.replace("-", " "))
+
+
+def hierarchy_title(course, kind):
+    """Display title for a hierarchy, e.g. 'CSA CED', 'IB syllabus'."""
+    return f"{course.upper()} {kind_label(course, kind)}"
+
+
 def parse_top_heading(rest):
     """Parse a level-1 heading, returning (flavor, id, head).
 

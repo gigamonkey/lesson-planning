@@ -23,7 +23,7 @@ detected flavor and can be overridden with the matching flags.
 import argparse
 import sqlite3
 
-from hierarchy import LEVEL_TAGS, parse_sections
+from hierarchy import LEVEL_TAGS, hierarchy_title, parse_sections
 
 DDL = """
 CREATE TABLE IF NOT EXISTS nodes (
@@ -124,7 +124,7 @@ def load(db_path, slug, course, kind, course_title, rows, source=None):
         conn.executemany(
             "INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)", rows
         )
-        title = f"{course.upper()} {kind.replace('-', ' ').upper()}"
+        title = hierarchy_title(course, kind)
         conn.execute(
             "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
             " VALUES (?, ?, ?, 0, ?, ?)"

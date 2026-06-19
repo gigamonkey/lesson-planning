@@ -29,6 +29,7 @@ from markupsafe import Markup
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import export_planning  # noqa: E402
 import import_objectives  # noqa: E402
+from hierarchy import hierarchy_title  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
@@ -47,19 +48,9 @@ STATUS = {
     "planned": ("planned", "planned"),
 }
 
-# Short, clean label for a hierarchy's kind, used in titles and the sidebar.
-def kind_label(course, kind):
-    """Drop a redundant leading course id from the kind (course 'ib' +
-    'ib-syllabus' -> 'syllabus'), then tidy ('ced' -> 'CED', dashes -> spaces)."""
-    parts = kind.split("-")
-    if parts[0] == course:
-        parts = parts[1:]
-    k = "-".join(parts)
-    return {"ced": "CED", "course-outline": "course outline"}.get(k, k.replace("-", " "))
-
-
-def page_title(course, kind):
-    return f"{course.upper()} {kind_label(course, kind)}"
+# kind_label / hierarchy_title (the page/sidebar titles) live in hierarchy.py so
+# load_nodes.py stores the same clean titles. page_title is an alias for clarity.
+page_title = hierarchy_title
 
 
 def db():
