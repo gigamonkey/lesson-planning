@@ -73,5 +73,14 @@
         e.target.blur();
       }
     });
+
+    // Tag tooltips drop below by default; flip above when there isn't room below
+    // (so items near the bottom of the window aren't clipped).
+    document.addEventListener('mouseover', function (e) {
+      const tag = e.target.closest && e.target.closest('.otag[data-tip]');
+      if (!tag) return;
+      const r = tag.getBoundingClientRect();
+      tag.classList.toggle('tip-above', (window.innerHeight - r.bottom) < 130);
+    });
   </script>
 {% endblock %}
