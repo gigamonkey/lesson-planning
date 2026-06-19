@@ -367,11 +367,13 @@
     table.objtable tbody tr:hover td { background: #f7f9fa; }
     .th-hier, td.hcell { white-space: nowrap; width: 1%; }   /* shrink to content */
     .tcell { max-width: 50rem; }                             /* cap; wrap beyond it */
-    .tcell .objedit { display: flex; margin: 0; }
-    .tcell textarea { width: 100%; max-width: 50rem; font: inherit; font-size: .9rem;
-            line-height: 1.4; border: 1px solid transparent; background: transparent;
-            border-radius: 4px; padding: .05rem .3rem; resize: none; overflow: hidden;
-            field-sizing: content; }
+    .tcell .objedit { display: block; margin: 0; }
+    /* No explicit width -- field-sizing sizes the field to its text (a width:100%
+       here would override it and force the column full-width); cap at 50rem to wrap. */
+    .tcell textarea { box-sizing: border-box; min-width: 14rem; max-width: 50rem;
+            font: inherit; font-size: .9rem; line-height: 1.4; border: 1px solid transparent;
+            background: transparent; border-radius: 4px; padding: .05rem .3rem; resize: none;
+            overflow: hidden; field-sizing: content; }
     .tcell textarea:hover { border-color: #e2e6ea; }
     .tcell textarea:focus { border-color: #bcd; background: #fff; outline: none; }
 
