@@ -6,9 +6,11 @@ Two input shapes, auto-detected from whether the first non-blank line has a tab:
     line becomes a raw objective in the course's pool, with no coverage.
 
   * TSV table -- a header row naming columns. `objective` is required (`text` is
-    accepted as an alias). `node_id` is optional (the coverage target; blank or
-    'none' = pool only; `ek` is an alias). `uuid` is optional. Other columns are
-    ignored. A node_id implies its ancestors, so only the node itself is needed.
+    accepted as an alias). The coverage-target column is `node_id`/`ek` if present,
+    otherwise the single column left over after uuid/objective/text (so a
+    downloaded uuid/text file plus any added id column -- 'subsection', etc. --
+    just works); blank or 'none' = pool only. `uuid` is optional. A node_id implies
+    its ancestors, so only the node itself is needed.
 
 An optional `uuid` column lets a row name an existing objective: a known uuid
 identifies it directly (preserving identity even if the text was edited),
@@ -69,16 +71,24 @@ def parse_text(content):
 
     reader = csv.DictReader(io.StringIO(content), delimiter="\t")
     cols = reader.fieldnames or []
-    if "objective" not in cols and "text" not in cols:
+    text_col = "objective" if "objective" in cols else "text" if "text" in cols else None
+    if not text_col:
         raise ValueError(
             f"table input must have an 'objective' (or 'text') column; got: {', '.join(cols)}")
+    # The node-id column: a recognized name, else the single leftover column (so a
+    # downloaded uuid/text file + any added id column -- 'subsection', 'ek', ... --
+    # just works). Ambiguous (>1 leftover, none recognized) -> no coverage.
+    node_col = next((c for c in ("node_id", "ek") if c in cols), None)
+    if not node_col:
+        leftover = [c for c in cols if c not in ("uuid", "objective", "text")]
+        node_col = leftover[0] if len(leftover) == 1 else None
     items = []
     for r in reader:
-        text = (r.get("objective") or r.get("text") or "").strip()
+        text = (r.get(text_col) or "").strip()
         if not text:
             continue
         uuid = (r.get("uuid") or "").strip() or None
-        node = (r.get("node_id") or r.get("ek") or "").strip()
+        node = (r.get(node_col) or "").strip() if node_col else ""
         items.append((uuid, text, None if node.lower() in ("", "none") else node))
     return items, "table"
 
