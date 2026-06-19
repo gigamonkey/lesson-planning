@@ -327,10 +327,21 @@
             border-radius: 4px; font: inherit; }
     .objnew input:focus, .objsearch:focus { border-color: #bcd; outline: none; }
     .objcount { color: var(--muted); font-size: .85rem; margin: .1rem 0 .5rem; }
-    ul.objlist-compact { margin: 0; padding-left: 1.2rem; }
-    ul.objlist-compact li { padding: .12rem 0; }
+    ul.objlist-compact { margin: 0; padding-left: 1.4rem; }
+    ul.objlist-compact li.oitem { padding: 0; }
+    ul.objlist-compact li.oitem::marker { color: #c4c4c4; }
+    .orow { display: flex; align-items: baseline; gap: .4rem; padding: .1rem .35rem;
+            border-radius: 4px; }
+    .orow:hover { background: #f1f3f5; }
+    .orow .objedit { display: flex; flex: 1; min-width: 0; margin: 0; }
+    .orow .objedit textarea { flex: 1; min-width: 0; font: inherit; line-height: 1.45;
+            border: 1px solid transparent; background: transparent; border-radius: 4px;
+            padding: .05rem .3rem; resize: none; overflow: hidden; field-sizing: content; }
+    .orow .objedit textarea:hover { border-color: #e2e6ea; }
+    .orow:hover .objedit textarea { cursor: text; }
+    .orow .objedit textarea:focus { border-color: #bcd; background: #fff; outline: none; }
     ul.objlist-compact .otag { font-family: ui-monospace, monospace; font-size: .72rem;
-            color: var(--muted); margin-left: .35rem; background: #f3f5f7;
+            color: var(--muted); background: #f3f5f7; flex: none;
             border: 1px solid #eaedf0; border-radius: 3px; padding: 0 .25rem; white-space: nowrap; }
 
     /* Help page */

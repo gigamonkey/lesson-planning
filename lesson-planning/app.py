@@ -635,7 +635,8 @@ def objectives(course):
                 o["tags"].append(r["node_id"])
         for o in objs.values():
             o["tags"] = sorted(set(o["tags"]))
-    rows = sorted(objs.values(), key=lambda o: o["text"].lower())
+    # Sort by the VISIBLE text -- ignore the markdown markers (`code`, *em*).
+    rows = sorted(objs.values(), key=lambda o: re.sub(r"[`*]", "", o["text"]).lower())
     return render_template("objectives.html", course=course,
                            objectives=rows, total=len(rows))
 

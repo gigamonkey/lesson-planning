@@ -16,18 +16,27 @@
 
   <ul class="objlist-compact">
     {% for o in objectives %}
-      <li>
-        <span class="otext">{{ o.text|inline }}</span>
-        {% for t in o.tags %}<span class="otag">{{ t }}</span>{% endfor %}
+      <li class="oitem">
+        <div class="orow">
+          <form method="post" class="objedit autosave"
+                action="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}"
+                hx-post="{{ url_for('objective_edit', course=course, uuid=o.uuid) }}" hx-swap="none">
+            <textarea name="text" rows="1">{{ o.text }}</textarea>
+          </form>
+          {% for t in o.tags %}<span class="otag">{{ t }}</span>{% endfor %}
+        </div>
       </li>
     {% endfor %}
   </ul>
 
   <script>
-    // Live filter: case-insensitive regex when it compiles, else substring.
     const search = document.getElementById('obj-search');
     const count = document.getElementById('obj-count');
-    const items = Array.from(document.querySelectorAll('ul.objlist-compact > li'));
+    const items = Array.from(document.querySelectorAll('ul.objlist-compact > li.oitem'));
+
+    function textOf(li) { const t = li.querySelector('textarea'); return t ? t.value : li.textContent; }
+
+    // Live filter: case-insensitive regex when it compiles, else substring.
     function apply() {
       const q = search.value.trim();
       let test = function () { return true; };
@@ -39,12 +48,27 @@
       }
       let shown = 0;
       items.forEach(function (li) {
-        const ok = test(li.textContent);
+        const ok = test(textOf(li));
         li.style.display = ok ? '' : 'none';
         if (ok) shown++;
       });
       count.textContent = shown;
     }
     search.addEventListener('input', apply);
+
+    // Click to edit: each item is a textarea styled as plain text until focused;
+    // it grows to fit, saves on blur (global autosave), and Enter blurs (= save).
+    function autosize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+    document.querySelectorAll('.objedit textarea').forEach(autosize);
+    document.addEventListener('input', function (e) {
+      if (e.target.matches && e.target.matches('.objedit textarea')) autosize(e.target);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.target.matches && e.target.matches('.objedit textarea') &&
+          e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        e.target.blur();
+      }
+    });
   </script>
 {% endblock %}
