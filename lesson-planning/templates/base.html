@@ -56,7 +56,6 @@
     .pill-book { background: #f3eefe; color: #6b46c1; border-color: #e0d4f5; }
     .pill-course-outline { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
     .pill-ib-syllabus { background: #fff4e6; color: #b7791f; border-color: #f0dcc0; }
-    .hiername { margin-top: 0; }
 
     .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0 0 1rem;
              padding: .8rem 1rem; background: #fff; border: 1px solid var(--line);
@@ -105,46 +104,9 @@
     button.iconbtn:hover { color: var(--gap); background: #f5ebeb; }
     .flash { background: #fffbe6; border: 1px solid #f0e0a0; border-radius: 6px;
              padding: .5rem .8rem; margin-bottom: 1rem; }
-    .obj { background: #fff; border: 1px solid var(--line); border-radius: 6px;
-           padding: .6rem .8rem; margin-bottom: .6rem; }
-    .obj .edit { display: flex; gap: .4rem; }
-    .obj .edit input[type=text] { flex: 1; padding: .3rem .5rem;
-           border: 1px solid var(--line); border-radius: 4px; }
-    .chips { margin-top: .4rem; display: flex; gap: .4rem; flex-wrap: wrap;
-             align-items: center; }
-    .chip { font-family: ui-monospace, monospace; font-size: .8rem;
-            background: #eef3f8; border: 1px solid #d6e2ee; border-radius: 12px;
-            padding: .05rem .2rem .05rem .5rem; display: inline-flex; align-items: center; gap: .2rem; }
-    .chip.unmapped { background: #fdeceb; border-color: #f3c9c4; color: var(--gap); }
-    .chip button { border: none; background: none; padding: 0 .2rem; color: var(--muted); }
-    .chip form { display: inline; margin: 0; }
-    .cluster { background: #fff; border: 1px solid var(--line); border-radius: 6px;
-               padding: .7rem .9rem; margin-bottom: .9rem; }
-    .cluster table { border-collapse: collapse; width: 100%; margin: .3rem 0; }
-    .cluster td { padding: .2rem .4rem; border-bottom: 1px solid #f0f0f0; }
-    .sim { font-size: .8rem; color: var(--muted); }
-    .inline-add { display: inline-flex; gap: .2rem; }
-    .inline-add input { width: 6rem; padding: .1rem .3rem; border: 1px solid var(--line);
-            border-radius: 4px; font-family: ui-monospace, monospace; font-size: .8rem; }
 
-    /* Synthesize: two columns */
-    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
-    .col h2 { margin-top: .2rem; }
-    ul.objlist.plain { list-style: none; padding-left: 0; }
-    ul.objlist.plain li { padding: .1rem 0; }
-    ul.objlist.plain label { display: flex; gap: .4rem; align-items: baseline; cursor: pointer; }
-
-    /* Synthesize drag board: learning-objective cards + raw-objective pool. */
-    .addlo { display: flex; gap: .4rem; margin-bottom: .7rem; }
-    .addlo input { flex: 1; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 4px; }
-    .locard { background: #fff; border: 1px solid var(--line); border-radius: 6px;
-              padding: .5rem .6rem; margin-bottom: .6rem; }
-    .loedit { display: flex; gap: .4rem; align-items: center; }
-    .loedit .edit { flex: 1; display: flex; gap: .35rem; margin: 0; }
-    .loedit .edit input { flex: 1; min-width: 0; padding: .25rem .4rem;
-              border: 1px solid var(--line); border-radius: 4px; }
-    .loedit form { margin: 0; }
-    ul.sortable.lorolls, ul.sortable.rawpool { list-style: none; margin: .4rem 0 0;
+    /* Raw-objective pool (drag target). */
+    ul.sortable.rawpool { list-style: none; margin: .4rem 0 0;
               padding: .2rem; min-height: 2.4rem; border: 1px dashed var(--line);
               border-radius: 5px; background: var(--bg); }
     ul.sortable.rawpool { margin-top: 0; min-height: 4rem; }
@@ -165,17 +127,12 @@
     .lessoncard { margin-bottom: .7rem; }
     .lessonhead { display: flex; align-items: center; gap: .5rem; }
     .lessonhead .edit { flex: 1; }
-    .lnum { font-weight: 700; color: var(--muted); }
     .lessonctl { display: flex; gap: .2rem; }
     .lessonctl form { margin: 0; }
     .lessonctl button { padding: .1rem .4rem; }
     ul.sortable { list-style: none; margin: .4rem 0 0; padding: .15rem;
             min-height: 2rem; border: 1px dashed var(--line); border-radius: 5px;
             background: var(--bg); }
-    li.lo { background: #fff; border: 1px solid var(--line); border-radius: 4px;
-            padding: .25rem .45rem; margin: .25rem 0; cursor: grab; font-size: .9rem; }
-    li.lo:active { cursor: grabbing; }
-    .drag-ghost { opacity: .4; }
     /* Units group lessons. */
     .addrow { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: .8rem; }
     .addrow .addlesson { margin-bottom: 0; }
@@ -197,8 +154,6 @@
     ul.unitlessons > li.lessoncard { margin: .35rem 0; cursor: grab; }
     .lessoncard input, .lessoncard textarea { cursor: text; }
     /* Plan page: outline (left) + raw pool (right). */
-    .plan-board { grid-template-columns: 1fr 300px; }
-    .plan-board .pool { position: sticky; top: 1rem; }
     ul.rawzone { list-style: none; margin: .3rem 0 0; padding: .2rem; min-height: 2.2rem;
             border: 1px dashed var(--line); border-radius: 5px; background: var(--bg); }
     ul.rawzone.rawpool { min-height: 6rem; }
