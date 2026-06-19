@@ -439,7 +439,7 @@
             {% for h in c.hierarchies %}
               <li class="{{ 'active' if h.hierarchy == active_hierarchy else '' }}">
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
-                   title="{{ h.title }}">{{ h.title }}</a>
+                   title="{{ h.label }}">{{ h.label }}</a>
                 <span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>
               </li>
             {% endfor %}

@@ -47,13 +47,19 @@ STATUS = {
     "planned": ("planned", "planned"),
 }
 
-# Clean per-kind label for page titles ("CSA CED", "CSA course outline", ...).
-KIND_LABEL = {"ced": "CED", "book": "book", "ib-syllabus": "syllabus",
-              "course-outline": "course outline"}
+# Short, clean label for a hierarchy's kind, used in titles and the sidebar.
+def kind_label(course, kind):
+    """Drop a redundant leading course id from the kind (course 'ib' +
+    'ib-syllabus' -> 'syllabus'), then tidy ('ced' -> 'CED', dashes -> spaces)."""
+    parts = kind.split("-")
+    if parts[0] == course:
+        parts = parts[1:]
+    k = "-".join(parts)
+    return {"ced": "CED", "course-outline": "course outline"}.get(k, k.replace("-", " "))
 
 
 def page_title(course, kind):
-    return f"{course.upper()} {KIND_LABEL.get(kind, kind)}"
+    return f"{course.upper()} {kind_label(course, kind)}"
 
 
 def db():
@@ -286,7 +292,9 @@ def inject_nav():
             for h in conn.execute(
                 "SELECT hierarchy, course, kind, editable, title FROM hierarchies "
                 "ORDER BY course, editable, (kind='ced') DESC, hierarchy"):
-                by_course.setdefault(h["course"], []).append(h)
+                by_course.setdefault(h["course"], []).append(
+                    {"hierarchy": h["hierarchy"], "kind": h["kind"],
+                     "editable": h["editable"], "label": page_title(h["course"], h["kind"])})
             for c in cs:
                 hs = by_course.get(c["course"], [])
                 outline = next((h["hierarchy"] for h in hs
@@ -565,7 +573,7 @@ def hierarchy_view(course, hierarchy):
             "WHERE hierarchy=? AND name='learning_objective'", (hierarchy,))} \
             if h["editable"] else {}
     return render_template(
-        "workspace.html", course=course, ref=hierarchy, hierarchy_title=h["title"],
+        "workspace.html", course=course, ref=hierarchy,
         page_title=page_title(course, h["kind"]),
         kind=h["kind"], editable=bool(h["editable"]), los=los, pool=pool,
         tree=build_tree(nodes, by_node, set()),
