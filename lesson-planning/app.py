@@ -375,6 +375,32 @@ def build_tree(nodes, objectives_by_node, planned_leaves, gaps_only=False):
             if keep is None or n["node_id"] in keep]
 
 
+def synthetic_ids(nodes):
+    """Positional display ids for a hierarchy whose node_ids are uuids (an outline):
+    pre-order '1', '1.1', '1.2', '2.1', ... reflecting the current structure.
+
+    Returns {node_id: (display, seq)} -- display is the dotted id; seq is a global
+    pre-order index for document-order sorting. `nodes` rows need node_id/parent_id/
+    ordinal. Identity stays the uuid; these are computed fresh each render.
+    """
+    children = {}
+    for n in nodes:
+        children.setdefault(n["parent_id"], []).append(n)
+    for kids in children.values():
+        kids.sort(key=lambda n: (n["ordinal"], n["node_id"]))
+    out, seq = {}, [0]
+
+    def walk(parent, prefix):
+        for i, n in enumerate(children.get(parent, []), 1):
+            disp = f"{prefix}.{i}" if prefix else str(i)
+            out[n["node_id"]] = (disp, seq[0])
+            seq[0] += 1
+            walk(n["node_id"], disp)
+
+    walk(None, "")
+    return out
+
+
 def summary(nodes, objectives_by_node, planned_leaves):
     leaves = [n for n in nodes if n["is_leaf"]]
     counts = {"gap": 0, "objective": 0, "planned": 0}
@@ -627,16 +653,30 @@ def objectives(course):
     BIG = 10 ** 9
     with db() as conn:
         cols = [dict(r) for r in conn.execute(
-            "SELECT hierarchy, kind, title FROM hierarchies WHERE course=? AND editable=0 "
-            "ORDER BY (kind='ced') DESC, hierarchy", (course,))]
+            "SELECT hierarchy, kind, editable, title FROM hierarchies WHERE course=? "
+            "ORDER BY editable, (kind='ced') DESC, hierarchy", (course,))]
         slugs = [h["hierarchy"] for h in cols]
-        # (hierarchy, node_id) -> (ordinal, statement) for this course's references.
-        node_meta = {(r["hierarchy"], r["node_id"]):
-                     (r["ordinal"], re.sub(r"[`*]", "", (r["text"] or "").split("\n", 1)[0]))
-                     for r in conn.execute(
-                         "SELECT n.hierarchy, n.node_id, n.ordinal, n.text FROM nodes n "
-                         "JOIN hierarchies h ON h.hierarchy=n.hierarchy "
-                         "AND h.editable=0 AND h.course=?", (course,))}
+        # (hierarchy, node_id) -> (display_id, sort_ord, tooltip). References use the
+        # verbatim id + document ordinal; editable outlines use synthetic ids.
+        node_meta = {}
+        for h in cols:
+            ns = conn.execute(
+                "SELECT node_id, parent_id, ordinal, text FROM nodes WHERE hierarchy=?",
+                (h["hierarchy"],)).fetchall()
+            firstline = lambda t: re.sub(r"[`*]", "", (t or "").split("\n", 1)[0])
+            if h["editable"]:
+                los = {r["node_id"]: r["value"] for r in conn.execute(
+                    "SELECT node_id, value FROM node_attr "
+                    "WHERE hierarchy=? AND name='learning_objective'", (h["hierarchy"],))}
+                sids = synthetic_ids(ns)
+                for n in ns:
+                    disp, seq = sids[n["node_id"]]
+                    tip = (n["text"] or "").strip() or los.get(n["node_id"], "")
+                    node_meta[(h["hierarchy"], n["node_id"])] = (disp, seq, firstline(tip))
+            else:
+                for n in ns:
+                    node_meta[(h["hierarchy"], n["node_id"])] = (
+                        n["node_id"], n["ordinal"], firstline(n["text"]))
         objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"],
                             "cells": {s: {"tags": [], "ord": BIG} for s in slugs}}
                 for r in conn.execute(
@@ -648,9 +688,10 @@ def objectives(course):
             o = objs.get(r["uuid"])
             if not o or r["hierarchy"] not in slugs:
                 continue
-            ordn, title = node_meta.get((r["hierarchy"], r["node_id"]), (BIG, ""))
+            disp, ordn, title = node_meta.get((r["hierarchy"], r["node_id"]),
+                                               (r["node_id"], BIG, ""))
             cell = o["cells"][r["hierarchy"]]
-            cell["tags"].append({"id": r["node_id"], "title": title, "ord": ordn})
+            cell["tags"].append({"id": disp, "title": title, "ord": ordn})
             cell["ord"] = min(cell["ord"], ordn)
         for o in objs.values():
             o["sort"] = re.sub(r"[`*]", "", o["text"]).lower()  # visible-text sort key
