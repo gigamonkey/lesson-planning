@@ -296,14 +296,17 @@
     .poolnew input { width: 100%; padding: .3rem .5rem; margin-bottom: .4rem; font: inherit;
             border: 1px solid var(--line); border-radius: 4px; }
     .poolnew input:focus { border-color: #bcd; outline: none; }
-    /* Reference tree: little/no indentation -- typography (by depth) carries the
-       structure, like a document outline; objectives render as bullet lists. */
+    /* Reference tree: no per-level indent -- typography (by depth) carries the
+       structure. A fixed-width id gutter (hanging indent) at every level, so all
+       node text starts in one column; objectives render as a bulleted list a bit
+       further in. */
+    .refnodes { --idw: 5rem; }                  /* id gutter width (fits the longest id) */
     .refnodes .wnode { margin: 0; }
-    .refnodes .wnodehead { display: flex; align-items: baseline; gap: .4rem; }
-    .refnodes .nid { font-family: ui-monospace, monospace; font-size: .76rem;
-            color: var(--muted); flex: none; }
-    .refnodes .wlabel { min-width: 0; }
-    .refnodes .wchildren { margin-left: 0; }   /* no per-level indent -- typography only */
+    .refnodes .wnodehead { display: flex; align-items: baseline; gap: .5rem; }
+    .refnodes .nid { flex: 0 0 var(--idw); white-space: nowrap;
+            font-family: ui-monospace, monospace; font-size: .76rem; color: var(--muted); }
+    .refnodes .wlabel { flex: 1; min-width: 0; }
+    .refnodes .wchildren { margin-left: 0; }    /* no per-level indent -- typography only */
     /* Typographic scale by nesting depth. */
     .refnodes .depth-1 > .wnodehead { font-weight: 700; font-size: 1.15rem;
             margin: 1.1rem 0 .15rem; padding-bottom: .15rem; border-bottom: 1px solid var(--line); }
@@ -313,9 +316,10 @@
             margin: .3rem 0 .05rem; }
     .refnodes .depth-5 > .wnodehead { font-weight: 400; font-size: .82rem; color: #555;
             margin: .2rem 0 0; }
-    /* Objectives as a bulleted list under their node. */
+    /* Objectives: a bulleted list aligned to the text column (id gutter + gap),
+       indented a bit further. */
     .refnodes ul.rawzone { list-style: disc; border: none; background: none;
-            margin: .05rem 0 .2rem; padding: 0 0 0 1.4rem; min-height: 0; }
+            margin: .05rem 0 .2rem; padding: 0 0 0 calc(var(--idw) + 1.6rem); min-height: 0; }
     .refnodes li.rawitem { display: list-item; background: none; border: none;
             padding: .03rem 0; margin: 0; cursor: grab; }
     .refnodes li.rawitem::marker { color: #c4c4c4; }
