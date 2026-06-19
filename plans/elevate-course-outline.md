@@ -15,6 +15,9 @@ Two concrete asks:
 2. In the sidebar, make it a **distinguished first item under each course, above
    "Objectives"**.
 
+**Decisions (confirmed):** rename the internal `kind` value (not just the label),
+and redirect the landing pages to the course outline. Both are detailed below.
+
 ## Current state (for grounding)
 
 - The outline is one hierarchy per course: `kind='lesson-plan'`, `editable=1`,
@@ -104,12 +107,18 @@ hierarchy. Only the course outline is promoted.
 - help.html: rename the "Plan" entry to "Course outline" and adjust the intro
   prose ("…organize them into a traceable lesson plan" → "course outline").
 
-### 4. Optional: landing on the outline
+### 4. Landing on the outline (confirmed)
 
-Because the tool is fundamentally about the course outline, consider redirecting
-`/` (and/or `/<course>`) to the **course outline** instead of the default
-reference workspace. This is a behavior change, so treat it as a separate
-decision — recommended, but easy to defer.
+Because the tool is fundamentally about the course outline, **redirect both `/`
+and `/<course>` to the course outline** instead of the default reference
+workspace:
+
+- `index()` → `redirect(url_for('plan', course=cs[0]))`.
+- `tree(course)` (the `/<course>` route) → `redirect(url_for('plan', course=course))`.
+
+`plan()` already `ensure_outline()`s and redirects into the workspace, so this
+works even for a course whose outline doesn't exist yet. References remain
+reachable from the sidebar.
 
 ## Files touched
 
