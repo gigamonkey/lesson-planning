@@ -5,18 +5,19 @@ Two input shapes, auto-detected from whether the first non-blank line has a tab:
   * Plain text -- one objective per non-blank line (no tabs, no header). Each
     line becomes a raw objective in the course's pool, with no coverage.
 
-  * TSV table -- a header row naming columns; `objective` is required and
-    `node_id` is optional (the coverage target; blank or 'none' = pool only).
-    `ek` is accepted as an alias for `node_id`; other columns are ignored. A
-    node_id implies its ancestors, so only the node itself is needed -- not the
-    path through the hierarchy.
+  * TSV table -- a header row naming columns. `objective` is required (`text` is
+    accepted as an alias). `node_id` is optional (the coverage target; blank or
+    'none' = pool only; `ek` is an alias). `uuid` is optional. Other columns are
+    ignored. A node_id implies its ancestors, so only the node itself is needed.
 
-Objectives are interned by exact text: a line/row whose text already exists
-reuses that objective (and its uuid) rather than creating a duplicate. So the
-import is idempotent -- re-running adds no duplicate objectives, pool
-memberships, or coverage edges -- and two rows with the same text collapse onto
-one objective (with both coverage edges). uuids are generated; you never supply
-them.
+An optional `uuid` column lets a row name an existing objective: a known uuid
+identifies it directly (preserving identity even if the text was edited),
+otherwise the objective is interned by exact text. So the round-trip works --
+download the uuid+text TSV from the app, add a `node_id` column via some
+classification step, and reimport to attach those placements. The import is
+idempotent: re-running adds no duplicate objectives, pool memberships, or
+coverage edges (already-present node_id assignments are no-ops), while new
+node_ids for an existing objective are added. uuids are generated when absent.
 
 Coverage edges go into the course's reference hierarchy (the CED, resolved from
 `hierarchies`, default '<course>-ced'); --hierarchy targets another (IB, a book).
@@ -65,20 +66,21 @@ def parse_items(path):
     first = next((ln for ln in lines if ln.strip()), "")
 
     if "\t" not in first:  # plain text: one objective per non-blank line
-        return [(ln.strip(), None) for ln in lines if ln.strip()], "text"
+        return [(None, ln.strip(), None) for ln in lines if ln.strip()], "text"
 
     reader = csv.DictReader(io.StringIO(content), delimiter="\t")
     cols = reader.fieldnames or []
-    if "objective" not in cols:
+    if "objective" not in cols and "text" not in cols:
         raise SystemExit(
-            f"table input must have an 'objective' column; got: {', '.join(cols)}")
+            f"table input must have an 'objective' (or 'text') column; got: {', '.join(cols)}")
     items = []
     for r in reader:
-        text = (r.get("objective") or "").strip()
+        text = (r.get("objective") or r.get("text") or "").strip()
         if not text:
             continue
+        uuid = (r.get("uuid") or "").strip() or None
         node = (r.get("node_id") or r.get("ek") or "").strip()
-        items.append((text, None if node.lower() in ("", "none") else node))
+        items.append((uuid, text, None if node.lower() in ("", "none") else node))
     return items, "table"
 
 
@@ -97,8 +99,27 @@ def reference_slug(conn, course):
     return row[0] if row else f"{course}-ced"
 
 
+def resolve_uuid(conn, uuid, text, stats):
+    """The uuid to use for (uuid, text), creating the objective if needed.
+
+    A given uuid that already exists wins (preserves the objective's identity on
+    reimport, regardless of edits to its text); otherwise intern by text; failing
+    that create a new objective (with the given uuid if one was supplied)."""
+    if uuid and conn.execute("SELECT 1 FROM objectives WHERE uuid=?", (uuid,)).fetchone():
+        return uuid
+    row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
+    if row:
+        return row[0]
+    u = uuid or str(uuidlib.uuid4())
+    conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
+    stats["objectives_new"] += 1
+    return u
+
+
 def load(db_path, course, items, hierarchy=None, replace=False):
-    """Intern `items` (text, node_id) into the course's pool and coverage.
+    """Import `items` (uuid|None, text, node_id|None) into the course's pool and
+    coverage. uuid is optional: when given and known it identifies the objective
+    (else interned by text). Idempotent -- re-running adds nothing already present.
 
     Returns (ref_slug, stats, dangling) where stats counts what changed and
     dangling is the sorted set of node_ids not present in the target hierarchy.
@@ -123,15 +144,9 @@ def load(db_path, course, items, hierarchy=None, replace=False):
         stats = {"read": 0, "objectives_new": 0, "pooled": 0, "coverage": 0}
         dangling = set()
 
-        for text, node in items:
+        for uuid_in, text, node in items:
             stats["read"] += 1
-            row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
-            if row:
-                uuid = row[0]
-            else:
-                uuid = str(uuidlib.uuid4())
-                conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (uuid, text))
-                stats["objectives_new"] += 1
+            uuid = resolve_uuid(conn, uuid_in, text, stats)
             if not conn.execute("SELECT 1 FROM course_objectives WHERE course=? AND uuid=?",
                                 (course, uuid)).fetchone():
                 conn.execute("INSERT INTO course_objectives(course, uuid, position)"
@@ -169,7 +184,7 @@ def main():
           f"{stats['objectives_new']} new ({stats['read'] - stats['objectives_new']} "
           f"reused), {stats['pooled']} added to the pool, {stats['coverage']} new "
           f"coverage edges into {ref!r}")
-    if any(n for _, n in items) and not known:
+    if any(node for _, _, node in items) and not known:
         print("  note: no nodes loaded for that hierarchy yet -- run load_nodes.py "
               "to enable coverage checks")
     elif dangling:
