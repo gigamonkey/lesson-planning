@@ -26,9 +26,10 @@ from flask import (Flask, Response, abort, flash, redirect, render_template,
                    request, url_for)
 from markupsafe import Markup
 
-# Import the sibling repo-root module (export_planning).
+# Import sibling repo-root modules (export_planning, import_objectives).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import export_planning  # noqa: E402
+import import_objectives  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
@@ -717,6 +718,29 @@ def objectives_tsv(course):
     return Response(
         buf.getvalue(), mimetype="text/tab-separated-values",
         headers={"Content-Disposition": f'attachment; filename="{course}-objectives.tsv"'})
+
+
+@app.route("/<course>/objectives/upload", methods=["POST"])
+def objectives_upload(course):
+    """Upload a file of objectives and import it via import_objectives (plain text
+    or a uuid/objective/node_id TSV); coverage lands in the course's reference."""
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("No file chosen.")
+        return redirect(url_for("objectives", course=course))
+    try:
+        items, mode = import_objectives.parse_text(f.read().decode("utf-8", "replace"))
+    except ValueError as e:
+        flash(f"Upload failed: {e}")
+        return redirect(url_for("objectives", course=course))
+    ref, stats, dangling, known = import_objectives.load(DB_PATH, course, items)
+    msg = (f"Imported {f.filename!r} ({mode}): read {stats['read']}, "
+           f"{stats['objectives_new']} new objectives, {stats['pooled']} added to the "
+           f"pool, {stats['coverage']} coverage edges into {ref}")
+    if dangling:
+        msg += f" · {len(dangling)} unknown node id(s): {', '.join(dangling[:6])}"
+    flash(msg)
+    return redirect(url_for("objectives", course=course))
 
 
 def _back(course):

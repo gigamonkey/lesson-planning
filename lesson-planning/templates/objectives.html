@@ -12,6 +12,14 @@
            placeholder="filter… (substring or regex)">
     <a class="dlbtn" href="{{ url_for('objectives_tsv', course=course) }}" download
        title="Download objectives as TSV (uuid, text)"><i class="bi bi-download"></i></a>
+    <form method="post" action="{{ url_for('objectives_upload', course=course) }}"
+          enctype="multipart/form-data" style="display:contents">
+      <label class="dlbtn" title="Upload objectives (plain text or a uuid/objective/node_id TSV) — imported like import_objectives.py">
+        <i class="bi bi-upload"></i>
+        <input type="file" name="file" accept=".tsv,.txt,.csv" hidden
+               onchange="this.form.submit()">
+      </label>
+    </form>
   </div>
 
   <p class="objcount"><b id="obj-count">{{ total }}</b> objectives</p>

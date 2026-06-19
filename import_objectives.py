@@ -55,13 +55,12 @@ DDL = [
 ]
 
 
-def parse_items(path):
-    """Parse an input file into (items, mode).
+def parse_text(content):
+    """Parse file CONTENT into (items, mode).
 
-    items is a list of (text, node_id|None); mode is 'text' or 'table'.
+    items is a list of (uuid|None, text, node_id|None); mode is 'text' or 'table'.
+    Raises ValueError on a table without an objective/text column.
     """
-    with open(path, encoding="utf-8") as f:
-        content = f.read()
     lines = content.splitlines()
     first = next((ln for ln in lines if ln.strip()), "")
 
@@ -71,7 +70,7 @@ def parse_items(path):
     reader = csv.DictReader(io.StringIO(content), delimiter="\t")
     cols = reader.fieldnames or []
     if "objective" not in cols and "text" not in cols:
-        raise SystemExit(
+        raise ValueError(
             f"table input must have an 'objective' (or 'text') column; got: {', '.join(cols)}")
     items = []
     for r in reader:
@@ -82,6 +81,12 @@ def parse_items(path):
         node = (r.get("node_id") or r.get("ek") or "").strip()
         items.append((uuid, text, None if node.lower() in ("", "none") else node))
     return items, "table"
+
+
+def parse_items(path):
+    """parse_text() over a file path."""
+    with open(path, encoding="utf-8") as f:
+        return parse_text(f.read())
 
 
 def reference_slug(conn, course):
@@ -177,7 +182,10 @@ def main():
                              "hierarchy before importing")
     args = parser.parse_args()
 
-    items, mode = parse_items(args.input)
+    try:
+        items, mode = parse_items(args.input)
+    except ValueError as e:
+        raise SystemExit(str(e))
     ref, stats, dangling, known = load(args.database, args.course, items,
                                        hierarchy=args.hierarchy, replace=args.replace)
     print(f"{mode}: read {stats['read']} objectives for course {args.course!r} -> "
