@@ -13,15 +13,17 @@ Run:  uv run lesson-planning/app.py        (serves on PORT, default 5001)
 The database path defaults to db.db next to this file; override with LESSON_DB.
 """
 
+import csv
 import html
+import io
 import os
 import re
 import sqlite3
 import sys
 import uuid as uuidlib
 
-from flask import (Flask, abort, flash, redirect, render_template, request,
-                   url_for)
+from flask import (Flask, Response, abort, flash, redirect, render_template,
+                   request, url_for)
 from markupsafe import Markup
 
 # Import the sibling repo-root module (export_planning).
@@ -639,6 +641,23 @@ def objectives(course):
     rows = sorted(objs.values(), key=lambda o: re.sub(r"[`*]", "", o["text"]).lower())
     return render_template("objectives.html", course=course,
                            objectives=rows, total=len(rows))
+
+
+@app.route("/<course>/objectives.tsv")
+def objectives_tsv(course):
+    """Download the course's objectives as a uuid/text TSV."""
+    with db() as conn:
+        rows = conn.execute(
+            "SELECT o.uuid, o.text FROM objectives o JOIN course_objectives co "
+            "ON co.uuid=o.uuid AND co.course=? WHERE o.status='active' ORDER BY o.text",
+            (course,)).fetchall()
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter="\t", lineterminator="\n")
+    writer.writerow(["uuid", "text"])
+    writer.writerows([(r["uuid"], r["text"]) for r in rows])
+    return Response(
+        buf.getvalue(), mimetype="text/tab-separated-values",
+        headers={"Content-Disposition": f'attachment; filename="{course}-objectives.tsv"'})
 
 
 def _back(course):

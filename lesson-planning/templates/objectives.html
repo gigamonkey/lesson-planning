@@ -10,6 +10,8 @@
     </form>
     <input type="search" id="obj-search" class="objsearch" autocomplete="off"
            placeholder="filter… (substring or regex)">
+    <a class="dlbtn" href="{{ url_for('objectives_tsv', course=course) }}" download
+       title="Download objectives as TSV (uuid, text)"><i class="bi bi-download"></i></a>
   </div>
 
   <p class="objcount"><b id="obj-count">{{ total }}</b> objectives</p>
