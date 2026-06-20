@@ -15,8 +15,8 @@ several hierarchies can share one database. The hierarchy is registered in
 `course` is upserted into `courses` -- the slug/course/kind default from the
 detected flavor and can be overridden with the matching flags.
 
-    uv run load_nodes.py my-course-hierarchy.md lesson-planning/db.db
-    uv run load_nodes.py another-hierarchy.md lesson-planning/db.db --course mycourse
+    uv run load_nodes.py my-course-hierarchy.md db.db
+    uv run load_nodes.py another-hierarchy.md db.db --course mycourse
 """
 
 import argparse

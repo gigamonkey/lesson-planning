@@ -7,9 +7,9 @@ the TSVs carry only the authored OUTLINE hierarchies, reloaded by a scoped delet
 Together these let you rebuild a database from scratch from version-controlled
 inputs:
 
-    sqlite3 db.db < lesson-planning/schema.sql              # empty tables (clean schema)
+    sqlite3 db.db < schema.sql              # empty tables (clean schema)
     uv run load_nodes.py my-course-hierarchy.md db.db      # rebuild `nodes`
-    uv run import_planning.py db.db lesson-planning/export/ # reload the planning tables
+    uv run import_planning.py db.db export/ # reload the planning tables
 
 An empty TSV cell becomes NULL for a nullable column, or stays "" for a NOT NULL
 column (so e.g. a lesson's empty title/learning_objective round-trips correctly).

@@ -29,20 +29,20 @@ see the whole pipeline end to end:
 
 ```bash
 # 1. Load your hierarchy markdown into a fresh database (creates the course).
-uv run load_nodes.py examples/widgets-hierarchy.md lesson-planning/db.db \
+uv run load_nodes.py examples/widgets-hierarchy.md db.db \
     --course widgets --hierarchy widgets-ced --course-title "Intro to Widgets"
 
 # 2. Import objectives (TSV: an `objective` column, optional `node_id`/`uuid`).
-uv run import_objectives.py examples/objectives.tsv lesson-planning/db.db --course widgets
+uv run import_objectives.py examples/objectives.tsv db.db --course widgets
 
 # 3. Render the plan (units → lessons, traceability appendix, gap list).
-uv run render_outline.py lesson-planning/db.db /tmp/plan.md --course widgets
+uv run render_outline.py db.db /tmp/plan.md --course widgets
 ```
 
 Or do it all in the browser:
 
 ```bash
-uv run lesson-planning/app.py          # http://localhost:5001
+uv run app.py          # http://localhost:5001
 ```
 
 The app boots an empty database from `schema.sql` on first run. On the **Data**
@@ -71,12 +71,12 @@ to a lesson.
 ## Saving & version control
 
 `db.db` is the live working copy and is gitignored. The committed state is the
-`lesson-planning/export/` directory of TSV snapshots:
+`export/` directory of TSV snapshots:
 
 ```bash
-uv run export_planning.py lesson-planning/db.db lesson-planning/export/   # snapshot
-uv run import_planning.py lesson-planning/db.db lesson-planning/export/   # restore
-uv run rebuild_db.py examples/widgets-hierarchy.md                        # rebuild from scratch
+uv run export_planning.py db.db export/                # snapshot
+uv run import_planning.py db.db export/                # restore
+uv run rebuild_db.py examples/widgets-hierarchy.md     # rebuild from scratch
 ```
 
 (The app exposes the same export/restore on its **Data** page.)

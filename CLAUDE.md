@@ -16,9 +16,9 @@ overview and `plans/` for the design history.
 - `*.py` — the engine scripts (see Key Scripts below)
 - `hierarchy.py` — the hierarchy-markdown parser (recognized flavors + their
   per-level tag names)
-- `lesson-planning/` — the Flask app: `schema.sql` (canonical schema), `db.db`
-  (live working copy, gitignored), `export/` (git-diffable TSV snapshots, shipped
-  empty), `app.py` + `templates/` + `static/`
+- `app.py` + `templates/` + `static/` — the Flask app
+- `schema.sql` — canonical schema; `db.db` — live working copy (gitignored);
+  `export/` — git-diffable TSV snapshots (shipped empty)
 - `examples/` — a synthetic example course ("Intro to Widgets"):
   `widgets-hierarchy.md` (also the format reference) and `objectives.tsv`
 - `plans/` — implementation plans (design record). Do **not** read `plans/done/`
@@ -40,17 +40,17 @@ overview and `plans/` for the design history.
 
 ```bash
 # Seed a fresh db from your own hierarchy + objectives, then render the plan
-uv run load_nodes.py <your-hierarchy>.md lesson-planning/db.db --course <course>
-uv run import_objectives.py <objectives>.tsv lesson-planning/db.db --course <course>
-uv run export_planning.py lesson-planning/db.db lesson-planning/export/
-uv run render_outline.py lesson-planning/db.db plan.md --course <course>
+uv run load_nodes.py <your-hierarchy>.md db.db --course <course>
+uv run import_objectives.py <objectives>.tsv db.db --course <course>
+uv run export_planning.py db.db export/
+uv run render_outline.py db.db plan.md --course <course>
 
 # Rebuild the db from version-controlled inputs (schema + nodes + export)
 uv run rebuild_db.py <your-hierarchy>.md     # deletes db.db; export + stop the app first
 
 # Web app (port 5001): bootstraps an empty db from schema.sql; the Data page
 # loads hierarchies, restores/exports snapshots; a course page downloads the plan.
-uv run lesson-planning/app.py
+uv run app.py
 ```
 
 The `examples/` fixture works as a drop-in for `<your-hierarchy>.md` /

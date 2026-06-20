@@ -9,7 +9,7 @@ The existing database file is DELETED first, so anything in it that is not in th
 export dir is lost -- Export a snapshot (and stop the app) before rebuilding.
 
     uv run rebuild_db.py my-course-hierarchy.md
-    uv run rebuild_db.py --db /tmp/x.db --export lesson-planning/export/ \
+    uv run rebuild_db.py --db /tmp/x.db --export export/ \
         my-course-hierarchy.md another-hierarchy.md
 """
 
@@ -95,9 +95,9 @@ def main():
     p.add_argument("hierarchy", nargs="*", default=None,
                    help="hierarchy markdown file(s) for the nodes table, with "
                         "flavor-derived course/slug (default: none -- pass your own)")
-    p.add_argument("--db", default="lesson-planning/db.db")
-    p.add_argument("--schema", default="lesson-planning/schema.sql")
-    p.add_argument("--export", default="lesson-planning/export/")
+    p.add_argument("--db", default="db.db")
+    p.add_argument("--schema", default="schema.sql")
+    p.add_argument("--export", default="export/")
     args = p.parse_args()
     specs = [{"path": h} for h in args.hierarchy] if args.hierarchy else DEFAULT_HIERARCHIES
     rebuild(args.db, args.schema, args.export, specs)

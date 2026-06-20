@@ -26,8 +26,8 @@ Coverage edges go into the course's reference hierarchy (the CED, resolved from
 node_ids are checked against the loaded `nodes` (load_nodes.py first) and unknown
 ones are reported -- still inserted, but flag a mislabeled objective or a change.
 
-    uv run import_objectives.py objectives.txt lesson-planning/db.db --course csa
-    uv run import_objectives.py categorized.tsv lesson-planning/db.db --course csa
+    uv run import_objectives.py objectives.txt db.db --course csa
+    uv run import_objectives.py categorized.tsv db.db --course csa
 """
 
 import argparse

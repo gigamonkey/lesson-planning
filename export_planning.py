@@ -5,7 +5,7 @@ its planning tables to stable, sorted TSV files so the canonical state stays
 reviewable in a PR and reproducible. The `nodes` table is intentionally NOT
 exported -- it is regenerated from the *-hierarchy.md files by load_nodes.py.
 
-    uv run export_planning.py lesson-planning/db.db lesson-planning/export/
+    uv run export_planning.py db.db export/
 
 Writes one <table>.tsv per planning table (objectives, hierarchies,
 hierarchy_targets, course_objectives, nodes, node_attr, coverage), each with a

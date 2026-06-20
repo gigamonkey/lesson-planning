@@ -110,7 +110,7 @@
   <div class="note">
     Edits go to the live database immediately. To capture a reviewable, committable
     snapshot, click <b>Export snapshot</b> in the sidebar — it writes the
-    git-diffable <code>.tsv</code> files under <code>lesson-planning/export/</code>.
+    git-diffable <code>.tsv</code> files under <code>export/</code>.
   </div>
 
   <h2>Loading a new reference or course</h2>
@@ -128,9 +128,9 @@
     <li><b>Then plan in the app</b> as above.</li>
   </ol>
   <p class="hint">Equivalent from a terminal:
-     <code>uv run load_nodes.py my-course-hierarchy.md lesson-planning/db.db</code>
+     <code>uv run load_nodes.py my-course-hierarchy.md db.db</code>
      and <code>uv run import_objectives.py &lt;objectives.tsv&gt;
-     lesson-planning/db.db --course mycourse</code>.</p>
+     db.db --course mycourse</code>.</p>
 
   <h2>Saving &amp; version control</h2>
   <p>The database (<code>db.db</code>) is the live working copy and is not checked

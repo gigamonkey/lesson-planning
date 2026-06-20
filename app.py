@@ -8,7 +8,7 @@ Objectives view and its hierarchies. Main views:
                                 with a droppable zone per node + the raw-objective
                                 pool. Editable outlines also edit their structure.
 
-Run:  uv run lesson-planning/app.py        (serves on PORT, default 5001)
+Run:  uv run app.py        (serves on PORT, default 5001)
 The database path defaults to db.db next to this file; override with LESSON_DB.
 """
 
@@ -28,7 +28,7 @@ from markupsafe import Markup
 # Import sibling repo-root modules (the lesson-planning scripts). The app wires
 # their library functions to routes -- it never reimplements their logic -- so the
 # CLI and the app stay in lockstep.
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO_ROOT)
 import export_planning  # noqa: E402
 import import_objectives  # noqa: E402
