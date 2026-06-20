@@ -69,7 +69,9 @@ Root scripts the app imports, transitively
 
 - `hierarchy.py` — markdown-hierarchy parser. Knows the *shapes* of CSA/CSP/IB/
   book markdown (its `LEVEL_TAGS` / flavor auto-detection), which is input-format
-  knowledge, **not** course data. Keep as-is.
+  knowledge, **not** course data. Keep as-is **for now** — but it's a copy shared
+  with the extractors repo, slated for removal once the data-driven boundary
+  lands; see "`hierarchy.py`: the consumer side of a data-driven boundary" below.
 - `load_nodes.py`
 - `import_objectives.py`
 - `export_planning.py`
@@ -341,6 +343,51 @@ Steps:
 Resolved by the user: drop `categorize-objectives.md`; include the synthetic
 `examples/` fixture; flatten — but in two phases (work in the current shape
 first, reorganize second). All reflected above.
+
+## `hierarchy.py`: the consumer side of a data-driven boundary
+
+This repo keeps `hierarchy.py` because `load_nodes.py` imports it today —
+`parse_sections`, `LEVEL_TAGS[flavor][level]` (to store the level's tag name in
+`nodes.level`), and `hierarchy_title()`. That makes `hierarchy.py` a copy
+**shared** with the extractors repo (`plans/extract-extractors.md`), which *owns*
+the file — the markdown format is defined by what the extractors emit.
+
+The agreed end state (decided in the extractors plan) is to share **data, not
+code**: the extractor library emits each hierarchy as an already-parsed,
+already-tagged JSON node-list, e.g.
+
+```json
+{ "flavor": "csa",
+  "nodes": [
+    {"id": "1.1.A.1", "level": 4, "tag": "essential-knowledge", "parent": "1.1.A", "text": "..."}
+  ] }
+```
+
+Because every node already carries its `tag`, the consumer needs no flavor
+detection and no markdown parsing — just the generic tree shape `load_nodes`
+already builds (`parent_id`, `is_leaf`, `ordinal`, `text`). `FLAVOR_META`
+(flavor → course/kind/slug) is already local app policy and stays;
+`hierarchy_title()` is a trivial `f"{course.upper()} …"` helper that needs only
+`course`/`kind` (both already local) and folds inline.
+
+### Scope: now vs. follow-up
+
+- **Now (this extraction):** keep `hierarchy.py` and `load_nodes.py` exactly as
+  they are — the app must keep loading hierarchies. Do **not** block this
+  extraction on the JSON work.
+- **Follow-up (cross-repo — the *same* task tracked in the extractors plan):**
+  the extractor library gains a `markdown → nodes JSON` emit step; rewrite
+  `load_nodes.py` here to load that JSON instead of calling
+  `parse_sections`/`LEVEL_TAGS`, fold `hierarchy_title()` inline, and then
+  **delete this repo's `hierarchy.py` copy**. After that the two repos share only
+  a documented JSON schema, no code.
+
+**Tradeoff:** the app currently ingests hand-editable hierarchy markdown directly
+(the `/data` upload route → `load_nodes`). Under the JSON contract, a hand-edited
+hierarchy must first pass through the extractor library's parse→emit step. Decide
+at follow-up time whether this repo keeps a minimal markdown reader for that
+convenience or relies on the emit CLI — the extractors plan ships that emit step
+as an easy CLI for exactly this reason.
 
 ## Decision left for publish time
 
