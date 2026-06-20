@@ -80,17 +80,19 @@ Root scripts the app imports, transitively
   "Genericize")
 - `render_outline.py`
 
-### Keep — the design history (plans)
+### Keep — the design history (the whole `plans/` tree)
 
-- `plans/lesson-planning.md`
-- `plans/scripts-into-app.md`
-- `plans/unified-hierarchies.md`
-- `plans/done/elevate-course-outline.md`
+Keep **all of `plans/`, including `plans/done/`** — the complete design record of
+the project, carried verbatim into the new repo.
 
-These are prose design docs for the tool. Some *mention* CSA/BHSawesome as the
-worked example; that's fine (it's design rationale, not shipped data).
-`plans/categorize-objectives.md` is **excluded** — it's the most CSA-specific
-plan, and the new repo's `plans/` should read as course-neutral.
+This is a deliberate exception to the otherwise course-neutral scope: the plans
+are prose design docs, not shipped data or runnable course-specific code, and the
+full set is small and cheap. Some plans (`done/summarize-*`,
+`done/categorize-objectives.md`, the extractor plans) discuss course-specific or
+extractor work that doesn't live in this repo — that's fine; they document *why*
+the code evolved the way it did, and a partial design history is more confusing
+than a complete one. Keeping the whole tree also means commits that touched only
+a plan survive the rewrite, preserving that history.
 
 ### Explicitly excluded — data
 
@@ -120,8 +122,9 @@ No course data travels, in the working tree **or** anywhere in history (because
   `identify.py`, `lcs.py`, `jaccard.py`, `load_objectives.py` (superseded by
   `import_objectives.py`), `just-pretext.sh`, `google-java-format.jar`,
   `.xml-formats/`, `decks/`, `reports/`, `workflows/`.
-- Their design plans stay behind too (`summarize-*`, `compare-books*`,
-  `extract-mcqs`, `extend-format-xml`, `genalize-build-ced-xml`).
+  (Their *design plans*, however, **do** travel — see "Keep — the design
+  history": the whole `plans/` tree comes along as the project's design record,
+  even where individual plans discuss code that stays in `bhs-awesome`.)
 
 Net effect on dependencies: with the `extract_*`/`build_*` scripts gone, **no
 kept file imports `lxml` or `pypdf`** (those were only used by the scrapers). The
@@ -184,11 +187,8 @@ export_planning.py
 import_planning.py
 rebuild_db.py
 render_outline.py
-# --- design plans (categorize-objectives.md excluded: too CSA-specific) ---
-plans/lesson-planning.md
-plans/scripts-into-app.md
-plans/unified-hierarchies.md
-plans/done/elevate-course-outline.md
+# --- the whole design-history tree (incl. plans/done/) ---
+plans/
 EOF
 
 git filter-repo --paths-from-file /tmp/keep.txt --prune-empty always
@@ -340,9 +340,11 @@ Steps:
 4. Re-run the step-7 smoke test to confirm the flattened layout still boots
    empty, loads the fixture, and renders an outline.
 
-Resolved by the user: drop `categorize-objectives.md`; include the synthetic
-`examples/` fixture; flatten — but in two phases (work in the current shape
-first, reorganize second). All reflected above.
+Resolved by the user: carry the **whole `plans/` tree** (including `plans/done/`)
+as the project's design record — superseding the earlier "drop
+`categorize-objectives.md`" call; include the synthetic `examples/` fixture;
+flatten — but in two phases (work in the current shape first, reorganize second).
+All reflected above.
 
 ## `hierarchy.py`: the consumer side of a data-driven boundary
 
