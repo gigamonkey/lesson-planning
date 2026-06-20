@@ -1,6 +1,6 @@
 """Parse a curriculum/book hierarchy markdown file into a flat list of sections.
 
-Shared by build_hierarchy_xml.py and build_hierarchy_db.py. The flavor is
+Used by load_nodes.py (and rebuild_db.py) to ingest a hierarchy. The flavor is
 detected from the first level-1 heading; sections carry their ids verbatim (e.g.
 "1", "1.1", "1.1.A", "1.1.A.1") and consumers apply their own id transformations.
 

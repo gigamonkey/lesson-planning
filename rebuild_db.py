@@ -8,9 +8,9 @@ Recreates the database in three steps:
 The existing database file is DELETED first, so anything in it that is not in the
 export dir is lost -- Export a snapshot (and stop the app) before rebuilding.
 
-    uv run rebuild_db.py
+    uv run rebuild_db.py my-course-hierarchy.md
     uv run rebuild_db.py --db /tmp/x.db --export lesson-planning/export/ \
-        csa/ced-2025-hierarchy.md ib/ib-hierarchy.md
+        my-course-hierarchy.md another-hierarchy.md
 """
 
 import argparse
@@ -24,13 +24,13 @@ from hierarchy import parse_sections
 # Each spec is a markdown `path` plus optional overrides for the flavor-derived
 # defaults (course, kind, hierarchy slug, course_title) -- needed when a file's
 # course/slug isn't implied by its flavor, e.g. a course's book outline.
-DEFAULT_HIERARCHIES = [
-    {"path": "csa/ced-2025-hierarchy.md"},
-    {"path": "csp/ced-hierarchy.md"},
-    {"path": "ib/ib-hierarchy.md"},
-    {"path": "csa/bhsawesome-outline.md", "hierarchy": "csa-book", "course": "csa",
-     "course_title": "AP Computer Science A"},
-]
+#
+# This generic tool ships with no hierarchies baked in: supply your own on the
+# command line (or upload them through the app's Data page). Each entry may carry
+# the same overrides shown above, e.g.
+#   {"path": "my-course-hierarchy.md", "hierarchy": "my-slug", "course": "my-course",
+#    "course_title": "My Course"}
+DEFAULT_HIERARCHIES = []
 
 
 def load_reference_nodes(db_path, specs):
@@ -94,7 +94,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("hierarchy", nargs="*", default=None,
                    help="hierarchy markdown file(s) for the nodes table, with "
-                        "flavor-derived course/slug (default: the known CED/IB/book files)")
+                        "flavor-derived course/slug (default: none -- pass your own)")
     p.add_argument("--db", default="lesson-planning/db.db")
     p.add_argument("--schema", default="lesson-planning/schema.sql")
     p.add_argument("--export", default="lesson-planning/export/")

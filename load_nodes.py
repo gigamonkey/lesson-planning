@@ -1,9 +1,8 @@
 """Normalize a hierarchy markdown file into the lesson-planning `nodes` table.
 
-Reads a CSA/CSP/IB (or book) hierarchy markdown file -- the same input
-build_hierarchy_db.py and build_hierarchy_xml.py consume -- and flattens it into
-one uniform table so the lesson-planning app can run gap/coverage queries without
-caring about the per-flavor level structure:
+Reads a hierarchy markdown file (any recognized flavor -- see hierarchy.py) and
+flattens it into one uniform table so the lesson-planning app can run gap/coverage
+queries without caring about the per-flavor level structure:
 
     nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)
 
@@ -16,8 +15,8 @@ several hierarchies can share one database. The hierarchy is registered in
 `course` is upserted into `courses` -- the slug/course/kind default from the
 detected flavor and can be overridden with the matching flags.
 
-    uv run load_nodes.py csa/ced-2025-hierarchy.md lesson-planning/db.db
-    uv run load_nodes.py ib/ib-hierarchy.md lesson-planning/db.db --course ib
+    uv run load_nodes.py my-course-hierarchy.md lesson-planning/db.db
+    uv run load_nodes.py another-hierarchy.md lesson-planning/db.db --course mycourse
 """
 
 import argparse

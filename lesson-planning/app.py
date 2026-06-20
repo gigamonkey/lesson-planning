@@ -484,9 +484,11 @@ def hierarchy_load():
 
 @app.route("/data/restore", methods=["POST"])
 def data_restore():
-    """Restore everything from version control: load reference nodes from the known
-    hierarchy markdown files, then the planning tables from the export dir
-    (rebuild_db's populate step -- WITHOUT the destructive db-file delete)."""
+    """Restore everything from version control: load any reference nodes from the
+    configured hierarchy markdown files (none by default in this generic tool --
+    upload yours via the form above first), then the planning tables from the
+    export dir (rebuild_db's populate step -- WITHOUT the destructive db-file
+    delete)."""
     specs = [dict(s, path=os.path.join(REPO_ROOT, s["path"]))
              for s in rebuild_db.DEFAULT_HIERARCHIES]
     node_loads, table_loads = rebuild_db.populate(DB_PATH, EXPORT_DIR, specs)

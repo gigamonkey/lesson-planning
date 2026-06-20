@@ -15,8 +15,8 @@
   {% endif %}
 
   <h2>Add a reference hierarchy (or course)</h2>
-  <p>Upload a hierarchy markdown file (an AP CED, the IB syllabus, or a book
-     outline). The flavor is auto-detected; the course and reference are registered
+  <p>Upload a hierarchy markdown file (e.g. a course standard, a syllabus, or a
+     book outline). The flavor is auto-detected; the course and reference are registered
      and the nodes loaded — exactly like <code>load_nodes.py</code>. Re-uploading a
      file replaces that hierarchy's nodes.</p>
   <form method="post" action="{{ url_for('hierarchy_load') }}" enctype="multipart/form-data"
@@ -38,10 +38,11 @@
   </form>
 
   <h2>Restore from version control</h2>
-  <p>Load reference nodes from the known hierarchy markdown files, then the
-     authored planning tables from the export snapshot
+  <p>Reload the authored planning tables from the export snapshot
      (<code>{{ export_dir }}</code>). This is the non-destructive equivalent of
-     <code>rebuild_db.py</code> — it doesn't delete the database.</p>
+     <code>rebuild_db.py</code> — it doesn't delete the database. Load your
+     reference hierarchies (above) first, since the planning tables reference
+     their nodes.</p>
   {% if n_obj %}
   <div class="note">There are <b>{{ n_obj }}</b> objective(s) in the live database
      already. Restoring replaces the authored planning tables with the committed

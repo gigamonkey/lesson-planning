@@ -6,7 +6,7 @@ raws not yet in a lesson, plus a traceability appendix (every leaf node -> where
 it's covered: a lesson, a unit rough-cut, or a gap) and a gap list. Proof that
 the teacher's own plan covers the official outline.
 
-    uv run render_outline.py lesson-planning/db.db csa/lesson-plan.md --course csa
+    uv run render_outline.py lesson-planning/db.db lesson-plan.md --course mycourse
 """
 
 import argparse
