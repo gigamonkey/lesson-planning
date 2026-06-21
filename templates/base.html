@@ -168,8 +168,8 @@
     .unithead .edit { flex: 1; display: flex; gap: .35rem; margin: 0; }
     .unithead .edit input { flex: 1; min-width: 0; font-weight: 700; font-size: 1.02rem;
             padding: .2rem .4rem; border: 1px solid transparent; border-radius: 4px; background: transparent; }
-    .unithead .edit input:hover, .unithead .edit input:focus { border-color: var(--line);
-            background: #fff; outline: none; }
+    .unithead .edit input:hover { border-color: var(--line); outline: none; }
+    .unithead .edit input:focus { border-color: #bcd; background: #fff; outline: none; }
     .unitlabel { flex: 1; font-weight: 700; color: var(--muted); }
     ul.unitlessons { min-height: 3rem; }
     .lessonhead .edit input,
@@ -180,9 +180,13 @@
        one line for normal titles, growing height via JS autosize when it wraps. */
     .lessonhead .edit textarea { display: block; width: 100%; box-sizing: border-box;
             font: inherit; font-weight: 600; line-height: 1.3; resize: none; overflow: hidden; }
-    .lessonhead .edit input:hover, .lessonhead .edit input:focus,
-    .lessonhead .edit textarea:hover, .lessonhead .edit textarea:focus {
-            border-color: var(--line); background: #fff; outline: none; }
+    /* Hover hints "editable" (subtle gray box); focus is the distinct "editing"
+       look (blue border + white bg) -- so Enter/blur changes the look immediately
+       even while the cursor still hovers the field. */
+    .lessonhead .edit input:hover, .lessonhead .edit textarea:hover {
+            border-color: var(--line); outline: none; }
+    .lessonhead .edit input:focus, .lessonhead .edit textarea:focus {
+            border-color: #bcd; background: #fff; outline: none; }
     ul.unitlessons > li.lessoncard { margin: .35rem 0; cursor: grab; }
     .lessoncard input, .lessoncard textarea { cursor: text; }
     /* Plan page: outline (left) + raw pool (right). */
@@ -199,8 +203,8 @@
     .loedit-form { display: flex; gap: .35rem; margin: .15rem 0 0; }
     .loedit-form input { flex: 1; min-width: 0; padding: .2rem .4rem; font-style: italic;
             color: #333; border: 1px solid transparent; border-radius: 4px; background: transparent; }
-    .loedit-form input:hover, .loedit-form input:focus {
-            border-color: var(--line); background: #fff; outline: none; }
+    .loedit-form input:hover { border-color: var(--line); outline: none; }
+    .loedit-form input:focus { border-color: #bcd; background: #fff; outline: none; }
     .lessoncard .lessonhead .edit { flex: 1; }
     .unithead form { margin: 0; }
 
