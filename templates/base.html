@@ -172,9 +172,15 @@
             background: #fff; outline: none; }
     .unitlabel { flex: 1; font-weight: 700; color: var(--muted); }
     ul.unitlessons { min-height: 3rem; }
-    .lessonhead .edit input { flex: 1; min-width: 0; font-weight: 600; padding: .2rem .4rem;
+    .lessonhead .edit input,
+    .lessonhead .edit textarea { flex: 1; min-width: 0; font-weight: 600; padding: .2rem .4rem;
             border: 1px solid transparent; border-radius: 4px; background: transparent; }
-    .lessonhead .edit input:hover, .lessonhead .edit input:focus {
+    /* The title is a textarea so a long title wraps and shows in full (an input
+       would clip it); it auto-grows to its content. */
+    .lessonhead .edit textarea { font: inherit; font-weight: 600; line-height: 1.3;
+            resize: none; overflow: hidden; field-sizing: content; }
+    .lessonhead .edit input:hover, .lessonhead .edit input:focus,
+    .lessonhead .edit textarea:hover, .lessonhead .edit textarea:focus {
             border-color: var(--line); background: #fff; outline: none; }
     ul.unitlessons > li.lessoncard { margin: .35rem 0; cursor: grab; }
     .lessoncard input, .lessoncard textarea { cursor: text; }
@@ -254,15 +260,6 @@
     table.reftable li.rawitem::marker { color: #c4c4c4; }
     body.dragging table.reftable ul.rawzone { outline: 1px dashed #b9cbe0; background: #f5f9fe;
             min-height: 1.1rem; list-style-position: inside; }
-    /* Inline "+ objective" under a node. */
-    .nodeadd { margin: 0 0 .1rem .2rem; }
-    .nodeadd .addlink { font-size: .74rem; color: var(--muted); cursor: pointer; }
-    .nodeadd .addlink:hover { color: #2b6cb0; }
-    .nodeadd input[type=text] { display: none; width: 100%; max-width: 32rem; font: inherit;
-            font-size: .85rem; padding: .15rem .4rem; border: 1px solid var(--line); border-radius: 4px; }
-    .nodeadd.open .addlink { display: none; }
-    .nodeadd.open input[type=text] { display: inline-block; }
-    .nodeadd input:focus { border-color: #bcd; outline: none; }
 
     /* Objectives page: compact sortable table (text column + one per hierarchy). */
     .objbar { display: flex; gap: .6rem; align-items: center; margin-bottom: .4rem; }

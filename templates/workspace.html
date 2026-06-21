@@ -1,21 +1,6 @@
 {% extends "base.html" %}
 {% from "_wstatbar.html" import wstatbar %}
 
-{# Reveal-able "write a new objective here" control for a node. Submitting htmx-
-   appends the new raw item into the node's drop zone (the previous .rawzone). #}
-{% macro nodeadd(node_id) %}
-<form class="nodeadd" method="post" action="{{ url_for('objective_new', course=course) }}"
-      hx-post="{{ url_for('objective_new', course=course) }}"
-      hx-target="previous .rawzone" hx-swap="beforeend"
-      hx-on::after-request="this.reset(); this.classList.remove('open')">
-  <input type="hidden" name="node_id" value="{{ node_id }}">
-  <input type="hidden" name="ref" value="{{ ref }}">
-  <input type="hidden" name="as" value="item">
-  <a class="addlink" onclick="this.closest('.nodeadd').classList.add('open'); this.nextElementSibling.focus()">+ objective</a>
-  <input type="text" name="text" placeholder="new objective…" autocomplete="off">
-</form>
-{% endmacro %}
-
 {# A reference node: its drop zone + (optionally) children. Structure is fixed. #}
 {# A reference hierarchy as a flat table (pre-order rows): an auto-sized id
    column, then the node text + its objectives. Depth drives the typography. #}
@@ -41,7 +26,7 @@
     <form method="post" class="edit autosave"
           action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
           hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
-      <input type="text" name="title" value="{{ L.label }}" placeholder="Lesson title…">
+      <textarea name="title" rows="1" placeholder="Lesson title…">{{ L.label }}</textarea>
     </form>
     <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}">
       <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
@@ -56,7 +41,6 @@
   <ul class="sortable rawzone" data-to="node-{{ L.id }}">
     {% for o in L.objectives %}{% include "_rawitem.html" %}{% endfor %}
   </ul>
-  {{ nodeadd(L.id) }}
 </li>
 {% endmacro %}
 
@@ -227,7 +211,7 @@
       document.querySelectorAll('.sortable.unitlessons').forEach(function (el) {
         new Sortable(el, {
           group: 'lessons', draggable: 'li.lessoncard',
-          filter: 'input, textarea, button, ul.rawzone, .nodeadd', preventOnFilter: false,
+          filter: 'input, textarea, button, ul.rawzone', preventOnFilter: false,
           animation: 120, ghostClass: 'sortable-ghost',
           forceFallback: true, fallbackOnBody: true,
           scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
@@ -254,13 +238,23 @@
 
     // Enter in an inline autosave field (lesson title, learning objective, unit
     // rename) commits by blurring -- the focusout handler saves -- rather than
-    // submitting the form or inserting a newline.
+    // submitting the form or inserting a newline (the title is a textarea).
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey && e.target.matches &&
-          e.target.matches('form.autosave input[type=text]')) {
+          e.target.matches('form.autosave input[type=text], form.autosave textarea')) {
         e.preventDefault();
         e.target.blur();
       }
     });
+
+    // Auto-grow the lesson-title textareas (fallback where field-sizing:content
+    // isn't supported), on load, on input, and when the column width changes.
+    function autosizeTitle(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+    const titleTAs = document.querySelectorAll('.lessonhead .edit textarea');
+    titleTAs.forEach(autosizeTitle);
+    document.addEventListener('input', function (e) {
+      if (e.target.matches && e.target.matches('.lessonhead .edit textarea')) autosizeTitle(e.target);
+    });
+    window.addEventListener('resize', function () { titleTAs.forEach(autosizeTitle); });
   </script>
 {% endblock %}
