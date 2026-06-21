@@ -1,50 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Data — Lesson Planning{% endblock %}
+{% block title %}Settings — Lesson Planning{% endblock %}
 
 {% block body %}
 <div class="help">
-  <p>Load and manage the data behind the app. References and courses come from
-     hierarchy markdown files; a committed snapshot restores everything you've
-     authored. The live database is rebuilt from these version-controlled inputs,
-     so anything here is reproducible.</p>
+  <p>Global version-control operations. To create a course, use <b>+</b> next to
+     <b>Lesson Planning</b> in the sidebar; to add hierarchies to a course, open its
+     <b>⚙ setup</b> page.</p>
 
   {% if not courses %}
-  <div class="note">This database is empty. Load a reference hierarchy below (which
-     also creates its course), or restore the last committed snapshot, to get
-     started.</div>
+  <div class="note">This database is empty. Create a course with <b>+</b> in the
+     sidebar, or restore the last committed snapshot below.</div>
   {% endif %}
-
-  <h2>Add a reference hierarchy (or course)</h2>
-  <p>Upload a hierarchy <b>node-list JSON</b> file — produced by the
-     hierarchy-extractors repo's <code>build_hierarchy_json.py</code> from your
-     hierarchy markdown (a course standard, a syllabus, a book outline). The flavor
-     comes from the document; the course and reference are registered and the nodes
-     loaded — exactly like <code>load_nodes.py</code>. Re-uploading a file replaces
-     that hierarchy's nodes.</p>
-  <form method="post" action="{{ url_for('hierarchy_load') }}" enctype="multipart/form-data"
-        class="dataform">
-    <p><input type="file" name="file" accept=".json" required></p>
-    <details>
-      <summary>Override the auto-detected course / kind / slug (optional)</summary>
-      <p class="hint">Needed only when the flavor doesn't imply the right values —
-         e.g. loading a book as a course's <code>*-book</code> reference. Leave
-         blank to auto-detect.</p>
-      <div class="grid2">
-        <label>Course <input type="text" name="course" placeholder="auto (e.g. csa)"></label>
-        <label>Kind <input type="text" name="kind" placeholder="auto (e.g. ced)"></label>
-        <label>Hierarchy slug <input type="text" name="hierarchy" placeholder="auto (e.g. csa-ced)"></label>
-        <label>Course title <input type="text" name="course_title" placeholder="auto"></label>
-      </div>
-    </details>
-    <p><button type="submit" class="primary">Load hierarchy</button></p>
-  </form>
 
   <h2>Restore from version control</h2>
   <p>Reload the authored planning tables from the export snapshot
      (<code>{{ export_dir }}</code>). This is the non-destructive equivalent of
-     <code>rebuild_db.py</code> — it doesn't delete the database. Load your
-     reference hierarchies (above) first, since the planning tables reference
-     their nodes.</p>
+     <code>rebuild_db.py</code> — it doesn't delete the database. Load a course's
+     reference hierarchies (on its setup page) first, since the planning tables
+     reference their nodes.</p>
   {% if n_obj %}
   <div class="note">There are <b>{{ n_obj }}</b> objective(s) in the live database
      already. Restoring replaces the authored planning tables with the committed
@@ -65,35 +38,10 @@
     <button type="submit">Export snapshot</button>
   </form>
   {% endif %}
-
-  {% if hierarchies %}
-  <h2>Currently loaded</h2>
-  <table class="report">
-    <tr><th>Course</th><th>Hierarchy</th><th>Kind</th><th>Editable</th><th>Title</th><th>Source</th></tr>
-    {% for h in hierarchies %}
-    <tr>
-      <td><a href="{{ url_for('tree', course=h['course']) }}">{{ h['course']|upper }}</a></td>
-      <td><code>{{ h['hierarchy'] }}</code></td>
-      <td><span class="pill pill-{{ h['kind'] }}">{{ h['kind'] }}</span></td>
-      <td>{{ 'authored' if h['editable'] else 'reference' }}</td>
-      <td>{{ h['title'] }}</td>
-      <td>{{ h['source'] or '—' }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  {% endif %}
 </div>
 
 <style>
-  .dataform { background: #fff; border: 1px solid var(--line); border-radius: 6px;
-              padding: .8rem 1rem; margin: .5rem 0 1rem; max-width: var(--content-max); }
-  .dataform p { margin: .5rem 0; }
-  .dataform summary { cursor: pointer; color: #2b6cb0; font-size: .9rem; }
-  .dataform .hint { color: var(--muted); font-size: .85rem; }
-  .dataform .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem .8rem; margin: .4rem 0; }
-  .dataform label { display: flex; flex-direction: column; gap: .15rem; font-size: .82rem;
-                    color: var(--muted); }
-  .dataform input[type=text] { padding: .25rem .4rem; border: 1px solid var(--line);
-                    border-radius: 4px; font: inherit; }
+  .note { background: #fffbe6; border: 1px solid #f0e0a0; border-radius: 6px;
+          padding: .5rem .8rem; margin: .8rem 0; font-size: .92rem; }
 </style>
 {% endblock %}

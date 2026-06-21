@@ -429,60 +429,15 @@ def help_page():
 
 @app.route("/data")
 def data():
-    """Setup / data page: load a reference hierarchy (and so a course), restore the
-    committed snapshot, export. Also the empty-db landing page (see `index`)."""
+    """Settings page: the global version-control operations (restore + export).
+    Creating courses and loading hierarchies now live in the sidebar (+) and the
+    per-course setup page. Also the empty-db landing page (see `index`)."""
     with db() as conn:
         cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
-        hs = conn.execute(
-            "SELECT hierarchy, course, kind, editable, title, source FROM hierarchies "
-            "ORDER BY course, editable, hierarchy").fetchall()
         n_obj = conn.execute("SELECT count(*) FROM objectives").fetchone()[0]
-    return render_template("data.html", courses=cs, hierarchies=hs, n_obj=n_obj,
+    return render_template("data.html", courses=cs, n_obj=n_obj,
                            export_dir=os.path.relpath(EXPORT_DIR, REPO_ROOT),
-                           page_title="Data")
-
-
-@app.route("/data/hierarchy/load", methods=["POST"])
-def hierarchy_load():
-    """Load an uploaded hierarchy node-list JSON file as a reference hierarchy
-    (load_nodes): take the document's flavor, register the course + reference, and
-    load the nodes. The JSON is produced by the hierarchy-extractors repo's
-    build_hierarchy_json.py from a hierarchy markdown file. Optional form fields
-    (course/kind/hierarchy/course_title) override the flavor-derived defaults,
-    mirroring load_nodes' CLI flags."""
-    f = request.files.get("file")
-    if not f or not f.filename:
-        flash("No file chosen.")
-        return redirect(url_for("data"))
-    try:
-        doc = load_nodes.load_doc(json.loads(f.read().decode("utf-8", "replace")))
-        flavor = doc["flavor"]
-    except Exception as e:  # bad JSON, unsupported version, or missing flavor
-        flash(f"Could not load {f.filename!r}: {e}")
-        return redirect(url_for("data"))
-    over = lambda k: (request.form.get(k) or "").strip() or None
-    m = load_nodes.meta_for(flavor, course=over("course"), kind=over("kind"),
-                            slug=over("hierarchy"), course_title=over("course_title"))
-    rows = load_nodes.build_rows(m["slug"], doc["nodes"])
-    # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage
-    # edges into node ids that the new version no longer has, so a renamed/removed
-    # id surfaces instead of silently stranding a mapping.
-    new_ids = {r[1] for r in rows}
-    with db() as conn:
-        existing = {r[0] for r in conn.execute(
-            "SELECT DISTINCT node_id FROM coverage WHERE hierarchy=?", (m["slug"],))}
-    orphaned = sorted(existing - new_ids)
-    load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], m["course_title"],
-                    rows, source=f.filename)
-    leaves = sum(r[4] for r in rows)
-    msg = (f"Loaded {f.filename!r} ({flavor}) as {m['slug']} for course {m['course']}: "
-           f"{len(rows)} nodes, {leaves} leaves.")
-    if orphaned:
-        msg += (f" · warning: {len(orphaned)} existing coverage edge(s) now point to "
-                f"node ids not in this version: {', '.join(orphaned[:6])}"
-                f"{'…' if len(orphaned) > 6 else ''}")
-    flash(msg)
-    return redirect(url_for("data"))
+                           page_title="Settings")
 
 
 @app.route("/data/restore", methods=["POST"])
@@ -503,6 +458,128 @@ def data_restore():
         msg += f" · skipped missing file(s): {', '.join(missing)}"
     flash(msg)
     return redirect(url_for("data"))
+
+
+# --------------------------------------------------------------------------
+# Course-first setup: create a course, then manage its hierarchies on a
+# per-course Setup page (the sidebar drives this; see templates/base.html).
+
+COURSE_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+
+
+@app.route("/course/new", methods=["POST"])
+def course_new():
+    """Create an empty course (id + title) and give it an outline straight away,
+    so it's immediately complete and shows in the sidebar. Course id is the
+    /<course> URL slug: lowercase letters, digits, hyphens."""
+    course = (request.form.get("course") or "").strip().lower()
+    title = (request.form.get("title") or "").strip()
+    back = request.referrer or url_for("index")
+    if not course:
+        flash("Course id is required.")
+        return redirect(back)
+    if not COURSE_ID_RE.match(course):
+        flash(f"Invalid course id {course!r}: use lowercase letters, digits, and hyphens.")
+        return redirect(back)
+    with db() as conn:
+        if conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+            flash(f"Course {course!r} already exists.")
+            return redirect(url_for("setup", course=course))
+        conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)",
+                     (course, title or course.upper()))
+        ensure_outline(conn, course)
+    flash(f"Created course {course!r}. Add a hierarchy to get started.")
+    return redirect(url_for("setup", course=course))
+
+
+@app.route("/<course>/setup")
+def setup(course):
+    """Per-course admin surface: its reference hierarchies (add / delete) plus
+    course-level actions. The course outline is managed on the plan page, not
+    here."""
+    with db() as conn:
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+            abort(404)
+        refs = conn.execute(
+            "SELECT hierarchy, kind, title, source FROM hierarchies "
+            "WHERE course=? AND editable=0 ORDER BY (kind='ced') DESC, hierarchy",
+            (course,)).fetchall()
+        counts = {r["hierarchy"]: r["n"] for r in conn.execute(
+            "SELECT hierarchy, count(*) n FROM nodes GROUP BY hierarchy")}
+    refs = [dict(r, nodes=counts.get(r["hierarchy"], 0)) for r in refs]
+    return render_template("setup.html", course=course, refs=refs,
+                           page_title=f"{course.upper()} setup")
+
+
+@app.route("/<course>/hierarchy/load", methods=["POST"])
+def hierarchy_load_course(course):
+    """Load an uploaded node-list JSON as a reference hierarchy of THIS course.
+    The course is fixed by context; flavor comes from the document; kind defaults
+    from the flavor and the slug defaults to <course>-<kind> (NOT the flavor's own
+    slug). Optional form fields override kind / slug / title."""
+    with db() as conn:
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+            abort(404)
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("No file chosen.")
+        return redirect(url_for("setup", course=course))
+    try:
+        doc = load_nodes.load_doc(json.loads(f.read().decode("utf-8", "replace")))
+        flavor = doc["flavor"]
+    except Exception as e:  # bad JSON, unsupported version, or missing flavor
+        flash(f"Could not load {f.filename!r}: {e}")
+        return redirect(url_for("setup", course=course))
+    over = lambda k: (request.form.get(k) or "").strip() or None
+    kind = over("kind") or load_nodes.meta_for(flavor)["kind"]
+    slug = over("hierarchy") or f"{course}-{kind}"
+    m = load_nodes.meta_for(flavor, course=course, kind=kind, slug=slug,
+                            course_title=over("course_title"))
+    rows = load_nodes.build_rows(m["slug"], doc["nodes"])
+    # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage
+    # edges into ids the new version no longer has (a renamed/removed id surfaces).
+    new_ids = {r[1] for r in rows}
+    with db() as conn:
+        existing = {r[0] for r in conn.execute(
+            "SELECT DISTINCT node_id FROM coverage WHERE hierarchy=?", (m["slug"],))}
+    orphaned = sorted(existing - new_ids)
+    load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], m["course_title"],
+                    rows, source=f.filename)
+    leaves = sum(r[4] for r in rows)
+    msg = (f"Loaded {f.filename!r} ({flavor}) as {m['slug']}: "
+           f"{len(rows)} nodes, {leaves} leaves.")
+    if orphaned:
+        msg += (f" · warning: {len(orphaned)} existing coverage edge(s) now point to "
+                f"node ids not in this version: {', '.join(orphaned[:6])}"
+                f"{'…' if len(orphaned) > 6 else ''}")
+    flash(msg)
+    return redirect(url_for("setup", course=course))
+
+
+@app.route("/<course>/hierarchy/<hierarchy>/delete", methods=["POST"])
+def hierarchy_delete(course, hierarchy):
+    """Delete one of a course's reference hierarchies and everything anchored to
+    it: its nodes, the coverage edges into it, per-node attrs, and any
+    outline<->reference target rows. The outline isn't deletable here."""
+    with db() as conn:
+        row = conn.execute(
+            "SELECT editable FROM hierarchies WHERE hierarchy=? AND course=?",
+            (hierarchy, course)).fetchone()
+        if not row:
+            abort(404)
+        if row["editable"]:
+            flash("The course outline can't be deleted here.")
+            return redirect(url_for("setup", course=course))
+        n = conn.execute("SELECT count(*) FROM coverage WHERE hierarchy=?",
+                         (hierarchy,)).fetchone()[0]
+        conn.execute("DELETE FROM coverage WHERE hierarchy=?", (hierarchy,))
+        conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (hierarchy,))
+        conn.execute("DELETE FROM hierarchy_targets WHERE outline=? OR reference=?",
+                     (hierarchy, hierarchy))
+        conn.execute("DELETE FROM nodes WHERE hierarchy=?", (hierarchy,))
+        conn.execute("DELETE FROM hierarchies WHERE hierarchy=?", (hierarchy,))
+    flash(f"Deleted hierarchy {hierarchy!r} ({n} coverage edge(s) removed).")
+    return redirect(url_for("setup", course=course))
 
 
 def workspace_data(conn, course, H):
@@ -733,7 +810,9 @@ def objectives_upload(course):
     except ValueError as e:
         flash(f"Upload failed: {e}")
         return redirect(url_for("objectives", course=course))
-    ref, stats, dangling, known = import_objectives.load(DB_PATH, course, items)
+    target = (request.form.get("hierarchy") or "").strip() or None
+    ref, stats, dangling, known = import_objectives.load(DB_PATH, course, items,
+                                                         hierarchy=target)
     msg = (f"Imported {f.filename!r} ({mode}): read {stats['read']}, "
            f"{stats['objectives_new']} new objectives, {stats['pooled']} added to the "
            f"pool, {stats['coverage']} coverage edges into {ref}")

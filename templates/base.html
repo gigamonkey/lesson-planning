@@ -27,7 +27,21 @@
     .sidebar { width: 230px; flex: none; background: #fff; border-right: 1px solid var(--line);
                padding: .8rem .9rem; position: sticky; top: 0; height: 100vh;
                overflow-y: auto; }
-    .sidebar h1 { font-size: 1rem; margin: 0 0 1rem; font-weight: 700; }
+    .sidebar h1 { font-size: 1rem; margin: 0; font-weight: 700; }
+    .brandrow { display: flex; align-items: center; justify-content: space-between;
+                gap: .5rem; margin-bottom: 1rem; }
+    .brandrow .addcourse { font-size: 1.1rem; line-height: 1; padding: 0 .45rem;
+                color: #2b6cb0; }
+    .newcourse { display: flex; flex-direction: column; gap: .3rem; margin: 0 0 1rem;
+                padding: .55rem .6rem; border: 1px solid var(--line); border-radius: 6px;
+                background: #fff; }
+    .newcourse input { padding: .28rem .45rem; border: 1px solid var(--line);
+                border-radius: 4px; font: inherit; font-size: .85rem; }
+    .newcourse input:focus { border-color: #bcd; outline: none; }
+    .newcourse button { font-size: .85rem; }
+    .coursehead { display: flex; align-items: center; justify-content: space-between; gap: .3rem; }
+    .coursehead .gear { color: #bbb; text-decoration: none; font-size: .82rem; flex: none; }
+    .coursehead .gear:hover { color: #2b6cb0; }
     .sidebar .course { margin-bottom: 1rem; }
     .sidebar .coursename { font-weight: 700; color: #222; text-decoration: none; font-size: .95rem; }
     .sidebar .course.active .coursename { color: #2b6cb0; }
@@ -320,10 +334,24 @@
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <h1>Lesson Planning</h1>
+      <div class="brandrow">
+        <h1>Lesson Planning</h1>
+        <button type="button" id="addcourse-btn" class="addcourse" title="New course">+</button>
+      </div>
+      <form id="newcourse" class="newcourse" method="post" action="{{ url_for('course_new') }}"
+            {% if course_nav %}hidden{% endif %}>
+        <input id="newcourse-id" type="text" name="course" placeholder="course id (e.g. csa)"
+               autocomplete="off" required>
+        <input type="text" name="title" placeholder="title (optional)" autocomplete="off">
+        <button type="submit" class="primary">Create course</button>
+      </form>
       {% for c in course_nav %}
         <div class="course {{ 'active' if c.course == nav_course else '' }}">
-          <div class="coursename">{{ c.course|upper }}</div>
+          <div class="coursehead">
+            <span class="coursename">{{ c.course|upper }}</span>
+            <a class="gear" href="{{ url_for('setup', course=c.course) }}"
+               title="{{ c.course|upper }} setup"><i class="bi bi-gear"></i></a>
+          </div>
           <span class="ctitle">{{ c.title }}</span>
           <ul class="hiers">
             <li class="outlineitem {{ 'active' if c.outline and c.outline == active_hierarchy else '' }}">
@@ -347,7 +375,7 @@
           <a href="{{ url_for('help_page') }}"
              class="{{ 'active' if request.endpoint == 'help_page' else '' }}">Help</a>
           <a href="{{ url_for('data') }}"
-             class="{{ 'active' if request.endpoint == 'data' else '' }}">Data</a>
+             class="{{ 'active' if request.endpoint == 'data' else '' }}">Settings</a>
         </span>
         {% if course_nav %}
         <form method="post" action="{{ url_for('export', course=nav_course or course_nav[0].course) }}">
@@ -365,6 +393,16 @@
     </main>
   </div>
   <script>
+    // Sidebar "+": toggle the inline new-course form and focus its id field.
+    (function () {
+      const btn = document.getElementById('addcourse-btn');
+      const form = document.getElementById('newcourse');
+      if (btn && form) btn.addEventListener('click', function () {
+        form.hidden = !form.hidden;
+        if (!form.hidden) document.getElementById('newcourse-id').focus();
+      });
+    })();
+
     // Auto-save: an inline field in a `.autosave` form saves on blur if it
     // changed (Enter still saves too). Those forms are htmx (hx-post) so saving
     // never reloads the page; the live DB stays current and the header's

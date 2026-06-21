@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 
 {% block body %}
+  <style>
+    .objupload { display: flex; align-items: center; gap: .4rem; margin: 0; }
+    .objupload .uptarget { padding: .3rem .4rem; border: 1px solid var(--line);
+            border-radius: 4px; font: inherit; font-size: .82rem; max-width: 12rem; }
+    .objupload .uptarget:focus { border-color: #bcd; outline: none; }
+  </style>
   <div class="objbar">
     <form method="post" action="{{ url_for('objective_new', course=course) }}" class="objnew">
       <input type="text" name="text" placeholder="Write a new objective…"
@@ -12,8 +18,17 @@
     <a class="dlbtn" href="{{ url_for('objectives_tsv', course=course) }}" download
        title="Download objectives as TSV (uuid, text)"><i class="bi bi-download"></i></a>
     <form method="post" action="{{ url_for('objectives_upload', course=course) }}"
-          enctype="multipart/form-data" style="display:contents">
-      <label class="dlbtn" title="Upload objectives (plain text or a uuid/objective/node_id TSV) — imported like import_objectives.py">
+          enctype="multipart/form-data" class="objupload">
+      {% set refs = hierarchies | selectattr('editable', 'equalto', 0) | list %}
+      {% if refs %}
+      <select name="hierarchy" class="uptarget"
+              title="Coverage target for node-id categorizations (raw text uploads ignore this)">
+        {% for h in refs %}
+          <option value="{{ h.hierarchy }}">→ {{ h.title }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <label class="dlbtn" title="Upload raw objectives (plain text, one per line) or a categorization TSV (objective[, uuid] + node_id) → the selected hierarchy">
         <i class="bi bi-upload"></i>
         <input type="file" name="file" accept=".tsv,.txt,.csv" hidden
                onchange="this.form.submit()">

@@ -86,8 +86,9 @@
         nodes to recategorize. The tree itself is fixed — it comes from the source.</dd>
   </dl>
   <p>And in the sidebar footer, two course-independent pages: <b>Help</b> (this
-     page) and <b><a href="{{ url_for('data') }}">Data</a></b> (load references,
-     restore a snapshot, export).</p>
+     page) and <b><a href="{{ url_for('data') }}">Settings</a></b> (restore a
+     snapshot, export). Create a course with <b>+</b> next to the title; manage a
+     course's hierarchies from its <b>⚙ setup</b> page.</p>
 
   <h2>Adding material in the app</h2>
   <ol>
@@ -113,19 +114,19 @@
     git-diffable <code>.tsv</code> files under <code>export/</code>.
   </div>
 
-  <h2>Loading a new reference or course</h2>
-  <p>References and courses come from hierarchy markdown files. Load them right in
-     the app on the <b><a href="{{ url_for('data') }}">Data</a></b> page:</p>
+  <h2>Setting up a new course</h2>
+  <p>Drive setup from the sidebar:</p>
   <ol>
-    <li><b>Add a reference.</b> On <b>Data</b>, upload a hierarchy node-list JSON
-        file (produced by the hierarchy-extractors repo's
-        <code>build_hierarchy_json.py</code> from your hierarchy markdown). The
-        flavor comes from the document; it registers the course
-        (e.g. <code>mycourse</code>) and its reference (e.g. <code>mycourse-ced</code>)
-        and loads the nodes — the course then appears in the sidebar.</li>
+    <li><b>Create the course.</b> Click <b>+</b> next to <b>Lesson Planning</b>,
+        enter a course id and title.</li>
+    <li><b>Add a reference hierarchy.</b> Open the course's <b>⚙ setup</b> page and
+        upload a hierarchy node-list JSON file (produced by the hierarchy-extractors
+        repo's <code>build_hierarchy_json.py</code> from your hierarchy markdown).
+        The flavor comes from the document; the slug defaults to
+        <code>&lt;course&gt;-&lt;kind&gt;</code>. Add as many as you need.</li>
     <li><b>Seed objectives (optional).</b> On the <b>Objectives</b> page, upload a
-        plain-text list or a uuid/objective/node_id TSV to bulk-load raw objectives
-        and their coverage.</li>
+        plain-text list (raw objectives) or a uuid/objective/node_id TSV
+        (categorizations), choosing the target hierarchy for the coverage.</li>
     <li><b>Then plan in the app</b> as above.</li>
   </ol>
   <p class="hint">Equivalent from a terminal:
@@ -137,9 +138,10 @@
   <p>The database (<code>db.db</code>) is the live working copy and is not checked
      in. The committed state is the export directory of <code>.tsv</code> files.
      <b>Export snapshot</b> writes them. Starting the app with no database creates
-     an empty one; the <b><a href="{{ url_for('data') }}">Data</a></b> page's
-     <b>Restore from version control</b> then reloads the references and that
-     export — so the whole thing is reproducible from version-controlled inputs.
+     an empty one; the <b><a href="{{ url_for('data') }}">Settings</a></b> page's
+     <b>Restore from version control</b> then reloads the planning tables from that
+     export (load each course's reference hierarchies on its setup page first) — so
+     the whole thing is reproducible from version-controlled inputs.
      (<code>uv run rebuild_db.py</code> does the same from a terminal, rebuilding
      from scratch.)</p>
   <p>Get the finished plan out with <b>Plan (.md)</b> on a course's
