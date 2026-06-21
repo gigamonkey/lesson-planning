@@ -368,12 +368,19 @@ def synthetic_ids(nodes):
 
     def walk(parent, prefix):
         for i, n in enumerate(children.get(parent, []), 1):
+            if n["node_id"] in out:  # guard against a parent cycle
+                continue
             disp = f"{prefix}.{i}" if prefix else str(i)
             out[n["node_id"]] = (disp, seq[0])
             seq[0] += 1
             walk(n["node_id"], disp)
 
     walk(None, "")
+    # Orphans (parent_id points to a missing/unreachable node) still need an id so
+    # callers can look up every node; give them a "?"-prefixed id at the end.
+    for i, n in enumerate((n for n in nodes if n["node_id"] not in out), 1):
+        out[n["node_id"]] = (f"?{i}", seq[0])
+        seq[0] += 1
     return out
 
 
@@ -1106,6 +1113,12 @@ def lesson_new(course):
     unit = (request.form.get("unit") or "").strip() or None
     with db() as conn:
         O = ensure_outline(conn, course)
+        # Only attach to a unit that actually exists in this outline; otherwise
+        # leave the lesson unassigned rather than orphaning it under a bad id.
+        if unit and not conn.execute(
+                "SELECT 1 FROM nodes WHERE hierarchy=? AND node_id=? AND level='unit'",
+                (O, unit)).fetchone():
+            unit = None
         nxt = conn.execute(
             "SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
             "WHERE hierarchy=? AND level='lesson' AND parent_id IS ?", (O, unit)).fetchone()[0]
