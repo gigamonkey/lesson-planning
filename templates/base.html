@@ -338,8 +338,7 @@
         <h1>Lesson Planning</h1>
         <button type="button" id="addcourse-btn" class="addcourse" title="New course">+</button>
       </div>
-      <form id="newcourse" class="newcourse" method="post" action="{{ url_for('course_new') }}"
-            {% if course_nav %}hidden{% endif %}>
+      <form id="newcourse" class="newcourse" method="post" action="{{ url_for('course_new') }}" hidden>
         <input id="newcourse-id" type="text" name="course" placeholder="course id (e.g. csa)"
                autocomplete="off" required>
         <input type="text" name="title" placeholder="title (optional)" autocomplete="off">
