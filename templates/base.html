@@ -35,6 +35,9 @@
     .newcourse { display: flex; flex-direction: column; gap: .3rem; margin: 0 0 1rem;
                 padding: .55rem .6rem; border: 1px solid var(--line); border-radius: 6px;
                 background: #fff; }
+    /* The HTML `hidden` attr sets display:none, but the .newcourse display:flex
+       above would override it; restore it so the form stays hidden until +. */
+    .newcourse[hidden] { display: none; }
     .newcourse input { padding: .28rem .45rem; border: 1px solid var(--line);
                 border-radius: 4px; font: inherit; font-size: .85rem; }
     .newcourse input:focus { border-color: #bcd; outline: none; }
