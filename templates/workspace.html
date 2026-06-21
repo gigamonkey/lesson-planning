@@ -198,6 +198,12 @@
       new Sortable(el, {
         group: 'raws', draggable: 'li.rawitem',
         animation: 120, ghostClass: 'sortable-ghost',
+        // Drive the drag ourselves (not native HTML5 DnD) so SortableJS's
+        // autoscroll reliably scrolls the *window* — otherwise dragging toward a
+        // drop zone below the fold (the page grows taller while dragging) can't
+        // reach it.
+        forceFallback: true, fallbackOnBody: true,
+        scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
         onStart: function () { document.body.classList.add('dragging'); },
         onEnd: function (evt) {
           document.body.classList.remove('dragging');
@@ -223,6 +229,8 @@
           group: 'lessons', draggable: 'li.lessoncard',
           filter: 'input, textarea, button, ul.rawzone, .nodeadd', preventOnFilter: false,
           animation: 120, ghostClass: 'sortable-ghost',
+          forceFallback: true, fallbackOnBody: true,
+          scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
           onEnd: function (evt) {
             const body = new URLSearchParams();
             body.set('unit', evt.to.dataset.unit || 'none');
