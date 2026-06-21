@@ -15,13 +15,15 @@
   {% endif %}
 
   <h2>Add a reference hierarchy (or course)</h2>
-  <p>Upload a hierarchy markdown file (e.g. a course standard, a syllabus, or a
-     book outline). The flavor is auto-detected; the course and reference are registered
-     and the nodes loaded — exactly like <code>load_nodes.py</code>. Re-uploading a
-     file replaces that hierarchy's nodes.</p>
+  <p>Upload a hierarchy <b>node-list JSON</b> file — produced by the
+     hierarchy-extractors repo's <code>build_hierarchy_json.py</code> from your
+     hierarchy markdown (a course standard, a syllabus, a book outline). The flavor
+     comes from the document; the course and reference are registered and the nodes
+     loaded — exactly like <code>load_nodes.py</code>. Re-uploading a file replaces
+     that hierarchy's nodes.</p>
   <form method="post" action="{{ url_for('hierarchy_load') }}" enctype="multipart/form-data"
         class="dataform">
-    <p><input type="file" name="file" accept=".md,.markdown,.txt" required></p>
+    <p><input type="file" name="file" accept=".json" required></p>
     <details>
       <summary>Override the auto-detected course / kind / slug (optional)</summary>
       <p class="hint">Needed only when the flavor doesn't imply the right values —

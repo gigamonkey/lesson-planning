@@ -3,7 +3,7 @@
 The lesson-planning database is the live working store the app edits; this dumps
 its planning tables to stable, sorted TSV files so the canonical state stays
 reviewable in a PR and reproducible. The `nodes` table is intentionally NOT
-exported -- it is regenerated from the *-hierarchy.md files by load_nodes.py.
+exported -- it is regenerated from the hierarchy node-list JSON by load_nodes.py.
 
     uv run export_planning.py db.db export/
 

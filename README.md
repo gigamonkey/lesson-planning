@@ -8,7 +8,13 @@ shows you what's covered and what's still a gap, and renders the finished plan a
 markdown.
 
 Nothing about any particular course is baked in. Point it at *your* hierarchy
-markdown and *your* objectives.
+and *your* objectives.
+
+Hierarchies are ingested as **node-list JSON** — the cross-repo data contract
+emitted by the companion [hierarchy-extractors](../hierarchy-extractors) repo's
+`build_hierarchy_json.py` from a hierarchy markdown file. This tool does no
+markdown parsing itself: it's a dumb loader of that JSON (see
+`hierarchy-extractors/json-format.md` for the format).
 
 ## What you get
 
@@ -28,8 +34,8 @@ A synthetic example course ("Intro to Widgets") lives in `examples/`. Use it to
 see the whole pipeline end to end:
 
 ```bash
-# 1. Load your hierarchy markdown into a fresh database (creates the course).
-uv run load_nodes.py examples/widgets-hierarchy.md db.db \
+# 1. Load your hierarchy node-list JSON into a fresh database (creates the course).
+uv run load_nodes.py examples/widgets-hierarchy.json db.db \
     --course widgets --hierarchy widgets-ced --course-title "Intro to Widgets"
 
 # 2. Import objectives (TSV: an `objective` column, optional `node_id`/`uuid`).
@@ -46,22 +52,30 @@ uv run app.py          # http://localhost:5001
 ```
 
 The app boots an empty database from `schema.sql` on first run. On the **Data**
-page, upload a hierarchy markdown file (e.g. `examples/widgets-hierarchy.md`) to
-create a course, then seed objectives from the **Objectives** page and plan from
+page, upload a hierarchy node-list JSON file (e.g. `examples/widgets-hierarchy.json`)
+to create a course, then seed objectives from the **Objectives** page and plan from
 each course's workspace.
 
-## The hierarchy markdown format
+## The hierarchy format
 
-`examples/widgets-hierarchy.md` doubles as a format reference. A hierarchy is a
-nested markdown outline: the level-1 heading names the top level and the flavor
-(see `hierarchy.py` for the recognized flavors and their per-level tag names),
-and deeper headings carry a verbatim id as their first token:
+A hierarchy is authored as a nested markdown outline and converted to node-list
+JSON by the hierarchy-extractors repo. `examples/widgets-hierarchy.md` is the
+authoring source; `examples/widgets-hierarchy.json` is the loadable artifact (what
+the commands above ingest). The markdown's level-1 heading names the top level and
+the flavor, and deeper headings carry a verbatim id as their first token:
 
 ```markdown
 # Unit 1: Widget Basics
 ## 1.1 What Is a Widget
 ### 1.1.A Describe the parts of a widget
 #### 1.1.A.1 A widget has a frobnicator and a sprocket.
+```
+
+Convert it to JSON with the extractor, then load that:
+
+```bash
+uv run ../hierarchy-extractors/build_hierarchy_json.py \
+    examples/widgets-hierarchy.md examples/widgets-hierarchy.json
 ```
 
 The deepest nodes (here, the `####` knowledge statements) are the **leaves** —
@@ -74,9 +88,9 @@ to a lesson.
 `export/` directory of TSV snapshots:
 
 ```bash
-uv run export_planning.py db.db export/                # snapshot
-uv run import_planning.py db.db export/                # restore
-uv run rebuild_db.py examples/widgets-hierarchy.md     # rebuild from scratch
+uv run export_planning.py db.db export/                  # snapshot
+uv run import_planning.py db.db export/                  # restore
+uv run rebuild_db.py examples/widgets-hierarchy.json     # rebuild from scratch
 ```
 
 (The app exposes the same export/restore on its **Data** page.)

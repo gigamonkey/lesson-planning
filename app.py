@@ -15,6 +15,7 @@ The database path defaults to db.db next to this file; override with LESSON_DB.
 import csv
 import html
 import io
+import json
 import os
 import re
 import sqlite3
@@ -35,7 +36,6 @@ import import_objectives  # noqa: E402
 import load_nodes  # noqa: E402
 import rebuild_db  # noqa: E402
 import render_outline  # noqa: E402
-from hierarchy import hierarchy_title  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
@@ -46,9 +46,9 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 app = Flask(__name__)
 app.secret_key = "lesson-planning-dev"  # local single-user app; not security-sensitive
 
-# kind_label / hierarchy_title (the page/sidebar titles) live in hierarchy.py so
-# load_nodes.py stores the same clean titles. page_title is an alias for clarity.
-page_title = hierarchy_title
+# kind_label / hierarchy_title (the page/sidebar titles) live in load_nodes.py so
+# load_nodes stores the same clean titles. page_title is an alias for clarity.
+page_title = load_nodes.hierarchy_title
 
 
 def db():
@@ -444,23 +444,26 @@ def data():
 
 @app.route("/data/hierarchy/load", methods=["POST"])
 def hierarchy_load():
-    """Load an uploaded hierarchy markdown file as a reference hierarchy (load_nodes):
-    auto-detect the flavor, register the course + reference, and load the nodes.
-    Optional form fields (course/kind/hierarchy/course_title) override the
-    flavor-derived defaults, mirroring load_nodes' CLI flags."""
+    """Load an uploaded hierarchy node-list JSON file as a reference hierarchy
+    (load_nodes): take the document's flavor, register the course + reference, and
+    load the nodes. The JSON is produced by the hierarchy-extractors repo's
+    build_hierarchy_json.py from a hierarchy markdown file. Optional form fields
+    (course/kind/hierarchy/course_title) override the flavor-derived defaults,
+    mirroring load_nodes' CLI flags."""
     f = request.files.get("file")
     if not f or not f.filename:
         flash("No file chosen.")
         return redirect(url_for("data"))
     try:
-        flavor, sections = load_nodes.parse_sections(f.read().decode("utf-8", "replace"))
-    except (Exception, SystemExit) as e:  # parse_sections sys.exit()s on no top-level heading
-        flash(f"Could not parse {f.filename!r}: {e}")
+        doc = load_nodes.load_doc(json.loads(f.read().decode("utf-8", "replace")))
+        flavor = doc["flavor"]
+    except Exception as e:  # bad JSON, unsupported version, or missing flavor
+        flash(f"Could not load {f.filename!r}: {e}")
         return redirect(url_for("data"))
     over = lambda k: (request.form.get(k) or "").strip() or None
     m = load_nodes.meta_for(flavor, course=over("course"), kind=over("kind"),
                             slug=over("hierarchy"), course_title=over("course_title"))
-    rows = load_nodes.build_rows(m["slug"], flavor, sections)
+    rows = load_nodes.build_rows(m["slug"], doc["nodes"])
     # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage
     # edges into node ids that the new version no longer has, so a renamed/removed
     # id surfaces instead of silently stranding a mapping.

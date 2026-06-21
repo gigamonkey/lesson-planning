@@ -1,28 +1,35 @@
-"""Normalize a hierarchy markdown file into the lesson-planning `nodes` table.
+"""Load a hierarchy node-list JSON file into the lesson-planning `nodes` table.
 
-Reads a hierarchy markdown file (any recognized flavor -- see hierarchy.py) and
-flattens it into one uniform table so the lesson-planning app can run gap/coverage
-queries without caring about the per-flavor level structure:
+Consumes the node-list JSON emitted by the hierarchy-extractors repo's
+`build_hierarchy_json.py` -- the cross-repo data contract (see that repo's
+`json-format.md`). Each node already carries its resolved level `tag`, structural
+`parent`, leaf flag, sibling ordinal, and text, so this loader does **no markdown
+parsing** and needs no curriculum-flavor knowledge beyond mapping the `flavor`
+string to local course/kind/slug policy (`FLAVOR_META`). It flattens the document
+into one uniform table so the app can run gap/coverage queries without caring
+about the per-flavor level structure:
 
     nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)
 
 `node_id` is the verbatim id (e.g. '1.1.A.1', 'CRD-1.A', 'A1.1.1.1'); `level` is
-the flavor's level tag ('unit', 'topic', 'essential-knowledge', ...); `is_leaf`
+the node's tag string ('unit', 'topic', 'essential-knowledge', ...); `is_leaf`
 marks nodes with no children (the unit of "coverage"); `ordinal` is document
 order. Keyed by hierarchy slug: re-running replaces only that hierarchy's rows so
 several hierarchies can share one database. The hierarchy is registered in
 `hierarchies` (editable=0, of a kind/type like 'ced' or 'ib-syllabus') and its
 `course` is upserted into `courses` -- the slug/course/kind default from the
-detected flavor and can be overridden with the matching flags.
+document's flavor and can be overridden with the matching flags.
 
-    uv run load_nodes.py my-course-hierarchy.md db.db
-    uv run load_nodes.py another-hierarchy.md db.db --course mycourse
+    uv run load_nodes.py my-course-hierarchy.json db.db
+    uv run load_nodes.py another-hierarchy.json db.db --course mycourse
+
+Author hierarchies as markdown, then run `build_hierarchy_json.py` (in the
+hierarchy-extractors repo) to produce the JSON this loads.
 """
 
 import argparse
+import json
 import sqlite3
-
-from hierarchy import LEVEL_TAGS, hierarchy_title, parse_sections
 
 DDL = """
 CREATE TABLE IF NOT EXISTS nodes (
@@ -43,8 +50,13 @@ HIERARCHIES_DDL = ("CREATE TABLE IF NOT EXISTS hierarchies (hierarchy TEXT PRIMA
                    " course TEXT NOT NULL, kind TEXT NOT NULL, editable INTEGER NOT NULL,"
                    " title TEXT NOT NULL, source TEXT)")
 
+# Major version of the node-list JSON format this loader understands. The format
+# is semver; a consumer checks only the major (see json-format.md "Versioning").
+FORMAT_MAJOR = 1
+
 # Per-flavor defaults for the course, reference kind (the TYPE), hierarchy slug,
 # and course title. The slug is an opaque-but-readable handle; CLI flags override.
+# This is consumer-side app policy -- the JSON contract carries only `flavor`.
 FLAVOR_META = {
     "csa":  {"course": "csa",  "kind": "ced",         "slug": "csa-ced",
              "course_title": "AP Computer Science A"},
@@ -68,41 +80,51 @@ def meta_for(flavor, course=None, kind=None, slug=None, course_title=None):
     return m
 
 
-def section_text(sec):
-    """Join a section's heading text and body, trimming surrounding blanks."""
-    lines = ([sec["head"]] if sec["head"] else []) + sec["body"]
-    while lines and not lines[0].strip():
-        lines.pop(0)
-    while lines and not lines[-1].strip():
-        lines.pop()
-    return "\n".join(lines)
+def kind_label(course, kind):
+    """Short, clean label for a hierarchy's kind. Drops a redundant leading course
+    id (course 'ib' + kind 'ib-syllabus' -> 'syllabus') then tidies ('ced' -> 'CED',
+    dashes -> spaces)."""
+    parts = kind.split("-")
+    if parts[0] == course:
+        parts = parts[1:]
+    k = "-".join(parts)
+    return {"ced": "CED", "course-outline": "course outline"}.get(k, k.replace("-", " "))
 
 
-def build_rows(hierarchy, flavor, sections):
-    """Return (hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) rows.
+def hierarchy_title(course, kind):
+    """Display title for a hierarchy, e.g. 'CSA CED', 'IB syllabus'."""
+    return f"{course.upper()} {kind_label(course, kind)}"
 
-    parent_id is the most recent ancestor at a shallower level; is_leaf is true
-    when the next section in document order is not deeper (a node's children, if
-    any, immediately follow it in a depth-first markdown hierarchy).
+
+def load_doc(doc):
+    """Validate a node-list JSON document and return it.
+
+    Checks only the format's MAJOR version (minor/patch are backward-compatible
+    and unknown fields are ignored, per the contract). Raises ValueError on an
+    unsupported major.
     """
-    tags = LEVEL_TAGS[flavor]
-    rows = []
-    ancestor = {}  # level -> id of the current node at that level
-    for i, sec in enumerate(sections):
-        level = sec["level"]
-        ancestor[level] = sec["id"]
-        for deeper in [lvl for lvl in ancestor if lvl > level]:
-            del ancestor[deeper]
-        parent_id = next(
-            (ancestor[lvl] for lvl in range(level - 1, 0, -1) if lvl in ancestor),
-            None,
-        )
-        is_leaf = i + 1 >= len(sections) or sections[i + 1]["level"] <= level
-        rows.append(
-            (hierarchy, sec["id"], parent_id, tags[level], int(is_leaf), i,
-             section_text(sec))
-        )
-    return rows
+    version = str(doc.get("version", ""))
+    major = version.split(".")[0]
+    if not major.isdigit() or int(major) != FORMAT_MAJOR:
+        raise ValueError(
+            f"unsupported node-list JSON version {version!r} "
+            f"(this loader handles major {FORMAT_MAJOR})")
+    return doc
+
+
+def build_rows(hierarchy, nodes):
+    """Map node-list JSON `nodes` to `nodes`-table rows, in document order.
+
+    Returns (hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) rows.
+    The JSON already carries each node's tag (-> level), parent, leaf flag, and
+    text; `ordinal` here is the node's 0-based position in document order (the
+    array is pre-order DFS) -- what the table has always stored, NOT the JSON's
+    per-parent `ordinal`.
+    """
+    return [
+        (hierarchy, n["id"], n["parent"], n["tag"], int(n["is_leaf"]), i, n["text"])
+        for i, n in enumerate(nodes)
+    ]
 
 
 def load(db_path, slug, course, kind, course_title, rows, source=None):
@@ -137,7 +159,7 @@ def load(db_path, slug, course, kind, course_title, rows, source=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("input", help="hierarchy markdown file")
+    parser.add_argument("input", help="hierarchy node-list JSON file")
     parser.add_argument("database", help="SQLite database file")
     parser.add_argument("--hierarchy", help="hierarchy slug (default: derived from flavor)")
     parser.add_argument("--course", help="course id (default: derived from flavor)")
@@ -147,13 +169,14 @@ def main():
     args = parser.parse_args()
 
     with open(args.input) as f:
-        flavor, sections = parse_sections(f.read())
+        doc = load_doc(json.load(f))
+    flavor = doc["flavor"]
     m = meta_for(flavor, args.course, args.kind, args.hierarchy, args.course_title)
-    rows = build_rows(m["slug"], flavor, sections)
+    rows = build_rows(m["slug"], doc["nodes"])
     load(args.database, m["slug"], m["course"], m["kind"], m["course_title"],
          rows, source=args.input)
 
-    leaves = sum(r[4] for r in rows)
+    leaves = sum(1 for r in rows if r[4])
     print(
         f"{flavor}: loaded {len(rows)} nodes for hierarchy {m['slug']!r} "
         f"(course {m['course']!r}, kind {m['kind']!r}, {leaves} leaves) into {args.database}"

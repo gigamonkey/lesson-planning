@@ -117,18 +117,19 @@
   <p>References and courses come from hierarchy markdown files. Load them right in
      the app on the <b><a href="{{ url_for('data') }}">Data</a></b> page:</p>
   <ol>
-    <li><b>Add a reference.</b> On <b>Data</b>, upload a hierarchy markdown file
-        (e.g. a course standard, a syllabus, or a book outline). The flavor is
-        auto-detected; it registers the course (e.g. <code>mycourse</code>) and its
-        reference (e.g. <code>mycourse-ced</code>) and loads the nodes — the course
-        then appears in the sidebar.</li>
+    <li><b>Add a reference.</b> On <b>Data</b>, upload a hierarchy node-list JSON
+        file (produced by the hierarchy-extractors repo's
+        <code>build_hierarchy_json.py</code> from your hierarchy markdown). The
+        flavor comes from the document; it registers the course
+        (e.g. <code>mycourse</code>) and its reference (e.g. <code>mycourse-ced</code>)
+        and loads the nodes — the course then appears in the sidebar.</li>
     <li><b>Seed objectives (optional).</b> On the <b>Objectives</b> page, upload a
         plain-text list or a uuid/objective/node_id TSV to bulk-load raw objectives
         and their coverage.</li>
     <li><b>Then plan in the app</b> as above.</li>
   </ol>
   <p class="hint">Equivalent from a terminal:
-     <code>uv run load_nodes.py my-course-hierarchy.md db.db</code>
+     <code>uv run load_nodes.py my-course-hierarchy.json db.db</code>
      and <code>uv run import_objectives.py &lt;objectives.tsv&gt;
      db.db --course mycourse</code>.</p>
 
