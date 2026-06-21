@@ -696,10 +696,22 @@ def workspace_data(conn, course, H):
 
 
 def workspace_stats(nodes, by_node, pool):
+    """Two complementary coverage directions for a hierarchy:
+
+    - leaf coverage: of this hierarchy's leaves, how many have >=1 objective
+      (what you want ~100% of for a standard like the CED -- every leaf taught);
+    - placement: of all the course's raw objectives, how many are placed somewhere
+      in this hierarchy (what you want ~100% of for the course outline -- every
+      objective has a home).
+    """
     leaves = [n for n in nodes if n["is_leaf"]]
     covered = sum(1 for n in leaves if by_node.get(n["node_id"]))
+    placed = sum(len(v) for v in by_node.values())  # objectives with a home here
+    total = placed + len(pool)                       # all the course's objectives
     return {"leaves": len(leaves), "covered": covered, "gaps": len(leaves) - covered,
-            "pool": len(pool), "pct": round(100 * covered / len(leaves)) if leaves else 0}
+            "pct": round(100 * covered / len(leaves)) if leaves else 0,
+            "pool": len(pool), "placed": placed, "total": total,
+            "placed_pct": round(100 * placed / total) if total else 0}
 
 
 @app.route("/<course>")
