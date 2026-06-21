@@ -1,0 +1,169 @@
+"""Export/import a whole course as a single self-contained JSON bundle.
+
+A bundle captures everything needed to recreate one course: the course row, all
+its hierarchies (reference + outline) with their nodes and per-node attrs, its
+objectives (text + pool membership/order) and the coverage edges into its
+hierarchies, plus its outline<->reference targets. Import recreates it all in one
+transaction.
+
+This is additive to the export/ TSV snapshot mechanism (export_planning.py /
+rebuild_db.py): the snapshots are the git-diffable committed state of the whole
+db; a bundle makes a single course portable as one file (move it between
+databases, or delete-and-restore one course).
+
+    uv run course_bundle.py export db.db <course> [out.json]
+    uv run course_bundle.py import db.db <bundle.json> [--as <course>]
+"""
+
+import argparse
+import json
+import sqlite3
+
+BUNDLE_VERSION = "1.0.0"
+FORMAT_MAJOR = 1
+
+
+def export_course(conn, course):
+    """Return a bundle dict for `course`. Raises KeyError if the course is absent."""
+    conn.row_factory = sqlite3.Row
+    crow = conn.execute("SELECT course, title FROM courses WHERE course=?",
+                        (course,)).fetchone()
+    if not crow:
+        raise KeyError(course)
+
+    hierarchies, slugs = [], []
+    for h in conn.execute(
+        "SELECT hierarchy, kind, editable, title, source FROM hierarchies "
+        "WHERE course=? ORDER BY editable, hierarchy", (course,)):
+        slugs.append(h["hierarchy"])
+        nodes = [dict(r) for r in conn.execute(
+            "SELECT node_id, parent_id, level, is_leaf, ordinal, text FROM nodes "
+            "WHERE hierarchy=? ORDER BY ordinal, node_id", (h["hierarchy"],))]
+        attrs = [dict(r) for r in conn.execute(
+            "SELECT node_id, name, value FROM node_attr "
+            "WHERE hierarchy=? ORDER BY node_id, name", (h["hierarchy"],))]
+        hierarchies.append({"hierarchy": h["hierarchy"], "kind": h["kind"],
+                            "editable": h["editable"], "title": h["title"],
+                            "source": h["source"], "nodes": nodes, "node_attr": attrs})
+
+    objectives = [dict(r) for r in conn.execute(
+        "SELECT o.uuid, o.text, o.status, co.position FROM objectives o "
+        "JOIN course_objectives co ON co.uuid=o.uuid AND co.course=? "
+        "ORDER BY co.position, o.text", (course,))]
+
+    coverage = []
+    if slugs:
+        ph = ",".join("?" * len(slugs))
+        coverage = [dict(r) for r in conn.execute(
+            f"SELECT hierarchy, uuid, node_id FROM coverage WHERE hierarchy IN ({ph}) "
+            "ORDER BY hierarchy, uuid, node_id", slugs)]
+
+    targets = [dict(r) for r in conn.execute(
+        "SELECT ht.outline, ht.reference FROM hierarchy_targets ht "
+        "JOIN hierarchies h ON h.hierarchy=ht.outline WHERE h.course=? "
+        "ORDER BY ht.outline, ht.reference", (course,))]
+
+    return {"version": BUNDLE_VERSION,
+            "course": {"course": crow["course"], "title": crow["title"]},
+            "hierarchies": hierarchies, "objectives": objectives,
+            "coverage": coverage, "hierarchy_targets": targets}
+
+
+def import_course(conn, doc, course=None):
+    """Recreate a course from a bundle dict. `course` overrides the bundle's id.
+
+    Raises ValueError on an unsupported version, an existing course id, or a
+    hierarchy-slug collision with another course. Interns objectives by uuid then
+    by text (so shared objectives aren't duplicated), remapping coverage edges to
+    the surviving uuid. Returns the created course id.
+    """
+    major = str(doc.get("version", "")).split(".")[0]
+    if not major.isdigit() or int(major) != FORMAT_MAJOR:
+        raise ValueError(f"unsupported bundle version {doc.get('version')!r} "
+                         f"(this app handles major {FORMAT_MAJOR})")
+    cid = course or doc["course"]["course"]
+    if conn.execute("SELECT 1 FROM courses WHERE course=?", (cid,)).fetchone():
+        raise ValueError(f"course {cid!r} already exists")
+    for h in doc["hierarchies"]:
+        if conn.execute("SELECT 1 FROM hierarchies WHERE hierarchy=?",
+                        (h["hierarchy"],)).fetchone():
+            raise ValueError(f"hierarchy slug {h['hierarchy']!r} already exists")
+
+    conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)",
+                 (cid, doc["course"]["title"]))
+    for h in doc["hierarchies"]:
+        conn.execute("INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
+                     " VALUES (?, ?, ?, ?, ?, ?)",
+                     (h["hierarchy"], cid, h["kind"], h["editable"], h["title"], h.get("source")))
+        conn.executemany(
+            "INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [(h["hierarchy"], n["node_id"], n["parent_id"], n["level"], n["is_leaf"],
+              n["ordinal"], n["text"]) for n in h["nodes"]])
+        conn.executemany(
+            "INSERT INTO node_attr(hierarchy, node_id, name, value) VALUES (?, ?, ?, ?)",
+            [(h["hierarchy"], a["node_id"], a["name"], a["value"]) for a in h.get("node_attr", [])])
+
+    uuid_map = {}
+    for o in doc["objectives"]:
+        if conn.execute("SELECT 1 FROM objectives WHERE uuid=?", (o["uuid"],)).fetchone():
+            uid = o["uuid"]
+        else:
+            trow = conn.execute("SELECT uuid FROM objectives WHERE text=?",
+                                (o["text"],)).fetchone()
+            if trow:
+                uid = trow[0]
+            else:
+                conn.execute("INSERT INTO objectives(uuid, text, status) VALUES (?, ?, ?)",
+                             (o["uuid"], o["text"], o.get("status") or "active"))
+                uid = o["uuid"]
+        uuid_map[o["uuid"]] = uid
+        conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid, position)"
+                     " VALUES (?, ?, ?)", (cid, uid, o.get("position")))
+
+    for cv in doc["coverage"]:
+        conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) VALUES (?, ?, ?)",
+                     (cv["hierarchy"], uuid_map.get(cv["uuid"], cv["uuid"]), cv["node_id"]))
+    for t in doc["hierarchy_targets"]:
+        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference) VALUES (?, ?)",
+                     (t["outline"], t["reference"]))
+    return cid
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    pe = sub.add_parser("export", help="write a course bundle")
+    pe.add_argument("database")
+    pe.add_argument("course")
+    pe.add_argument("output", nargs="?", help="JSON file (default: stdout)")
+    pi = sub.add_parser("import", help="recreate a course from a bundle")
+    pi.add_argument("database")
+    pi.add_argument("bundle")
+    pi.add_argument("--as", dest="as_course", help="import under this course id")
+    args = p.parse_args()
+
+    conn = sqlite3.connect(args.database)
+    try:
+        if args.cmd == "export":
+            doc = export_course(conn, args.course)
+            text = json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+            if args.output:
+                with open(args.output, "w") as f:
+                    f.write(text)
+                print(f"wrote {args.output}: course {args.course!r}, "
+                      f"{len(doc['hierarchies'])} hierarchies, {len(doc['objectives'])} objectives")
+            else:
+                print(text, end="")
+        else:
+            with open(args.bundle) as f:
+                doc = json.load(f)
+            cid = import_course(conn, doc, course=args.as_course)
+            conn.commit()
+            print(f"imported course {cid!r} from {args.bundle}")
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()

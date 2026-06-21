@@ -62,6 +62,21 @@
     </details>
     <p><button type="submit" class="primary">Load hierarchy</button></p>
   </form>
+
+  <h2>Course</h2>
+  <form method="post" action="{{ url_for('course_rename', course=course) }}" class="dataform">
+    <p><label>Title
+      <input type="text" name="title" value="{{ course_title }}" autocomplete="off"></label>
+      <button type="submit">Rename</button></p>
+  </form>
+  <p>
+    <a class="dlbtn" href="{{ url_for('course_bundle_download', course=course) }}" download
+       title="Download the whole course as a bundle file"><i class="bi bi-download"></i>&nbsp;Export course</a>
+  </p>
+  <form method="post" action="{{ url_for('course_delete', course=course) }}"
+        onsubmit="return confirm('Delete the entire {{ course|upper }} course — all its hierarchies, objectives, and the plan? This cannot be undone.');">
+    <button type="submit" class="danger"><i class="bi bi-trash"></i>&nbsp;Delete course</button>
+  </form>
 </div>
 
 <style>

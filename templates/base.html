@@ -38,10 +38,14 @@
     /* The HTML `hidden` attr sets display:none, but the .newcourse display:flex
        above would override it; restore it so the form stays hidden until +. */
     .newcourse[hidden] { display: none; }
+    .newcourse .ncform { display: flex; flex-direction: column; gap: .3rem; margin: 0; }
+    .newcourse .ncimport { margin: 0; }
     .newcourse input { padding: .28rem .45rem; border: 1px solid var(--line);
                 border-radius: 4px; font: inherit; font-size: .85rem; }
     .newcourse input:focus { border-color: #bcd; outline: none; }
     .newcourse button { font-size: .85rem; }
+    .newcourse .importlink { font-size: .8rem; color: #2b6cb0; cursor: pointer; }
+    .newcourse .importlink:hover { text-decoration: underline; }
     .coursehead { display: flex; align-items: center; justify-content: space-between; gap: .3rem; }
     .coursehead .gear { color: #bbb; text-decoration: none; font-size: .82rem; flex: none; }
     .coursehead .gear:hover { color: #2b6cb0; }
@@ -341,12 +345,21 @@
         <h1>Lesson Planning</h1>
         <button type="button" id="addcourse-btn" class="addcourse" title="New course">+</button>
       </div>
-      <form id="newcourse" class="newcourse" method="post" action="{{ url_for('course_new') }}" hidden>
-        <input id="newcourse-id" type="text" name="course" placeholder="course id (e.g. csa)"
-               autocomplete="off" required>
-        <input type="text" name="title" placeholder="title (optional)" autocomplete="off">
-        <button type="submit" class="primary">Create course</button>
-      </form>
+      <div id="newcourse" class="newcourse" hidden>
+        <form method="post" action="{{ url_for('course_new') }}" class="ncform">
+          <input id="newcourse-id" type="text" name="course" placeholder="course id (e.g. csa)"
+                 autocomplete="off" required>
+          <input type="text" name="title" placeholder="title (optional)" autocomplete="off">
+          <button type="submit" class="primary">Create course</button>
+        </form>
+        <form method="post" action="{{ url_for('course_import') }}" enctype="multipart/form-data"
+              class="ncimport">
+          <label class="importlink" title="Recreate a course from a downloaded bundle file">
+            …or import a course bundle
+            <input type="file" name="file" accept=".json" hidden onchange="this.form.submit()">
+          </label>
+        </form>
+      </div>
       {% for c in course_nav %}
         <div class="course {{ 'active' if c.course == nav_course else '' }}">
           <div class="coursehead">

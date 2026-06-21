@@ -93,4 +93,26 @@ uv run import_planning.py db.db export/                  # restore
 uv run rebuild_db.py examples/widgets-hierarchy.json     # rebuild from scratch
 ```
 
-(The app exposes the same export/restore on its **Data** page.)
+(The app exposes the same global restore/export on its **Settings** page.)
+
+## Setting up courses in the app
+
+Setup is driven from the sidebar:
+
+- **+** next to the title creates a course (id + title) — or imports one from a
+  bundle file.
+
+- each course's **⚙ setup** page adds reference hierarchies (upload node-list
+  JSON), deletes them, renames/deletes the course, and **exports the whole course**
+  as a single self-contained bundle file.
+
+- the **Objectives** page seeds raw objectives (plain text) or categorizations (a
+  TSV with a `node_id` column) against a chosen target hierarchy.
+
+A course bundle round-trips everything (hierarchies, nodes, objectives, coverage,
+the outline) so a course is portable and re-creatable; from a terminal:
+
+```bash
+uv run course_bundle.py export db.db <course> <course>.json
+uv run course_bundle.py import db.db <course>.json [--as <new-id>]
+```

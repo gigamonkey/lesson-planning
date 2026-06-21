@@ -31,6 +31,7 @@ from markupsafe import Markup
 # CLI and the app stay in lockstep.
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO_ROOT)
+import course_bundle  # noqa: E402
 import export_planning  # noqa: E402
 import import_objectives  # noqa: E402
 import load_nodes  # noqa: E402
@@ -498,7 +499,8 @@ def setup(course):
     course-level actions. The course outline is managed on the plan page, not
     here."""
     with db() as conn:
-        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+        crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
+        if not crow:
             abort(404)
         refs = conn.execute(
             "SELECT hierarchy, kind, title, source FROM hierarchies "
@@ -508,7 +510,7 @@ def setup(course):
             "SELECT hierarchy, count(*) n FROM nodes GROUP BY hierarchy")}
     refs = [dict(r, nodes=counts.get(r["hierarchy"], 0)) for r in refs]
     return render_template("setup.html", course=course, refs=refs,
-                           page_title=f"{course.upper()} setup")
+                           course_title=crow["title"], page_title=f"{course.upper()} setup")
 
 
 @app.route("/<course>/hierarchy/load", methods=["POST"])
@@ -545,6 +547,13 @@ def hierarchy_load_course(course):
     orphaned = sorted(existing - new_ids)
     load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], m["course_title"],
                     rows, source=f.filename)
+    # Measure the course outline against this new reference (the eager outline was
+    # created before any reference existed, so link it here).
+    with db() as conn:
+        O = outline_hierarchy(conn, course)
+        if O:
+            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
+                         " VALUES (?, ?)", (O, m["slug"]))
     leaves = sum(r[4] for r in rows)
     msg = (f"Loaded {f.filename!r} ({flavor}) as {m['slug']}: "
            f"{len(rows)} nodes, {leaves} leaves.")
@@ -580,6 +589,79 @@ def hierarchy_delete(course, hierarchy):
         conn.execute("DELETE FROM hierarchies WHERE hierarchy=?", (hierarchy,))
     flash(f"Deleted hierarchy {hierarchy!r} ({n} coverage edge(s) removed).")
     return redirect(url_for("setup", course=course))
+
+
+@app.route("/<course>/rename", methods=["POST"])
+def course_rename(course):
+    """Rename a course's display title (the id/slug is fixed)."""
+    title = (request.form.get("title") or "").strip()
+    with db() as conn:
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+            abort(404)
+        if not title:
+            flash("Title can't be empty.")
+            return redirect(url_for("setup", course=course))
+        conn.execute("UPDATE courses SET title=? WHERE course=?", (title, course))
+    flash(f"Renamed course to {title!r}.")
+    return redirect(url_for("setup", course=course))
+
+
+@app.route("/<course>/delete", methods=["POST"])
+def course_delete(course):
+    """Delete a course and everything anchored to it: all its hierarchies (+ their
+    nodes, coverage, attrs, targets) and its pool membership, then prune any
+    objectives left with no course."""
+    with db() as conn:
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+            abort(404)
+        hs = [r[0] for r in conn.execute(
+            "SELECT hierarchy FROM hierarchies WHERE course=?", (course,))]
+        for h in hs:
+            conn.execute("DELETE FROM coverage WHERE hierarchy=?", (h,))
+            conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (h,))
+            conn.execute("DELETE FROM nodes WHERE hierarchy=?", (h,))
+            conn.execute("DELETE FROM hierarchy_targets WHERE outline=? OR reference=?", (h, h))
+        conn.execute("DELETE FROM hierarchies WHERE course=?", (course,))
+        conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
+        conn.execute("DELETE FROM courses WHERE course=?", (course,))
+        # Objectives are course-agnostic (interned by text); drop only those now
+        # belonging to no course at all.
+        conn.execute("DELETE FROM objectives WHERE uuid NOT IN "
+                     "(SELECT uuid FROM course_objectives)")
+    flash(f"Deleted course {course!r}.")
+    return redirect(url_for("index"))
+
+
+@app.route("/<course>/bundle")
+def course_bundle_download(course):
+    """Download the whole course as a single self-contained JSON bundle."""
+    with db() as conn:
+        try:
+            doc = course_bundle.export_course(conn, course)
+        except KeyError:
+            abort(404)
+    payload = json.dumps(doc, indent=2, ensure_ascii=False)
+    return Response(payload, mimetype="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{course}-course.json"'})
+
+
+@app.route("/course/import", methods=["POST"])
+def course_import():
+    """Recreate a course from an uploaded bundle (the inverse of the download)."""
+    f = request.files.get("file")
+    back = request.referrer or url_for("index")
+    if not f or not f.filename:
+        flash("No file chosen.")
+        return redirect(back)
+    try:
+        doc = json.loads(f.read().decode("utf-8", "replace"))
+        with db() as conn:
+            cid = course_bundle.import_course(conn, doc)
+    except Exception as e:  # bad JSON, version, or id/slug clash (rolled back)
+        flash(f"Import failed: {e}")
+        return redirect(back)
+    flash(f"Imported course {cid!r}.")
+    return redirect(url_for("tree", course=cid))
 
 
 def workspace_data(conn, course, H):

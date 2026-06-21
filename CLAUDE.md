@@ -40,6 +40,7 @@ parser moved entirely to the extractors repo.)
 | `import_planning.py`   | Inverse of `export_planning.py`: reloads the planning tables from the export TSVs.                                                                                      |
 | `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load `nodes` from the hierarchy node-list JSON file(s), reload planning tables from the export dir. No hierarchies are baked in — pass your own. |
 | `render_outline.py`    | Renders a course's lesson plan to markdown: ordered lessons with objectives, a traceability appendix (every leaf → covering lesson(s)), and a gap list. The deliverable. |
+| `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the `export/` TSV snapshots. |
 
 ## Running
 
@@ -54,8 +55,10 @@ uv run render_outline.py db.db plan.md --course <course>
 # Rebuild the db from version-controlled inputs (schema + nodes + export)
 uv run rebuild_db.py <your-hierarchy>.json     # deletes db.db; export + stop the app first
 
-# Web app (port 5001): bootstraps an empty db from schema.sql; the Data page
-# loads hierarchies, restores/exports snapshots; a course page downloads the plan.
+# Web app (port 5001): bootstraps an empty db from schema.sql. Setup is sidebar-
+# driven: "+" creates (or imports) a course; each course's "⚙" setup page adds/
+# deletes hierarchies and exports/deletes the course; the slimmed Settings page
+# (formerly Data) does global restore/export of the TSV snapshots.
 uv run app.py
 ```
 
