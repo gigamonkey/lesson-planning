@@ -251,5 +251,16 @@
       refreshStats();
       applyRawFilter();
     });
+
+    // Enter in an inline autosave field (lesson title, learning objective, unit
+    // rename) commits by blurring -- the focusout handler saves -- rather than
+    // submitting the form or inserting a newline.
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey && e.target.matches &&
+          e.target.matches('form.autosave input[type=text]')) {
+        e.preventDefault();
+        e.target.blur();
+      }
+    });
   </script>
 {% endblock %}
