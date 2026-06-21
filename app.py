@@ -489,7 +489,8 @@ def course_new():
         conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)",
                      (course, title or course.upper()))
         ensure_outline(conn, course)
-    flash(f"Created course {course!r}. Add a hierarchy to get started.")
+    # The new course appears in the sidebar and we land on its (empty) setup page,
+    # so no flash is needed to confirm it.
     return redirect(url_for("setup", course=course))
 
 
@@ -555,14 +556,12 @@ def hierarchy_load_course(course):
         if O:
             conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
                          " VALUES (?, ?)", (O, m["slug"]))
-    leaves = sum(r[4] for r in rows)
-    msg = (f"Loaded {f.filename!r} ({flavor}) as {m['slug']}: "
-           f"{len(rows)} nodes, {leaves} leaves.")
+    # The loaded hierarchy shows up in the setup table, so only surface the
+    # non-obvious case: coverage edges now pointing at ids the new version dropped.
     if orphaned:
-        msg += (f" · warning: {len(orphaned)} existing coverage edge(s) now point to "
-                f"node ids not in this version: {', '.join(orphaned[:6])}"
-                f"{'…' if len(orphaned) > 6 else ''}")
-    flash(msg)
+        flash(f"Loaded {f.filename!r}, but {len(orphaned)} existing coverage edge(s) now "
+              f"point to node ids not in this version: {', '.join(orphaned[:6])}"
+              f"{'…' if len(orphaned) > 6 else ''}")
     return redirect(url_for("setup", course=course))
 
 
@@ -603,7 +602,7 @@ def course_rename(course):
             flash("Title can't be empty.")
             return redirect(url_for("setup", course=course))
         conn.execute("UPDATE courses SET title=? WHERE course=?", (title, course))
-    flash(f"Renamed course to {title!r}.")
+    # The new title shows in the sidebar and the rename field; no flash needed.
     return redirect(url_for("setup", course=course))
 
 
@@ -661,7 +660,7 @@ def course_import():
     except Exception as e:  # bad JSON, version, or id/slug clash (rolled back)
         flash(f"Import failed: {e}")
         return redirect(back)
-    flash(f"Imported course {cid!r}.")
+    # We land on the imported course (in the sidebar, with its data); no flash.
     return redirect(url_for("tree", course=cid))
 
 
@@ -970,8 +969,7 @@ def objective_new(course):
         if not text:
             return ("", 204)
         return render_template("_rawitem.html", o={"uuid": u, "text": text})
-    if text:
-        flash(f"Added objective: {text}")
+    # The new objective appears in the pool/table on reload; no flash.
     return _back(course)
 
 
@@ -992,10 +990,9 @@ def objective_edit(course, uuid):
             conn.execute("UPDATE objectives SET text = ? WHERE uuid = ?", (text, uuid))
             conn.commit()
     # An edit doesn't change structure/coverage, so no re-render -- just persist.
+    # (Autosave is htmx -> 204; the edited text is already on screen, so no flash.)
     if request.headers.get("HX-Request"):
         return ("", 204)
-    if text:
-        flash("Edited objective.")
     return _back(course)
 
 
@@ -1048,7 +1045,7 @@ def unit_new(course):
                          " ordinal, text) VALUES (?, ?, NULL, 'unit', 0, ?, ?)",
                          (O, str(uuidlib.uuid4()), nxt, title))
             conn.commit()
-        flash(f"Added unit: {title}")
+        # The new unit section appears on reload; no flash.
     return _back(course)
 
 
@@ -1116,7 +1113,7 @@ def lesson_new(course):
             "INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) "
             "VALUES (?, ?, ?, 'lesson', 1, ?, ?)", (O, str(uuidlib.uuid4()), unit, nxt, title))
         conn.commit()
-    flash("Added lesson.")
+    # The new lesson box appears on reload; no flash.
     return _back(course)
 
 
