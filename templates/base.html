@@ -81,10 +81,10 @@
     .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0 0 1rem;
              padding: .8rem 1rem; background: #fff; border: 1px solid var(--line);
              border-radius: 6px; }
-    /* Two stacked coverage bars (leaf coverage + objective placement). */
-    .wstats { margin-bottom: 1rem; }
-    .wstats .stats { margin-bottom: .5rem; }
-    .wstats .stats:last-child { margin-bottom: 0; }
+    /* Coverage summary: a subtle one-line readout, top-right of the page. */
+    .wstats { text-align: right; color: var(--muted); font-size: .8rem; margin: 0 0 .8rem; }
+    .wstats b { color: #555; font-weight: 600; }
+    .wstats .sep { opacity: .45; margin: 0 .25rem; }
     .stat { line-height: 1.2; }
     .stat b { font-size: 1.4rem; display: block; }
     .stat span { color: var(--muted); font-size: .8rem; }

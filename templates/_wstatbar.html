@@ -1,22 +1,6 @@
 {% macro wstatbar(stats, id=None) %}
-<div class="wstats"{% if id %} id="{{ id }}"{% endif %}>
-  {# Direction 1 -- leaf coverage: how much of this hierarchy is taught. #}
-  <div class="stats">
-    <div class="stat"><b style="color:var(--objective)">{{ stats.covered }}/{{ stats.leaves }}</b><span>leaves with an objective</span></div>
-    <div class="stat"><b style="color:var(--gap)">{{ stats.gaps }}</b><span>uncovered</span></div>
-    <div class="stat"><b>{{ stats.pct }}%</b><span>leaf coverage</span></div>
-    <div class="bar" title="{{ stats.covered }} / {{ stats.leaves }} leaves have at least one objective">
-      <i class="objective" style="width:{{ stats.pct }}%"></i>
-    </div>
-  </div>
-  {# Direction 2 -- placement: how many of the course's objectives have a home here. #}
-  <div class="stats">
-    <div class="stat"><b style="color:var(--planned)">{{ stats.placed }}/{{ stats.total }}</b><span>objectives placed here</span></div>
-    <div class="stat"><b>{{ stats.pool }}</b><span>in the pool</span></div>
-    <div class="stat"><b>{{ stats.placed_pct }}%</b><span>placement</span></div>
-    <div class="bar" title="{{ stats.placed }} / {{ stats.total }} of the course's objectives are placed in this hierarchy">
-      <i class="planned" style="width:{{ stats.placed_pct }}%"></i>
-    </div>
-  </div>
+<div class="wstats"{% if id %} id="{{ id }}"{% endif %}
+     title="{{ stats.covered }}/{{ stats.leaves }} leaves have an objective · {{ stats.placed }}/{{ stats.total }} objectives placed · {{ stats.pool }} in the pool">
+  <b>{{ stats.pct }}%</b> leaf coverage<span class="sep">·</span><b>{{ stats.placed_pct }}%</b> objectives placed
 </div>
 {% endmacro %}
