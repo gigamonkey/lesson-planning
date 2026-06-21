@@ -734,9 +734,13 @@ def hierarchy_view(course, hierarchy):
             "SELECT node_id, value FROM node_attr "
             "WHERE hierarchy=? AND name='learning_objective'", (hierarchy,))} \
             if h["editable"] else {}
+    # The outline's stored title is the generic "Course outline"; qualify it with
+    # the course (like the objectives page) so the page title isn't ambiguous.
+    # Reference titles already include the course (e.g. "WIDGETS CED").
+    title = f"{course.upper()} {h['title'].lower()}" if h["editable"] else h["title"]
     return render_template(
         "workspace.html", course=course, ref=hierarchy,
-        page_title=h["title"],
+        page_title=title,
         kind=h["kind"], editable=bool(h["editable"]), los=los, pool=pool,
         tree=build_tree(nodes, by_node, set()),
         stats=workspace_stats(nodes, by_node, pool))
