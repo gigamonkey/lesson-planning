@@ -8,7 +8,7 @@ Objectives view and its hierarchies. Main views:
                                 with a droppable zone per node + the raw-objective
                                 pool. Editable outlines also edit their structure.
 
-Run:  uv run app.py        (serves on PORT, default 5001)
+Run:  uv run app.py        (binds HOST:PORT, default 127.0.0.1:5001)
 The database path defaults to db.db next to this file; override with LESSON_DB.
 """
 
@@ -991,4 +991,5 @@ ensure_schema()
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=int(os.environ.get("PORT", "5001")))
+    app.run(debug=True, host=os.environ.get("HOST", "127.0.0.1"),
+            port=int(os.environ.get("PORT", "5001")))
