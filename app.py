@@ -882,8 +882,10 @@ def outline_md(course):
 
 @app.route("/<course>/objectives/upload", methods=["POST"])
 def objectives_upload(course):
-    """Upload a file of objectives and import it via import_objectives (plain text
-    or a uuid/objective/node_id TSV); coverage lands in the course's reference."""
+    """Upload a file of objectives into the course POOL only (import_objectives):
+    plain text, or a TSV with an objective/text column. Any node-id column is
+    ignored here -- categorize on a hierarchy page (see hierarchy_upload), where
+    the target hierarchy is unambiguous."""
     f = request.files.get("file")
     if not f or not f.filename:
         flash("No file chosen.")
