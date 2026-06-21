@@ -125,8 +125,10 @@
         The flavor comes from the document; the slug defaults to
         <code>&lt;course&gt;-&lt;kind&gt;</code>. Add as many as you need.</li>
     <li><b>Seed objectives (optional).</b> On the <b>Objectives</b> page, upload a
-        plain-text list (raw objectives) or a uuid/objective/node_id TSV
-        (categorizations), choosing the target hierarchy for the coverage.</li>
+        plain-text list (one objective per line) or a TSV with an
+        <code>objective</code> column to bulk-add raw objectives to the pool. (Any
+        node-id column is ignored here — categorize on a hierarchy page by dragging
+        an objective onto the node.)</li>
     <li><b>Then plan in the app</b> as above.</li>
   </ol>
   <p>A course's <b>⚙ setup</b> page also lets you delete a hierarchy, rename or

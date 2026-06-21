@@ -53,11 +53,11 @@
     </p>
     <details>
       <summary>Override the slug / title (optional)</summary>
-      <p class="hint">Leave blank to use <code>{{ course }}-&lt;kind&gt;</code> and the
-         auto-derived title.</p>
+      <p class="hint">Leave blank to use <code>{{ course }}-&lt;kind&gt;</code> for the
+         slug and an auto-derived title (e.g. <code>{{ course|upper }} CED</code>).</p>
       <div class="grid2">
         <label>Hierarchy slug <input type="text" name="hierarchy" placeholder="auto ({{ course }}-ced)"></label>
-        <label>Title <input type="text" name="course_title" placeholder="auto"></label>
+        <label>Hierarchy title <input type="text" name="title" placeholder="auto ({{ course|upper }} CED)"></label>
       </div>
     </details>
     <p><button type="submit" class="primary">Load hierarchy</button></p>

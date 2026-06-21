@@ -106,8 +106,10 @@ Setup is driven from the sidebar:
   JSON), deletes them, renames/deletes the course, and **exports the whole course**
   as a single self-contained bundle file.
 
-- the **Objectives** page seeds raw objectives (plain text) or categorizations (a
-  TSV with a `node_id` column) against a chosen target hierarchy.
+- the **Objectives** page seeds raw objectives into the course pool (plain text,
+  one per line, or a TSV with an `objective` column). Categorizing an objective to
+  a node happens on a hierarchy page (drag it onto the node), where the target
+  hierarchy is unambiguous.
 
 A course bundle round-trips everything (hierarchies, nodes, objectives, coverage,
 the outline) so a course is portable and re-creatable; from a terminal:

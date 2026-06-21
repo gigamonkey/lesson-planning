@@ -127,11 +127,13 @@ def build_rows(hierarchy, nodes):
     ]
 
 
-def load(db_path, slug, course, kind, course_title, rows, source=None):
+def load(db_path, slug, course, kind, course_title, rows, source=None, title=None):
     """Replace one reference hierarchy's nodes and register its course/hierarchy.
 
-    `rows` carry `slug` as their hierarchy column. The course is upserted, and the
-    hierarchy is registered as a reference (editable=0) of the given kind (type).
+    `rows` carry `slug` as their hierarchy column. The course is created if new but
+    its title is NOT changed by loading a hierarchy (a course is named when it's
+    created). The hierarchy is registered as a reference (editable=0) of the given
+    kind; its display title is `title` if given, else derived from course+kind.
     """
     conn = sqlite3.connect(db_path)
     try:
@@ -139,13 +141,13 @@ def load(db_path, slug, course, kind, course_title, rows, source=None):
         conn.execute(HIERARCHIES_DDL)
         conn.execute(DDL)
         conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)"
-                     " ON CONFLICT(course) DO UPDATE SET title=excluded.title",
+                     " ON CONFLICT(course) DO NOTHING",
                      (course, course_title))
         conn.execute("DELETE FROM nodes WHERE hierarchy = ?", (slug,))
         conn.executemany(
             "INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)", rows
         )
-        title = hierarchy_title(course, kind)
+        title = title or hierarchy_title(course, kind)
         conn.execute(
             "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
             " VALUES (?, ?, ?, 0, ?, ?)"

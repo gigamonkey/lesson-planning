@@ -294,7 +294,7 @@ def inject_nav():
                 "ORDER BY course, editable, (kind='ced') DESC, hierarchy"):
                 by_course.setdefault(h["course"], []).append(
                     {"hierarchy": h["hierarchy"], "kind": h["kind"],
-                     "editable": h["editable"], "label": page_title(h["course"], h["kind"])})
+                     "editable": h["editable"], "label": h["title"]})
             for c in cs:
                 hs = by_course.get(c["course"], [])
                 outline = next((h["hierarchy"] for h in hs
@@ -520,7 +520,8 @@ def hierarchy_load_course(course):
     from the flavor and the slug defaults to <course>-<kind> (NOT the flavor's own
     slug). Optional form fields override kind / slug / title."""
     with db() as conn:
-        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+        crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
+        if not crow:
             abort(404)
     f = request.files.get("file")
     if not f or not f.filename:
@@ -535,8 +536,8 @@ def hierarchy_load_course(course):
     over = lambda k: (request.form.get(k) or "").strip() or None
     kind = over("kind") or load_nodes.meta_for(flavor)["kind"]
     slug = over("hierarchy") or f"{course}-{kind}"
-    m = load_nodes.meta_for(flavor, course=course, kind=kind, slug=slug,
-                            course_title=over("course_title"))
+    title = over("title")  # hierarchy display title; None -> derived from course+kind
+    m = load_nodes.meta_for(flavor, course=course, kind=kind, slug=slug)
     rows = load_nodes.build_rows(m["slug"], doc["nodes"])
     # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage
     # edges into ids the new version no longer has (a renamed/removed id surfaces).
@@ -545,8 +546,8 @@ def hierarchy_load_course(course):
         existing = {r[0] for r in conn.execute(
             "SELECT DISTINCT node_id FROM coverage WHERE hierarchy=?", (m["slug"],))}
     orphaned = sorted(existing - new_ids)
-    load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], m["course_title"],
-                    rows, source=f.filename)
+    load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], crow["title"],
+                    rows, source=f.filename, title=title)
     # Measure the course outline against this new reference (the eager outline was
     # created before any reference existed, so link it here).
     with db() as conn:
@@ -723,7 +724,7 @@ def hierarchy_view(course, hierarchy):
             if h["editable"] else {}
     return render_template(
         "workspace.html", course=course, ref=hierarchy,
-        page_title=page_title(course, h["kind"]),
+        page_title=h["title"],
         kind=h["kind"], editable=bool(h["editable"]), los=los, pool=pool,
         tree=build_tree(nodes, by_node, set()),
         stats=workspace_stats(nodes, by_node, pool))
@@ -892,14 +893,17 @@ def objectives_upload(course):
     except ValueError as e:
         flash(f"Upload failed: {e}")
         return redirect(url_for("objectives", course=course))
-    target = (request.form.get("hierarchy") or "").strip() or None
-    ref, stats, dangling, known = import_objectives.load(DB_PATH, course, items,
-                                                         hierarchy=target)
-    msg = (f"Imported {f.filename!r} ({mode}): read {stats['read']}, "
-           f"{stats['objectives_new']} new objectives, {stats['pooled']} added to the "
-           f"pool, {stats['coverage']} coverage edges into {ref}")
-    if dangling:
-        msg += f" · {len(dangling)} unknown node id(s): {', '.join(dangling[:6])}"
+    # Import here is POOL-ONLY: never create coverage edges. Categorizing an
+    # objective to a node is done on a hierarchy page, where the target hierarchy
+    # is unambiguous -- doing it here made it too easy to hit the wrong one. Strip
+    # any node-id column.
+    had_nodes = any(n for _, _, n in items)
+    items = [(u, t, None) for u, t, n in items]
+    _ref, stats, _dangling, _known = import_objectives.load(DB_PATH, course, items)
+    msg = (f"Imported {f.filename!r}: read {stats['read']}, "
+           f"{stats['objectives_new']} new objectives, {stats['pooled']} added to the pool.")
+    if had_nodes:
+        msg += " · node-id column ignored — categorize objectives on a hierarchy page."
     flash(msg)
     return redirect(url_for("objectives", course=course))
 
