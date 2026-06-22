@@ -345,14 +345,16 @@ def inject_nav():
                 primary = c["primary_reference"] or (refs[0]["hierarchy"] if refs else None)
                 for h in refs:
                     h["is_primary"] = (h["hierarchy"] == primary)
-                # Does the on-disk corpus need a (re)export? Drives the save icon.
+                # Does the on-disk corpus need a (re)export? Drives the save icon;
+                # has_corpus drives whether Refresh (pull from disk) is available.
+                course_dir = os.path.join(CORPUS_DIR, c["course"])
+                has_corpus = os.path.isdir(course_dir)
                 try:
-                    dirty = plan_io.is_dirty(conn, c["course"],
-                                             os.path.join(CORPUS_DIR, c["course"]))
+                    dirty = plan_io.is_dirty(conn, c["course"], course_dir)
                 except Exception:
                     dirty = True
                 nav.append({"course": c["course"], "title": c["title"], "outline": outline,
-                            "hierarchies": refs, "dirty": dirty})
+                            "hierarchies": refs, "dirty": dirty, "has_corpus": has_corpus})
     except sqlite3.OperationalError:
         pass
     return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}
@@ -1069,6 +1071,24 @@ def export(course):
     rel = os.path.relpath(course_dir, REPO_ROOT)
     flash(f"Exported {course!r} to {rel}/ · {n_obj} objectives, {n_cov} coverage edges")
     return redirect(request.referrer or url_for("objectives", course=course))
+
+
+@app.route("/<course>/refresh", methods=["POST"])
+def course_refresh(course):
+    """Reload a course from its corpus directory on disk, replacing the db's copy
+    -- the inverse of export, for when the corpus was edited outside the app."""
+    course_dir = os.path.join(CORPUS_DIR, course)
+    back = request.referrer or url_for("tree", course=course)
+    if not os.path.isdir(course_dir):
+        flash(f"No corpus for {course!r} yet (export it first).")
+        return redirect(back)
+    try:
+        _c, n_refs, n_obj = plan_io.read_course(DB_PATH, course_dir)
+    except (OSError, ValueError) as e:
+        flash(f"Couldn't refresh {course!r} from disk: {e}")
+        return redirect(back)
+    flash(f"Refreshed {course!r} from disk · {n_refs} reference(s), {n_obj} objectives")
+    return redirect(back)
 
 
 # --------------------------------------------------------------------------

@@ -61,7 +61,8 @@
     .ctitle-input:focus { border-color: #bcd; background: #fff; color: #222; outline: none; }
     .coursehead-actions .cdel { margin: 0; display: inline-flex; }
     .coursehead-actions .cdel button:hover { color: var(--gap); }
-    .coursehead-actions .csave { margin: 0; display: inline-flex; }
+    .coursehead-actions .csave,
+    .coursehead-actions .crefresh { margin: 0; display: inline-flex; }
     /* Save icon greys out (and stops reacting) when the corpus is up to date. */
     .coursehead .gear:disabled, .coursehead .gear:disabled:hover { color: #d8d8d8; cursor: default; }
     /* Per-hierarchy row controls: a primary star (when >1 ref) and a hover trash. */
@@ -412,6 +413,13 @@
                 <button type="submit" class="gear" {{ '' if c.dirty else 'disabled' }}
                         title="{{ 'Save (export) this course to the corpus' if c.dirty else 'Saved — corpus is up to date' }}">
                   <i class="bi bi-{{ 'floppy' if c.dirty else 'check2' }}"></i>
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('course_refresh', course=c.course) }}" class="crefresh"
+                    {% if c.dirty %}onsubmit="return confirm('Refresh {{ c.course|upper }} from disk? This course has unsaved changes that will be replaced by the corpus.');"{% endif %}>
+                <button type="submit" class="gear" {{ '' if c.has_corpus else 'disabled' }}
+                        title="{{ 'Refresh this course from the corpus on disk' if c.has_corpus else 'No corpus on disk yet (save first)' }}">
+                  <i class="bi bi-arrow-clockwise"></i>
                 </button>
               </form>
               <a class="gear" href="{{ url_for('course_bundle_download', course=c.course) }}" download
