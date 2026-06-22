@@ -579,17 +579,18 @@ def hierarchy_load_course(course):
         crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
         if not crow:
             abort(404)
+    back = request.referrer or url_for("setup", course=course)
     f = request.files.get("file")
     if not f or not f.filename:
         flash("No file chosen.")
-        return redirect(url_for("setup", course=course))
+        return redirect(back)
     text = f.read().decode("utf-8", "replace")
     try:
         doc = load_nodes.parse(text)
         flavor = doc["flavor"]
     except Exception as e:  # unparseable markdown / unknown flavor
         flash(f"Could not load {f.filename!r}: {e}")
-        return redirect(url_for("setup", course=course))
+        return redirect(back)
     over = lambda k: (request.form.get(k) or "").strip() or None
     # Resolve kind/title: explicit form override, else what the markdown carries,
     # else derived (kind from flavor; title from course+kind inside load_nodes.load).
@@ -628,7 +629,8 @@ def hierarchy_load_course(course):
         flash(f"Loaded {f.filename!r}, but {len(orphaned)} existing coverage edge(s) now "
               f"point to node ids not in this version: {', '.join(orphaned[:6])}"
               f"{'…' if len(orphaned) > 6 else ''}")
-    return redirect(url_for("setup", course=course))
+    # Land on the loaded hierarchy so the upload (from the sidebar or setup) shows.
+    return redirect(url_for("hierarchy_view", course=course, hierarchy=m["slug"]))
 
 
 @app.route("/<course>/hierarchy/<hierarchy>/delete", methods=["POST"])
@@ -662,17 +664,17 @@ def hierarchy_delete(course, hierarchy):
 
 @app.route("/<course>/rename", methods=["POST"])
 def course_rename(course):
-    """Rename a course's display title (the id/slug is fixed)."""
+    """Rename a course's display title (the id/slug is fixed). Used by the inline
+    click-to-edit title in the sidebar (htmx) and the setup form."""
     title = (request.form.get("title") or "").strip()
     with db() as conn:
         if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
-        if not title:
-            flash("Title can't be empty.")
-            return redirect(url_for("setup", course=course))
-        conn.execute("UPDATE courses SET title=? WHERE course=?", (title, course))
-    # The new title shows in the sidebar and the rename field; no flash needed.
-    return redirect(url_for("setup", course=course))
+        if title:  # ignore an empty title rather than blanking it
+            conn.execute("UPDATE courses SET title=? WHERE course=?", (title, course))
+    if request.headers.get("HX-Request"):
+        return ("", 204)
+    return redirect(request.referrer or url_for("setup", course=course))
 
 
 @app.route("/<course>/delete", methods=["POST"])

@@ -47,8 +47,18 @@
     .newcourse .importlink { font-size: .8rem; color: #2b6cb0; cursor: pointer; }
     .newcourse .importlink:hover { text-decoration: underline; }
     .coursehead { display: flex; align-items: center; justify-content: space-between; gap: .3rem; }
-    .coursehead .gear { color: #bbb; text-decoration: none; font-size: .82rem; flex: none; }
+    .coursehead-actions { display: flex; align-items: center; gap: .25rem; flex: none; }
+    .coursehead-actions .addhier { margin: 0; display: inline-flex; }
+    .coursehead .gear { color: #bbb; text-decoration: none; font-size: .82rem; flex: none;
+                cursor: pointer; line-height: 1; }
     .coursehead .gear:hover { color: #2b6cb0; }
+    /* Click-to-edit course title: looks like plain muted text until hover/focus. */
+    .ctitle-form { margin: 0 0 .3rem; }
+    .ctitle-input { width: 100%; box-sizing: border-box; font: inherit; font-size: .7rem;
+                color: var(--muted); border: 1px solid transparent; background: transparent;
+                border-radius: 3px; padding: .05rem .2rem; }
+    .ctitle-input:hover { border-color: var(--line); }
+    .ctitle-input:focus { border-color: #bcd; background: #fff; color: #222; outline: none; }
     .sidebar .course { margin-bottom: 1rem; }
     .sidebar .coursename { font-weight: 700; color: #222; text-decoration: none; font-size: .95rem; }
     .sidebar .course.active .coursename { color: #2b6cb0; }
@@ -370,10 +380,24 @@
         <div class="course {{ 'active' if c.course == nav_course else '' }}">
           <div class="coursehead">
             <span class="coursename">{{ c.course|upper }}</span>
-            <a class="gear" href="{{ url_for('setup', course=c.course) }}"
-               title="{{ c.course|upper }} setup"><i class="bi bi-gear"></i></a>
+            <span class="coursehead-actions">
+              <form method="post" action="{{ url_for('hierarchy_load_course', course=c.course) }}"
+                    enctype="multipart/form-data" class="addhier">
+                <label class="gear" title="Add a hierarchy (upload .md)">
+                  <i class="bi bi-plus-lg"></i>
+                  <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
+                </label>
+              </form>
+              <a class="gear" href="{{ url_for('setup', course=c.course) }}"
+                 title="{{ c.course|upper }} setup"><i class="bi bi-gear"></i></a>
+            </span>
           </div>
-          <span class="ctitle">{{ c.title }}</span>
+          <form class="ctitle-form autosave" method="post"
+                action="{{ url_for('course_rename', course=c.course) }}"
+                hx-post="{{ url_for('course_rename', course=c.course) }}" hx-swap="none">
+            <input class="ctitle-input" type="text" name="title" value="{{ c.title }}"
+                   autocomplete="off" aria-label="Course title" placeholder="course title…">
+          </form>
           <ul class="hiers">
             <li class="outlineitem {{ 'active' if c.outline and c.outline == active_hierarchy else '' }}">
               <a href="{{ url_for('plan', course=c.course) }}">Course outline</a>
