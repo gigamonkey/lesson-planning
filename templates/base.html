@@ -61,6 +61,9 @@
     .ctitle-input:focus { border-color: #bcd; background: #fff; color: #222; outline: none; }
     .coursehead-actions .cdel { margin: 0; display: inline-flex; }
     .coursehead-actions .cdel button:hover { color: var(--gap); }
+    .coursehead-actions .csave { margin: 0; display: inline-flex; }
+    /* Save icon greys out (and stops reacting) when the corpus is up to date. */
+    .coursehead .gear:disabled, .coursehead .gear:disabled:hover { color: #d8d8d8; cursor: default; }
     /* Per-hierarchy row controls: a primary star (when >1 ref) and a hover trash. */
     .sidebar ul.hiers li.hieritem { gap: .25rem; }
     .pform { margin: 0; display: inline-flex; flex: none; }
@@ -405,6 +408,12 @@
                   <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
                 </label>
               </form>
+              <form method="post" action="{{ url_for('export', course=c.course) }}" class="csave">
+                <button type="submit" class="gear" {{ '' if c.dirty else 'disabled' }}
+                        title="{{ 'Save (export) this course to the corpus' if c.dirty else 'Saved — corpus is up to date' }}">
+                  <i class="bi bi-{{ 'floppy' if c.dirty else 'check2' }}"></i>
+                </button>
+              </form>
               <a class="gear" href="{{ url_for('course_bundle_download', course=c.course) }}" download
                  title="Download {{ c.course|upper }} as a bundle (.json)"><i class="bi bi-box-arrow-down"></i></a>
               <form method="post" action="{{ url_for('course_delete', course=c.course) }}" class="cdel"
@@ -472,11 +481,6 @@
           <a href="{{ url_for('data') }}"
              class="{{ 'active' if request.endpoint == 'data' else '' }}">Settings</a>
         </span>
-        {% if course_nav %}
-        <form method="post" action="{{ url_for('export', course=nav_course or course_nav[0].course) }}">
-          <button type="submit" title="Write this course's plan.md + objectives.tsv / coverage.tsv to the corpus">Export</button>
-        </form>
-        {% endif %}
       </div>
     </aside>
     <main>

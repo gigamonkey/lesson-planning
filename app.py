@@ -345,8 +345,14 @@ def inject_nav():
                 primary = c["primary_reference"] or (refs[0]["hierarchy"] if refs else None)
                 for h in refs:
                     h["is_primary"] = (h["hierarchy"] == primary)
+                # Does the on-disk corpus need a (re)export? Drives the save icon.
+                try:
+                    dirty = plan_io.is_dirty(conn, c["course"],
+                                             os.path.join(CORPUS_DIR, c["course"]))
+                except Exception:
+                    dirty = True
                 nav.append({"course": c["course"], "title": c["title"], "outline": outline,
-                            "hierarchies": refs})
+                            "hierarchies": refs, "dirty": dirty})
     except sqlite3.OperationalError:
         pass
     return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}

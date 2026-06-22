@@ -110,7 +110,8 @@
 
   <div class="note">
     Edits go to the live database immediately. To capture a reviewable, committable
-    state, click <b>Export</b> in the sidebar — it writes the course's
+    state, click the <b>save</b> icon on the course in the sidebar (greyed when the
+    corpus is already up to date) — it writes the course's
     git-diffable <code>plan.md</code> (the outline) plus <code>objectives.tsv</code>
     / <code>coverage.tsv</code> into its corpus directory.
   </div>
@@ -147,8 +148,8 @@
   <p>The database (<code>db.db</code>) is the live working copy and is not checked
      in. The committed state is the <b>corpus</b>: a directory of course
      directories, each holding its hierarchy markdown, <code>plan.md</code>, and
-     <code>objectives.tsv</code> / <code>coverage.tsv</code>. <b>Export</b> writes a
-     course back to it. Starting the app with no database creates an empty one and
+     <code>objectives.tsv</code> / <code>coverage.tsv</code>. The course's <b>save</b>
+     icon writes it back to the corpus. Starting the app with no database creates an empty one and
      loads any course already in the corpus; the
      <b><a href="{{ url_for('data') }}">Settings</a></b> page's <b>Restore from
      version control</b> reloads every course from disk — so the whole thing is

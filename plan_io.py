@@ -22,6 +22,7 @@ full uuid in the markdown. See FORMAT.md for the format.
 """
 
 import csv
+import io
 import os
 import re
 import sqlite3
@@ -308,6 +309,101 @@ def _new_uuid():
 # --------------------------------------------------------------------------
 # export: database -> directory
 
+def render_course(conn, course):
+    """Build a course's authored files in memory (no disk writes): returns
+    ({plan.md, objectives.tsv, coverage.tsv} -> text, n_objectives, n_coverage).
+    Raises KeyError if the course is absent. write_course writes these; is_dirty
+    compares them to disk."""
+    conn.row_factory = sqlite3.Row
+    crow = conn.execute("SELECT course, title, primary_reference, primary_outline"
+                        " FROM courses WHERE course=?", (course,)).fetchone()
+    if not crow:
+        raise KeyError(course)
+    outline = crow["primary_outline"] or _first_outline(conn, course)
+
+    units = conn.execute("SELECT node_id, text FROM nodes WHERE hierarchy=? AND level='unit'"
+                        " ORDER BY ordinal", (outline,)).fetchall()
+    lessons = conn.execute("SELECT node_id, parent_id, text FROM nodes WHERE hierarchy=?"
+                         " AND level='lesson' ORDER BY ordinal", (outline,)).fetchall()
+    los = {r["node_id"]: r["value"] for r in conn.execute(
+        "SELECT node_id, value FROM node_attr WHERE hierarchy=? AND name='learning_objective'",
+        (outline,))}
+    placed = {}   # lesson_id -> [uuid]
+    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (outline,)):
+        placed.setdefault(r["node_id"], []).append(r["uuid"])
+
+    pool = conn.execute("SELECT co.uuid, co.position, o.text FROM course_objectives co"
+                      " JOIN objectives o ON o.uuid=co.uuid WHERE co.course=?"
+                      " ORDER BY co.position, o.text", (course,)).fetchall()
+    text_of = {r["uuid"]: r["text"] for r in pool}
+    position = {r["uuid"]: (r["position"] if r["position"] is not None else 0) for r in pool}
+    tokens = abbrev_tokens([r["uuid"] for r in pool])
+
+    def bullet(uuid):
+        return f"- {text_of.get(uuid, '')}  (#{tokens.get(uuid, uuid[:TOKEN_FLOOR])})"
+
+    meta = {"course": course, "title": crow["title"],
+            "primary_reference": crow["primary_reference"],
+            "primary_outline": outline,
+            "targets": ", ".join(r["reference"] for r in conn.execute(
+                "SELECT reference FROM hierarchy_targets WHERE outline=? ORDER BY reference",
+                (outline,)))}
+
+    out = [_emit_front_matter(meta), ""]
+    lessons_by_unit = {}
+    for L in lessons:
+        lessons_by_unit.setdefault(L["parent_id"], []).append(L)
+    for i, u in enumerate(units, 1):
+        out.append(f"# Unit {i}: {u['text']}")
+        out.append("")
+        for L in lessons_by_unit.get(u["node_id"], []):
+            num = L["node_id"]
+            out.append(f"## {num} {L['text']}".rstrip())
+            out.append("")
+            if los.get(L["node_id"]):
+                out.append(f"**Learning objective:** {los[L['node_id']]}")
+                out.append("")
+            ps = sorted(placed.get(L["node_id"], []), key=lambda u: position.get(u, 0))
+            for uuid in ps:
+                out.append(bullet(uuid))
+            if ps:
+                out.append("")
+
+    placed_uuids = {u for us in placed.values() for u in us}
+    unplaced = [r["uuid"] for r in pool if r["uuid"] not in placed_uuids]
+    if unplaced:
+        out.append("## Pool — not yet placed")
+        out.append("")
+        for uuid in unplaced:
+            out.append(bullet(uuid))
+        out.append("")
+
+    plan_text = "\n".join(out).rstrip() + "\n"
+
+    # objectives.tsv (uuid, text), sorted by uuid for a stable diff.
+    obj_buf = io.StringIO()
+    w = csv.writer(obj_buf, delimiter="\t", lineterminator="\n")
+    w.writerow(["uuid", "text"])
+    for r in sorted(pool, key=lambda r: r["uuid"]):
+        w.writerow([r["uuid"], r["text"]])
+
+    # coverage.tsv (uuid, hierarchy_id, node_id) -- reference edges only
+    # (outline placement is structural in plan.md), sorted for a stable diff.
+    cov = conn.execute(
+        "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv"
+        " JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?"
+        " WHERE cv.hierarchy<>? ORDER BY cv.hierarchy, cv.uuid, cv.node_id",
+        (course, outline)).fetchall()
+    cov_buf = io.StringIO()
+    w = csv.writer(cov_buf, delimiter="\t", lineterminator="\n")
+    w.writerow(["uuid", "hierarchy_id", "node_id"])
+    for r in cov:
+        w.writerow([r["uuid"], r["hierarchy"], r["node_id"]])
+
+    return ({PLAN_FILE: plan_text, OBJECTIVES_TSV: obj_buf.getvalue(),
+             COVERAGE_TSV: cov_buf.getvalue()}, len(pool), len(cov))
+
+
 def write_course(db_path, course, course_dir):
     """Serialize a course's authored state to `course_dir`: plan.md + the two
     TSVs. Reference markdown files are inputs and are left untouched.
@@ -316,97 +412,32 @@ def write_course(db_path, course, course_dir):
     """
     os.makedirs(course_dir, exist_ok=True)
     conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
     try:
-        crow = conn.execute("SELECT course, title, primary_reference, primary_outline"
-                            " FROM courses WHERE course=?", (course,)).fetchone()
-        if not crow:
-            raise KeyError(course)
-        outline = crow["primary_outline"] or _first_outline(conn, course)
-
-        units = conn.execute("SELECT node_id, text FROM nodes WHERE hierarchy=? AND level='unit'"
-                            " ORDER BY ordinal", (outline,)).fetchall()
-        lessons = conn.execute("SELECT node_id, parent_id, text FROM nodes WHERE hierarchy=?"
-                             " AND level='lesson' ORDER BY ordinal", (outline,)).fetchall()
-        los = {r["node_id"]: r["value"] for r in conn.execute(
-            "SELECT node_id, value FROM node_attr WHERE hierarchy=? AND name='learning_objective'",
-            (outline,))}
-        placed = {}   # lesson_id -> [uuid]
-        for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (outline,)):
-            placed.setdefault(r["node_id"], []).append(r["uuid"])
-
-        pool = conn.execute("SELECT co.uuid, co.position, o.text FROM course_objectives co"
-                          " JOIN objectives o ON o.uuid=co.uuid WHERE co.course=?"
-                          " ORDER BY co.position, o.text", (course,)).fetchall()
-        text_of = {r["uuid"]: r["text"] for r in pool}
-        position = {r["uuid"]: (r["position"] if r["position"] is not None else 0) for r in pool}
-        tokens = abbrev_tokens([r["uuid"] for r in pool])
-
-        def bullet(uuid):
-            return f"- {text_of.get(uuid, '')}  (#{tokens.get(uuid, uuid[:TOKEN_FLOOR])})"
-
-        meta = {"course": course, "title": crow["title"],
-                "primary_reference": crow["primary_reference"],
-                "primary_outline": outline,
-                "targets": ", ".join(r["reference"] for r in conn.execute(
-                    "SELECT reference FROM hierarchy_targets WHERE outline=? ORDER BY reference",
-                    (outline,)))}
-
-        out = [_emit_front_matter(meta), ""]
-        lessons_by_unit = {}
-        for L in lessons:
-            lessons_by_unit.setdefault(L["parent_id"], []).append(L)
-        for i, u in enumerate(units, 1):
-            out.append(f"# Unit {i}: {u['text']}")
-            out.append("")
-            for L in lessons_by_unit.get(u["node_id"], []):
-                num = L["node_id"]
-                out.append(f"## {num} {L['text']}".rstrip())
-                out.append("")
-                if los.get(L["node_id"]):
-                    out.append(f"**Learning objective:** {los[L['node_id']]}")
-                    out.append("")
-                ps = sorted(placed.get(L["node_id"], []), key=lambda u: position.get(u, 0))
-                for uuid in ps:
-                    out.append(bullet(uuid))
-                if ps:
-                    out.append("")
-
-        placed_uuids = {u for us in placed.values() for u in us}
-        unplaced = [r["uuid"] for r in pool if r["uuid"] not in placed_uuids]
-        if unplaced:
-            out.append("## Pool — not yet placed")
-            out.append("")
-            for uuid in unplaced:
-                out.append(bullet(uuid))
-            out.append("")
-
-        plan_path = os.path.join(course_dir, PLAN_FILE)
-        with open(plan_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(out).rstrip() + "\n")
-
-        # objectives.tsv (uuid, text), sorted by uuid for a stable diff.
-        with open(os.path.join(course_dir, OBJECTIVES_TSV), "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f, delimiter="\t", lineterminator="\n")
-            w.writerow(["uuid", "text"])
-            for r in sorted(pool, key=lambda r: r["uuid"]):
-                w.writerow([r["uuid"], r["text"]])
-
-        # coverage.tsv (uuid, hierarchy_id, node_id) -- reference edges only
-        # (outline placement is structural in plan.md), sorted for a stable diff.
-        cov = conn.execute(
-            "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv"
-            " JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?"
-            " WHERE cv.hierarchy<>? ORDER BY cv.hierarchy, cv.uuid, cv.node_id",
-            (course, outline)).fetchall()
-        with open(os.path.join(course_dir, COVERAGE_TSV), "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f, delimiter="\t", lineterminator="\n")
-            w.writerow(["uuid", "hierarchy_id", "node_id"])
-            for r in cov:
-                w.writerow([r["uuid"], r["hierarchy"], r["node_id"]])
+        files, n_obj, n_cov = render_course(conn, course)
     finally:
         conn.close()
-    return plan_path, len(pool), len(cov)
+    for name, text in files.items():
+        with open(os.path.join(course_dir, name), "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+    return os.path.join(course_dir, PLAN_FILE), n_obj, n_cov
+
+
+def is_dirty(conn, course, course_dir):
+    """True if the on-disk corpus differs from what write_course would now produce
+    (or any file is missing) -- i.e. the course has unsaved changes. False when the
+    course is absent or fully in sync."""
+    try:
+        files, _n_obj, _n_cov = render_course(conn, course)
+    except KeyError:
+        return False
+    for name, text in files.items():
+        try:
+            with open(os.path.join(course_dir, name), encoding="utf-8", newline="") as f:
+                if f.read() != text:
+                    return True
+        except FileNotFoundError:
+            return True
+    return False
 
 
 def _first_outline(conn, course):
