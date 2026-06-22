@@ -50,8 +50,8 @@ HIERARCHIES_DDL = ("CREATE TABLE IF NOT EXISTS hierarchies (hierarchy TEXT PRIMA
                    " course TEXT NOT NULL, kind TEXT NOT NULL, editable INTEGER NOT NULL,"
                    " title TEXT NOT NULL, source TEXT)")
 
-# Major version of the node-list JSON format this loader understands. The format
-# is semver; a consumer checks only the major (see json-format.md "Versioning").
+# Major version of the hierarchy-document format this loader understands (the dict
+# hierarchy.to_nodes emits). Semver; only the major is checked. See FORMAT.md.
 FORMAT_MAJOR = 1
 
 # Per-flavor defaults for the course, reference kind (the TYPE), hierarchy slug,
@@ -123,12 +123,12 @@ def load_doc(doc):
 
 
 def build_rows(hierarchy, nodes):
-    """Map node-list JSON `nodes` to `nodes`-table rows, in document order.
+    """Map a parsed hierarchy document's `nodes` to `nodes`-table rows, in order.
 
     Returns (hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) rows.
-    The JSON already carries each node's tag (-> level), parent, leaf flag, and
-    text; `ordinal` here is the node's 0-based position in document order (the
-    array is pre-order DFS) -- what the table has always stored, NOT the JSON's
+    The node list already carries each node's tag (-> level), parent, leaf flag,
+    and text; `ordinal` here is the node's 0-based position in document order (the
+    list is pre-order DFS) -- what the table has always stored, NOT the document's
     per-parent `ordinal`.
     """
     return [

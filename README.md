@@ -10,18 +10,21 @@ markdown.
 Nothing about any particular course is baked in. Point it at *your* hierarchy
 and *your* objectives.
 
-Hierarchies are ingested as **node-list JSON** — the cross-repo data contract
-emitted by the companion [hierarchy-extractors](../hierarchy-extractors) repo's
-`build_hierarchy_json.py` from a hierarchy markdown file. This tool does no
-markdown parsing itself: it's a dumb loader of that JSON (see
-`hierarchy-extractors/json-format.md` for the format).
+A course lives on disk as **human-editable markdown** (plus two small normalized
+TSVs); SQLite is just a cache the tool loads from and exports back to those files.
+The markdown format is defined here (see [`FORMAT.md`](FORMAT.md)). Reference
+hierarchies can be hand-authored or produced by the companion
+[hierarchy-extractors](../hierarchy-extractors) repo, whose job is to turn a
+source out of your control (a CED PDF, the IB syllabus, a PreTeXt book) into
+conforming markdown.
 
 ## What you get
 
 - A web app (Flask) to load a hierarchy, place raw objectives onto it, author
-  lessons, and watch coverage fill in.
-- A command-line pipeline for the same lifecycle: load a hierarchy, import
-  objectives, snapshot to git-diffable TSVs, and render the plan.
+  lessons, and watch coverage fill in — then **export** the course back to
+  git-trackable markdown.
+- A command-line pipeline for the same lifecycle: load a course from its markdown
+  corpus, render the plan, rebuild the database from scratch.
 - A **traceability** view: every leaf of the standard maps to the lesson(s) that
   cover it, plus an explicit list of gaps.
 
@@ -30,52 +33,51 @@ with [`uv`](https://docs.astral.sh/uv/).
 
 ## Quick start
 
-A synthetic example course ("Intro to Widgets") lives in `examples/`. Use it to
-see the whole pipeline end to end:
+A synthetic example course ("Intro to Widgets") lives in `examples/widgets/` —
+a **course directory**: its reference hierarchy markdown (`widgets-ced.md`), the
+outline (`plan.md`), and the normalized `objectives.tsv` / `coverage.tsv`. Use the
+`examples/` corpus to see the whole pipeline end to end:
 
 ```bash
-# 1. Load your hierarchy node-list JSON into a fresh database (creates the course).
-uv run load_nodes.py examples/widgets-hierarchy.json db.db \
-    --course widgets --hierarchy widgets-ced --course-title "Intro to Widgets"
+# 1. Rebuild a database from the markdown corpus (a dir of course directories).
+uv run rebuild_db.py --corpus examples            # -> db.db
 
-# 2. Import objectives (TSV: an `objective` column, optional `node_id`/`uuid`).
-uv run import_objectives.py examples/objectives.tsv db.db --course widgets
-
-# 3. Render the plan (units → lessons, traceability appendix, gap list).
+# 2. Render the plan (units → lessons, traceability appendix, gap list).
 uv run render_outline.py db.db /tmp/plan.md --course widgets
+```
+
+To load a single hierarchy markdown file straight into a database (the lower-level
+step `rebuild_db` orchestrates):
+
+```bash
+uv run load_nodes.py examples/widgets/widgets-ced.md db.db \
+    --course widgets --hierarchy widgets-ced --course-title "Intro to Widgets"
 ```
 
 Or do it all in the browser:
 
 ```bash
-uv run app.py          # http://localhost:5001
+LESSON_CORPUS_DIR=examples uv run app.py          # http://localhost:5001
 ```
 
-The app boots an empty database from `schema.sql` on first run. On the **Data**
-page, upload a hierarchy node-list JSON file (e.g. `examples/widgets-hierarchy.json`)
-to create a course, then seed objectives from the **Objectives** page and plan from
-each course's workspace.
+The app boots an empty database from `schema.sql`, then loads any course in the
+corpus directory. Without a corpus, create a course with **+** in the sidebar and
+upload a hierarchy markdown file on its **⚙ setup** page.
 
-## The hierarchy format
+## The format
 
-A hierarchy is authored as a nested markdown outline and converted to node-list
-JSON by the hierarchy-extractors repo. `examples/widgets-hierarchy.md` is the
-authoring source; `examples/widgets-hierarchy.json` is the loadable artifact (what
-the commands above ingest). The markdown's level-1 heading names the top level and
-the flavor, and deeper headings carry a verbatim id as their first token:
+A course is a directory of markdown + two TSVs; the corpus is a directory of
+those. The full spec — reference hierarchy markdown (the `csa`/`csp`/`ib`/`book`
+flavors), the `plan.md` outline profile, and the two TSVs — is in
+[`FORMAT.md`](FORMAT.md). A reference hierarchy's level-1 heading names the top
+level and the flavor, and deeper headings carry a verbatim id as their first
+token:
 
 ```markdown
 # Unit 1: Widget Basics
 ## 1.1 What Is a Widget
 ### 1.1.A Describe the parts of a widget
 #### 1.1.A.1 A widget has a frobnicator and a sprocket.
-```
-
-Convert it to JSON with the extractor, then load that:
-
-```bash
-uv run ../hierarchy-extractors/build_hierarchy_json.py \
-    examples/widgets-hierarchy.md examples/widgets-hierarchy.json
 ```
 
 The deepest nodes (here, the `####` knowledge statements) are the **leaves** —
@@ -85,15 +87,17 @@ to a lesson.
 ## Saving & version control
 
 `db.db` is the live working copy and is gitignored. The committed state is the
-`export/` directory of TSV snapshots:
+**corpus**: a directory of course directories of markdown + TSVs. Export writes a
+course back to it; rebuild reproduces the database from it:
 
 ```bash
-uv run export_planning.py db.db export/                  # snapshot
-uv run import_planning.py db.db export/                  # restore
-uv run rebuild_db.py examples/widgets-hierarchy.json     # rebuild from scratch
+uv run rebuild_db.py --corpus courses            # rebuild db.db from the corpus
+uv run seed.py --all courses db.db               # reload every course (non-destructive)
 ```
 
-(The app exposes the same global restore/export on its **Settings** page.)
+(The app exposes per-course **Export** in the sidebar and a global **Restore from
+version control** on its **Settings** page. Reference hierarchy markdown is a
+load-only input and is never rewritten — only `plan.md` and the two TSVs are.)
 
 ## Setting up courses in the app
 
@@ -102,9 +106,9 @@ Setup is driven from the sidebar:
 - **+** next to the title creates a course (id + title) — or imports one from a
   bundle file.
 
-- each course's **⚙ setup** page adds reference hierarchies (upload node-list
-  JSON), deletes them, renames/deletes the course, and **exports the whole course**
-  as a single self-contained bundle file.
+- each course's **⚙ setup** page adds reference hierarchies (upload hierarchy
+  **markdown**, saved into the corpus), deletes them, renames/deletes the course,
+  and **exports the whole course** as a single self-contained bundle file.
 
 - the **Objectives** page seeds raw objectives into the course pool (plain text,
   one per line, or a TSV with an `objective` column). Categorizing an objective to
@@ -121,21 +125,20 @@ uv run course_bundle.py import db.db <course>.json [--as <new-id>]
 
 ## Seeding on startup
 
-Point the app at a directory of input files and it will populate a blank database
-automatically — no clicking. Set `LESSON_SEED_DIR` to a directory containing a
-`manifest.toml` that says which course each file belongs to (the input files
-themselves don't carry that):
+Point the app at a **corpus** — a directory whose subdirectories are course
+directories — and it populates a blank database automatically. Set
+`LESSON_CORPUS_DIR` (default `courses`):
 
 ```bash
-LESSON_SEED_DIR=examples/seed uv run app.py     # or set it before serve.sh
+LESSON_CORPUS_DIR=examples uv run app.py        # or set it before serve.sh
 ```
 
-The manifest lists each course with its hierarchies (node-list JSON) and
-objectives files; an objectives entry with a `hierarchy =` is categorized into that
-hierarchy, otherwise it's pool-only. See `examples/seed/manifest.toml`. Seeding is
-**create-if-absent per course**, so it's safe on every restart (existing courses
-are left untouched). The same thing from a terminal:
+Each course directory carries everything the loader needs (its `plan.md` front
+matter names the course; see [`FORMAT.md`](FORMAT.md)), so no manifest is needed.
+Seeding is **create-if-absent per course**, so it's safe on every restart
+(existing courses are left untouched). The same thing from a terminal:
 
 ```bash
-uv run seed.py examples/seed db.db
+uv run seed.py examples db.db                   # load new courses
+uv run seed.py --all examples db.db             # reload every course
 ```

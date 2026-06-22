@@ -1,8 +1,9 @@
 """Parse a curriculum/book hierarchy markdown file into a flat list of sections.
 
-Shared by build_hierarchy_xml.py and build_hierarchy_db.py. The flavor is
-detected from the first level-1 heading; sections carry their ids verbatim (e.g.
-"1", "1.1", "1.1.A", "1.1.A.1") and consumers apply their own id transformations.
+The curriculum-hierarchy markdown parser this repo owns (see FORMAT.md); used by
+load_nodes.py (references) and plan_io.py (helpers). The flavor is detected from
+the first level-1 heading; sections carry their ids verbatim (e.g. "1", "1.1",
+"1.1.A", "1.1.A.1") and consumers apply their own id transformations.
 
 Flavors and their per-level tags:
 
@@ -67,7 +68,7 @@ FLAVOR_KIND = {
     "course": "course",
 }
 
-# Version of the node-list JSON contract emitted by to_nodes (see json-format.md).
+# Version of the node-list document emitted by to_nodes (see FORMAT.md).
 # Semantic versioning: bump major for any breaking change to an existing field or
 # guarantee; minor for backward-compatible additions (e.g. a new field).
 # 1.1.0 added the (nullable) "title" field and the "kind" field.
