@@ -228,6 +228,9 @@ def ensure_schema():
             # and title (idempotent -- a no-op once renamed).
             conn.execute("UPDATE hierarchies SET kind='course-outline', title='Course outline'"
                          " WHERE kind='lesson-plan'")
+            # kind is now the hierarchy's purpose, decoupled from flavor; the IB
+            # syllabus kind drops its redundant 'ib-' prefix (flavor carries it).
+            conn.execute("UPDATE hierarchies SET kind='syllabus' WHERE kind='ib-syllabus'")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)
@@ -543,9 +546,11 @@ def hierarchy_load_course(course):
         flash(f"Could not load {f.filename!r}: {e}")
         return redirect(url_for("setup", course=course))
     over = lambda k: (request.form.get(k) or "").strip() or None
-    kind = over("kind") or load_nodes.meta_for(flavor)["kind"]
+    # Resolve kind/title: explicit form override, else what the doc carries, else
+    # derived (kind from flavor; title from course+kind inside load_nodes.load).
+    kind = over("kind") or doc.get("kind") or load_nodes.meta_for(flavor)["kind"]
     slug = over("hierarchy") or f"{course}-{kind}"
-    title = over("title")  # hierarchy display title; None -> derived from course+kind
+    title = over("title") or doc.get("title")
     m = load_nodes.meta_for(flavor, course=course, kind=kind, slug=slug)
     rows = load_nodes.build_rows(m["slug"], doc["nodes"])
     # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage

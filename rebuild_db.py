@@ -47,12 +47,13 @@ def load_reference_nodes(db_path, specs):
             continue
         with open(hf) as f:
             doc = load_nodes.load_doc(json.load(f))
-        m = load_nodes.meta_for(doc["flavor"], course=spec.get("course"), kind=spec.get("kind"),
+        m = load_nodes.meta_for(doc["flavor"], course=spec.get("course"),
+                                kind=spec.get("kind") or doc.get("kind"),
                                 slug=spec.get("hierarchy"),
                                 course_title=spec.get("course_title"))
         rows = load_nodes.build_rows(m["slug"], doc["nodes"])
         load_nodes.load(db_path, m["slug"], m["course"], m["kind"], m["course_title"],
-                        rows, source=hf)
+                        rows, source=hf, title=spec.get("title") or doc.get("title"))
         loaded.append((hf, m["slug"], m["course"], len(rows)))
     return loaded
 

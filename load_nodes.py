@@ -16,7 +16,7 @@ the node's tag string ('unit', 'topic', 'essential-knowledge', ...); `is_leaf`
 marks nodes with no children (the unit of "coverage"); `ordinal` is document
 order. Keyed by hierarchy slug: re-running replaces only that hierarchy's rows so
 several hierarchies can share one database. The hierarchy is registered in
-`hierarchies` (editable=0, of a kind/type like 'ced' or 'ib-syllabus') and its
+`hierarchies` (editable=0, of a kind/type like 'ced' or 'syllabus') and its
 `course` is upserted into `courses` -- the slug/course/kind default from the
 document's flavor and can be overridden with the matching flags.
 
@@ -62,7 +62,7 @@ FLAVOR_META = {
              "course_title": "AP Computer Science A"},
     "csp":  {"course": "csp",  "kind": "ced",         "slug": "csp-ced",
              "course_title": "AP Computer Science Principles"},
-    "ib":   {"course": "ib",   "kind": "ib-syllabus", "slug": "ib-syllabus",
+    "ib":   {"course": "ib",   "kind": "syllabus",    "slug": "ib-syllabus",
              "course_title": "IB Computer Science"},
     "book": {"course": "book", "kind": "book",        "slug": "book",
              "course_title": "Book"},
@@ -82,8 +82,8 @@ def meta_for(flavor, course=None, kind=None, slug=None, course_title=None):
 
 def kind_label(course, kind):
     """Short, clean label for a hierarchy's kind. Drops a redundant leading course
-    id (course 'ib' + kind 'ib-syllabus' -> 'syllabus') then tidies ('ced' -> 'CED',
-    dashes -> spaces)."""
+    id (legacy kind 'ib-syllabus' -> 'syllabus') then tidies ('ced' -> 'CED',
+    'course-outline' -> 'course outline', dashes -> spaces)."""
     parts = kind.split("-")
     if parts[0] == course:
         parts = parts[1:]
@@ -173,10 +173,11 @@ def main():
     with open(args.input) as f:
         doc = load_doc(json.load(f))
     flavor = doc["flavor"]
-    m = meta_for(flavor, args.course, args.kind, args.hierarchy, args.course_title)
+    m = meta_for(flavor, args.course, args.kind or doc.get("kind"),
+                 args.hierarchy, args.course_title)
     rows = build_rows(m["slug"], doc["nodes"])
     load(args.database, m["slug"], m["course"], m["kind"], m["course_title"],
-         rows, source=args.input)
+         rows, source=args.input, title=doc.get("title"))
 
     leaves = sum(1 for r in rows if r[4])
     print(

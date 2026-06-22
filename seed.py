@@ -64,8 +64,9 @@ def _load_hierarchy(db_path, course, spec, seed_dir):
     """Load one node-list JSON as a reference of `course`. Returns (slug, n_nodes)."""
     with open(os.path.join(seed_dir, spec["file"])) as f:
         doc = load_nodes.load_doc(json.load(f))
-    kind = spec.get("kind") or load_nodes.meta_for(doc["flavor"])["kind"]
+    kind = spec.get("kind") or doc.get("kind") or load_nodes.meta_for(doc["flavor"])["kind"]
     slug = spec.get("slug") or f"{course}-{kind}"
+    title = spec.get("title") or doc.get("title")
     rows = load_nodes.build_rows(slug, doc["nodes"])
     conn = sqlite3.connect(db_path)
     try:
@@ -77,7 +78,7 @@ def _load_hierarchy(db_path, course, spec, seed_dir):
     finally:
         conn.close()
     load_nodes.load(db_path, slug, course, kind, course_title, rows,
-                    source=spec["file"], title=spec.get("title"))
+                    source=spec["file"], title=title)
     if out:  # measure the outline against this reference
         conn = sqlite3.connect(db_path)
         try:
