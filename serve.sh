@@ -13,6 +13,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-5001}"
+# Auto-populate a blank db on startup from this dir's manifest.toml (no-op if the
+# dir/manifest is absent). Override with LESSON_SEED_DIR=... in the environment.
+export LESSON_SEED_DIR="${LESSON_SEED_DIR:-seed}"
 LOG="${LESSON_LOG:-/tmp/lesson-planning.log}"
 
 if [ "${1:-}" = "-d" ] || [ "${1:-}" = "--detach" ]; then

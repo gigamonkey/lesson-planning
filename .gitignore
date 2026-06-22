@@ -1,6 +1,7 @@
 *.db
 *~
 .DS_Store
+/seed/
 __pycache__/
 .venv/
 .claude/settings.local.json
