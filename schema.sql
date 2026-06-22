@@ -16,7 +16,12 @@
 -- /<course> URL) and a title. Every hierarchy belongs to a course.
 CREATE TABLE IF NOT EXISTS courses (
   course TEXT PRIMARY KEY,            -- 'csa', 'csp', 'ib'
-  title  TEXT NOT NULL               -- 'AP Computer Science A'
+  title  TEXT NOT NULL,              -- 'AP Computer Science A'
+  -- The course's chosen hierarchies: its authoritative reference (what the plan is
+  -- measured against) and its official outline. Explicit, not inferred from kind.
+  -- (FK enforcement is off app-wide; declared for documentation.)
+  primary_reference TEXT REFERENCES hierarchies(hierarchy),
+  primary_outline   TEXT REFERENCES hierarchies(hierarchy)
 );
 
 -- Registry of every hierarchy (a tree of nodes): the CED/IB/book references and

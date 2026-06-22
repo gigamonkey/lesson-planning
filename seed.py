@@ -51,12 +51,13 @@ def _ensure_outline(conn, course):
     row = conn.execute(
         "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
         "ORDER BY (kind='course-outline') DESC, hierarchy LIMIT 1", (course,)).fetchone()
-    if row:
-        return row[0]
-    outline = course + "-plan"
-    conn.execute(
-        "INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title, source)"
-        " VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)", (outline, course))
+    outline = row[0] if row else course + "-plan"
+    if not row:
+        conn.execute(
+            "INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title, source)"
+            " VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)", (outline, course))
+    conn.execute("UPDATE courses SET primary_outline=? WHERE course=? AND primary_outline IS NULL",
+                 (outline, course))
     return outline
 
 
@@ -79,14 +80,17 @@ def _load_hierarchy(db_path, course, spec, seed_dir):
         conn.close()
     load_nodes.load(db_path, slug, course, kind, course_title, rows,
                     source=spec["file"], title=title)
-    if out:  # measure the outline against this reference
-        conn = sqlite3.connect(db_path)
-        try:
+    conn = sqlite3.connect(db_path)
+    try:
+        if out:  # measure the outline against this reference
             conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
                          " VALUES (?, ?)", (out[0], slug))
-            conn.commit()
-        finally:
-            conn.close()
+        # Make this the course's primary reference if it has none yet.
+        conn.execute("UPDATE courses SET primary_reference=? WHERE course=? "
+                     "AND primary_reference IS NULL", (slug, course))
+        conn.commit()
+    finally:
+        conn.close()
     return slug, len(rows)
 
 

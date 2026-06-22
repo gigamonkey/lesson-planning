@@ -13,16 +13,27 @@ import argparse
 import sqlite3
 
 
+def _primary(conn, course, col, editable, kind):
+    """The course's explicit primary_<...> pointer, else the first matching
+    hierarchy (kind-ordered) -- mirrors app.reference_hierarchy/outline_hierarchy."""
+    try:
+        row = conn.execute(f"SELECT {col} FROM courses WHERE course=?", (course,)).fetchone()
+        if row and row[0]:
+            return row[0]
+    except sqlite3.OperationalError:
+        pass
+    row = conn.execute(
+        f"SELECT hierarchy FROM hierarchies WHERE course=? AND editable=? "
+        f"ORDER BY (kind=?) DESC, hierarchy LIMIT 1", (course, editable, kind)).fetchone()
+    return row[0] if row else None
+
+
 def fetch(conn, course):
     conn.row_factory = sqlite3.Row
-    # Resolve the course's reference (CED) and outline (plan) hierarchies by column.
-    R = conn.execute("SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0 "
-                     "ORDER BY (kind='ced') DESC, hierarchy LIMIT 1", (course,)).fetchone()
-    R = R[0] if R else course
-    O = conn.execute("SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
-                     "ORDER BY (kind='course-outline') DESC, hierarchy LIMIT 1",
-                     (course,)).fetchone()
-    O = O[0] if O else None
+    # The course's primary reference (what the plan is measured against) and its
+    # official outline -- explicit pointers, falling back to the first match.
+    R = _primary(conn, course, "primary_reference", 0, "ced") or course
+    O = _primary(conn, course, "primary_outline", 1, "course-outline")
 
     # Reference coverage annotates each raw with its CED nodes.
     coverage = {}

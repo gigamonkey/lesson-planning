@@ -25,7 +25,7 @@ import sqlite3
 # `hierarchies` are exported only for OUTLINE hierarchies, so they are reloaded
 # by a SCOPED delete (only the hierarchies present in the TSV) to avoid clobbering
 # the reference rows that load_nodes.py already wrote.
-TABLES = ["objectives", "hierarchies", "hierarchy_targets", "course_objectives",
+TABLES = ["courses", "objectives", "hierarchies", "hierarchy_targets", "course_objectives",
           "nodes", "node_attr", "coverage"]
 SCOPED = {"nodes", "hierarchies"}  # delete only the TSV's hierarchies, not all rows
 

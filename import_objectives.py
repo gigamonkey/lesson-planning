@@ -100,11 +100,19 @@ def parse_items(path):
 
 
 def reference_slug(conn, course):
-    """The course's reference (CED) hierarchy slug; load_nodes registers it.
+    """The course's primary reference hierarchy slug; load_nodes registers it.
 
-    Falls back to the conventional '<course>-ced' if the hierarchy isn't loaded
-    yet (the coverage edges still record where the objectives belong).
+    Prefers the course's explicit `primary_reference`, else the first reference
+    (ced-ordered), else the conventional '<course>-ced' if none is loaded yet (the
+    coverage edges still record where the objectives belong).
     """
+    try:
+        row = conn.execute("SELECT primary_reference FROM courses WHERE course=?",
+                           (course,)).fetchone()
+        if row and row[0]:
+            return row[0]
+    except sqlite3.OperationalError:
+        pass
     try:
         row = conn.execute(
             "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0 "

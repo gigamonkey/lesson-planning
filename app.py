@@ -231,6 +231,23 @@ def ensure_schema():
             # kind is now the hierarchy's purpose, decoupled from flavor; the IB
             # syllabus kind drops its redundant 'ib-' prefix (flavor carries it).
             conn.execute("UPDATE hierarchies SET kind='syllabus' WHERE kind='ib-syllabus'")
+
+            # A course's primary reference + official outline become explicit
+            # pointers (replacing the kind='ced'/'course-outline' tiebreaks). Add
+            # the columns and backfill from the old implicit selection.
+            ccols = [r[1] for r in conn.execute("PRAGMA table_info(courses)")]
+            if "primary_reference" not in ccols:
+                conn.execute("ALTER TABLE courses ADD COLUMN primary_reference TEXT")
+                conn.execute(
+                    "UPDATE courses SET primary_reference = (SELECT h.hierarchy FROM hierarchies h"
+                    " WHERE h.course=courses.course AND h.editable=0"
+                    " ORDER BY (h.kind='ced') DESC, h.hierarchy LIMIT 1)")
+            if "primary_outline" not in ccols:
+                conn.execute("ALTER TABLE courses ADD COLUMN primary_outline TEXT")
+                conn.execute(
+                    "UPDATE courses SET primary_outline = (SELECT h.hierarchy FROM hierarchies h"
+                    " WHERE h.course=courses.course AND h.editable=1"
+                    " ORDER BY (h.kind='course-outline') DESC, h.hierarchy LIMIT 1)")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)
@@ -242,12 +259,17 @@ def courses(conn):
 
 
 # A course is backed by hierarchies (the courses->hierarchies link). Its REFERENCE
-# (a read-only CED/syllabus) and its OUTLINE (the authored lesson plan) are resolved
-# by the explicit course/kind/editable columns -- never by parsing the slug. Both
-# reference "coverage" and lesson "placement" are coverage edges into a hierarchy.
+# (a read-only CED/syllabus) and its OUTLINE (the authored lesson plan) are the
+# course's explicit primary_reference / primary_outline pointers, falling back to
+# the first matching hierarchy if a pointer isn't set. Both reference "coverage"
+# and lesson "placement" are coverage edges into a hierarchy.
 
 def reference_hierarchy(conn, course):
-    """The slug of the course's reference hierarchy (the CED/syllabus), or None."""
+    """The slug of the course's primary reference hierarchy, or None."""
+    row = conn.execute("SELECT primary_reference FROM courses WHERE course=?",
+                       (course,)).fetchone()
+    if row and row[0]:
+        return row[0]
     row = conn.execute(
         "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0 "
         "ORDER BY (kind='ced') DESC, hierarchy LIMIT 1", (course,)).fetchone()
@@ -255,7 +277,11 @@ def reference_hierarchy(conn, course):
 
 
 def outline_hierarchy(conn, course):
-    """The slug of the course's outline hierarchy (its course outline), or None."""
+    """The slug of the course's official outline hierarchy, or None."""
+    row = conn.execute("SELECT primary_outline FROM courses WHERE course=?",
+                       (course,)).fetchone()
+    if row and row[0]:
+        return row[0]
     row = conn.execute(
         "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
         "ORDER BY (kind='course-outline') DESC, hierarchy LIMIT 1", (course,)).fetchone()
@@ -265,17 +291,19 @@ def outline_hierarchy(conn, course):
 def ensure_outline(conn, course):
     """The course's outline hierarchy slug, creating + registering it if needed."""
     O = outline_hierarchy(conn, course)
-    if O:
-        return O
-    O = course + "-plan"  # a readable handle; the columns below carry the meaning
-    conn.execute("INSERT OR IGNORE INTO courses(course, title) VALUES (?, ?)",
-                 (course, course.upper()))
-    conn.execute("INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title,"
-                 " source) VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)",
-                 (O, course))
-    # Measure the plan against each of the course's references.
-    conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
-                 " SELECT ?, hierarchy FROM hierarchies WHERE course=? AND editable=0",
+    if not O:
+        O = course + "-plan"  # a readable handle; the columns below carry the meaning
+        conn.execute("INSERT OR IGNORE INTO courses(course, title) VALUES (?, ?)",
+                     (course, course.upper()))
+        conn.execute("INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title,"
+                     " source) VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)",
+                     (O, course))
+        # Measure the plan against each of the course's references.
+        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
+                     " SELECT ?, hierarchy FROM hierarchies WHERE course=? AND editable=0",
+                     (O, course))
+    # Make it the course's official outline if one isn't set yet.
+    conn.execute("UPDATE courses SET primary_outline=? WHERE course=? AND primary_outline IS NULL",
                  (O, course))
     return O
 
@@ -291,7 +319,8 @@ def inject_nav():
     active = va.get("hierarchy")  # set only on the workspace (hierarchy_view)
     try:
         with db() as conn:
-            cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
+            cs = conn.execute(
+                "SELECT course, title, primary_outline FROM courses ORDER BY course").fetchall()
             by_course = {}
             for h in conn.execute(
                 "SELECT hierarchy, course, kind, editable, title FROM hierarchies "
@@ -301,8 +330,9 @@ def inject_nav():
                      "editable": h["editable"], "label": h["title"]})
             for c in cs:
                 hs = by_course.get(c["course"], [])
-                outline = next((h["hierarchy"] for h in hs
-                                if h["editable"] and h["kind"] == "course-outline"), None)
+                outline = c["primary_outline"] or next(
+                    (h["hierarchy"] for h in hs
+                     if h["editable"] and h["kind"] == "course-outline"), None)
                 nav.append({"course": c["course"], "title": c["title"], "outline": outline,
                             "hierarchies": [h for h in hs if h["hierarchy"] != outline]})
     except sqlite3.OperationalError:
@@ -511,7 +541,8 @@ def setup(course):
     course-level actions. The course outline is managed on the plan page, not
     here."""
     with db() as conn:
-        crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
+        crow = conn.execute("SELECT title, primary_reference FROM courses WHERE course=?",
+                            (course,)).fetchone()
         if not crow:
             abort(404)
         refs = conn.execute(
@@ -520,9 +551,24 @@ def setup(course):
             (course,)).fetchall()
         counts = {r["hierarchy"]: r["n"] for r in conn.execute(
             "SELECT hierarchy, count(*) n FROM nodes GROUP BY hierarchy")}
+        primary_ref = reference_hierarchy(conn, course)  # resolved (explicit or fallback)
     refs = [dict(r, nodes=counts.get(r["hierarchy"], 0)) for r in refs]
     return render_template("setup.html", course=course, refs=refs,
+                           primary_ref=primary_ref,
                            course_title=crow["title"], page_title=f"{course.upper()} setup")
+
+
+@app.route("/<course>/primary", methods=["POST"])
+def set_primary_reference(course):
+    """Declare which reference is the course's primary (authoritative) one."""
+    ref = (request.form.get("reference") or "").strip()
+    with db() as conn:
+        ok = conn.execute("SELECT 1 FROM hierarchies WHERE hierarchy=? AND course=? "
+                          "AND editable=0", (ref, course)).fetchone()
+        if not ok:
+            abort(404)
+        conn.execute("UPDATE courses SET primary_reference=? WHERE course=?", (ref, course))
+    return redirect(url_for("setup", course=course))
 
 
 @app.route("/<course>/hierarchy/load", methods=["POST"])
@@ -563,12 +609,15 @@ def hierarchy_load_course(course):
     load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], crow["title"],
                     rows, source=f.filename, title=title)
     # Measure the course outline against this new reference (the eager outline was
-    # created before any reference existed, so link it here).
+    # created before any reference existed, so link it here); and make this the
+    # course's primary reference if it doesn't have one yet.
     with db() as conn:
         O = outline_hierarchy(conn, course)
         if O:
             conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
                          " VALUES (?, ?)", (O, m["slug"]))
+        conn.execute("UPDATE courses SET primary_reference=? WHERE course=? "
+                     "AND primary_reference IS NULL", (m["slug"], course))
     # The loaded hierarchy shows up in the setup table, so only surface the
     # non-obvious case: coverage edges now pointing at ids the new version dropped.
     if orphaned:
@@ -600,6 +649,9 @@ def hierarchy_delete(course, hierarchy):
                      (hierarchy, hierarchy))
         conn.execute("DELETE FROM nodes WHERE hierarchy=?", (hierarchy,))
         conn.execute("DELETE FROM hierarchies WHERE hierarchy=?", (hierarchy,))
+        # Clear the course pointer if it named this hierarchy (reads then fall back).
+        conn.execute("UPDATE courses SET primary_reference=NULL "
+                     "WHERE course=? AND primary_reference=?", (course, hierarchy))
     flash(f"Deleted hierarchy {hierarchy!r} ({n} coverage edge(s) removed).")
     return redirect(url_for("setup", course=course))
 

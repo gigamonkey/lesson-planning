@@ -11,10 +11,21 @@
 
   <h2>Reference hierarchies</h2>
   {% if refs %}
+  <p class="hint">The <b>primary</b> reference is the course's authoritative
+     standard — what the plan's coverage is measured against.</p>
+  {# Standalone form (not wrapping the table, so the per-row delete forms below
+     aren't nested inside it); the radios attach to it via the form= attribute. #}
+  <form method="post" action="{{ url_for('set_primary_reference', course=course) }}"
+        id="primaryform"></form>
   <table class="report">
-    <tr><th>Hierarchy</th><th>Kind</th><th>Title</th><th>Nodes</th><th>Source</th><th></th></tr>
+    <tr><th>Primary</th><th>Hierarchy</th><th>Kind</th><th>Title</th><th>Nodes</th><th>Source</th><th></th></tr>
     {% for h in refs %}
     <tr>
+      <td style="text-align:center">
+        <input type="radio" form="primaryform" name="reference" value="{{ h.hierarchy }}"
+               {{ 'checked' if h.hierarchy == primary_ref else '' }}
+               onchange="this.form.submit()" title="Make this the primary reference">
+      </td>
       <td><a href="{{ url_for('hierarchy_view', course=course, hierarchy=h.hierarchy) }}"><code>{{ h.hierarchy }}</code></a></td>
       <td><span class="pill pill-{{ h.kind }}">{{ h.kind }}</span></td>
       <td>{{ h.title }}</td>
