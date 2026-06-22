@@ -13,6 +13,7 @@ The database path defaults to db.db next to this file; override with LESSON_DB.
 """
 
 import csv
+import datetime
 import html
 import io
 import json
@@ -703,8 +704,11 @@ def course_bundle_download(course):
         except KeyError:
             abort(404)
     payload = json.dumps(doc, indent=2, ensure_ascii=False)
+    # ISO-8601 local timestamp, made filename-safe (colons -> dashes in the time).
+    ts = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     return Response(payload, mimetype="application/json",
-                    headers={"Content-Disposition": f'attachment; filename="{course}-course.json"'})
+                    headers={"Content-Disposition":
+                             f'attachment; filename="{course}-course-{ts}.json"'})
 
 
 @app.route("/course/import", methods=["POST"])
