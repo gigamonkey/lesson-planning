@@ -409,12 +409,7 @@
                   <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
                 </label>
               </form>
-              <form method="post" action="{{ url_for('export', course=c.course) }}" class="csave">
-                <button type="submit" class="gear" {{ '' if c.dirty else 'disabled' }}
-                        title="{{ 'Save (export) this course to the corpus' if c.dirty else 'Saved — corpus is up to date' }}">
-                  <i class="bi bi-{{ 'floppy' if c.dirty else 'check2' }}"></i>
-                </button>
-              </form>
+              {% include "_savebtn.html" %}
               <form method="post" action="{{ url_for('course_refresh', course=c.course) }}" class="crefresh"
                     {% if c.dirty %}onsubmit="return confirm('Refresh {{ c.course|upper }} from disk? This course has unsaved changes that will be replaced by the corpus.');"{% endif %}>
                 <button type="submit" class="gear" {{ '' if c.has_corpus else 'disabled' }}
@@ -521,6 +516,20 @@
       el.defaultValue = el.value;
       const form = el.closest('form.autosave');
       if (form) form.requestSubmit();
+    });
+
+    // Keep the per-course save icons' dirty state live: after any htmx mutation
+    // (non-GET), and after the fetch-based drag saves (which call window.saveRefresh),
+    // fire `save-refresh` so each course's save control re-fetches itself.
+    window.saveRefresh = function () {
+      if (window.htmx) htmx.trigger(document.body, 'save-refresh');
+    };
+    document.body.addEventListener('htmx:afterRequest', function (e) {
+      const cfg = e.detail && e.detail.requestConfig;
+      if (e.detail && e.detail.successful && cfg && cfg.verb &&
+          cfg.verb.toLowerCase() !== 'get' && cfg.path && cfg.path.indexOf('/savebtn') === -1) {
+        window.saveRefresh();
+      }
     });
   </script>
 </body>

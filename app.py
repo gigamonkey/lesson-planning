@@ -1077,6 +1077,22 @@ def export(course):
     return redirect(request.referrer or url_for("objectives", course=course))
 
 
+@app.route("/<course>/savebtn")
+def save_button(course):
+    """The course's save control fragment with a fresh dirty state -- re-fetched by
+    the sidebar after edits/drags (which don't re-render the page) so the save icon
+    doesn't go stale."""
+    course_dir = os.path.join(CORPUS_DIR, course)
+    with db() as conn:
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+            abort(404)
+        try:
+            dirty = plan_io.is_dirty(conn, course, course_dir)
+        except Exception:
+            dirty = True
+    return render_template("_savebtn.html", c={"course": course, "dirty": dirty})
+
+
 @app.route("/<course>/refresh", methods=["POST"])
 def course_refresh(course):
     """Reload a course from its corpus directory on disk, replacing the db's copy

@@ -200,7 +200,7 @@
           }
           fetch(placeURL, { method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
-            .then(refreshStats);
+            .then(function () { refreshStats(); if (window.saveRefresh) window.saveRefresh(); });
           applyRawFilter();
         }
       });
@@ -221,7 +221,8 @@
             body.set('ids', Array.from(evt.to.children)
               .filter(c => c.classList.contains('lessoncard')).map(li => li.dataset.lessonId).join(','));
             fetch('/' + course + '/lesson/arrange', { method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body });
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
+              .then(function () { if (window.saveRefresh) window.saveRefresh(); });
           }
         });
       });
