@@ -4,8 +4,8 @@
 {% block body %}
 <div class="help">
   <p>Global version-control operations. To create a course, use <b>+</b> next to
-     <b>Lesson Planning</b> in the sidebar; to add hierarchies to a course, open its
-     <b>⚙ setup</b> page.</p>
+     <b>Lesson Planning</b> in the sidebar; to add a hierarchy to a course, use the
+     <b>+</b> in its sidebar header.</p>
 
   {% if not courses %}
   <div class="note">This database is empty. Create a course with <b>+</b> in the
@@ -28,8 +28,8 @@
 
   {% if courses %}
   <h2>Export</h2>
-  <p>Export is per course: open a course and use <b>Export</b> in the sidebar (or
-     its <b>⚙ setup</b> page) to write its <code>plan.md</code> +
+  <p>Export is per course: open a course and use <b>Export</b> in the sidebar
+     footer to write its <code>plan.md</code> +
      <code>objectives.tsv</code> / <code>coverage.tsv</code> into
      <code>{{ export_dir }}/&lt;course&gt;/</code> — the committable state.
      Reference hierarchy markdown is a load-only input and is never rewritten.</p>

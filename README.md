@@ -62,7 +62,7 @@ LESSON_CORPUS_DIR=examples uv run app.py          # http://localhost:5001
 
 The app boots an empty database from `schema.sql`, then loads any course in the
 corpus directory. Without a corpus, create a course with **+** in the sidebar and
-upload a hierarchy markdown file on its **⚙ setup** page.
+upload a hierarchy markdown file with the **+** in its sidebar header.
 
 ## The format
 
@@ -106,9 +106,11 @@ Setup is driven from the sidebar:
 - **+** next to the title creates a course (id + title) — or imports one from a
   bundle file.
 
-- each course's **⚙ setup** page adds reference hierarchies (upload hierarchy
-  **markdown**, saved into the corpus), deletes them, renames/deletes the course,
-  and **exports the whole course** as a single self-contained bundle file.
+- each course's sidebar block holds its controls: the **+** adds a reference
+  hierarchy (upload hierarchy **markdown**, saved into the corpus); the title is
+  click-to-edit; each reference has a **★** (set primary, shown with more than one)
+  and a trash; the course header has a **download** (export the whole course as a
+  self-contained bundle file) and a trash (delete the course).
 
 - the **Objectives** page seeds raw objectives into the course pool (plain text,
   one per line, or a TSV with an `objective` column). Categorizing an objective to

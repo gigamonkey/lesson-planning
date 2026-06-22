@@ -325,7 +325,8 @@ def inject_nav():
     try:
         with db() as conn:
             cs = conn.execute(
-                "SELECT course, title, primary_outline FROM courses ORDER BY course").fetchall()
+                "SELECT course, title, primary_outline, primary_reference FROM courses "
+                "ORDER BY course").fetchall()
             by_course = {}
             for h in conn.execute(
                 "SELECT hierarchy, course, kind, editable, title FROM hierarchies "
@@ -338,8 +339,14 @@ def inject_nav():
                 outline = c["primary_outline"] or next(
                     (h["hierarchy"] for h in hs
                      if h["editable"] and h["kind"] == "course-outline"), None)
+                refs = [h for h in hs if h["hierarchy"] != outline]
+                # The primary matters only with >1 reference (else it's automatic);
+                # mark each so the sidebar can show/choose it just in that case.
+                primary = c["primary_reference"] or (refs[0]["hierarchy"] if refs else None)
+                for h in refs:
+                    h["is_primary"] = (h["hierarchy"] == primary)
                 nav.append({"course": c["course"], "title": c["title"], "outline": outline,
-                            "hierarchies": [h for h in hs if h["hierarchy"] != outline]})
+                            "hierarchies": refs})
     except sqlite3.OperationalError:
         pass
     return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}
@@ -523,36 +530,12 @@ def course_new():
     with db() as conn:
         if conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             flash(f"Course {course!r} already exists.")
-            return redirect(url_for("setup", course=course))
+            return redirect(url_for("tree", course=course))
         conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)",
                      (course, title or course.upper()))
         ensure_outline(conn, course)
-    # The new course appears in the sidebar and we land on its (empty) setup page,
-    # so no flash is needed to confirm it.
-    return redirect(url_for("setup", course=course))
-
-
-@app.route("/<course>/setup")
-def setup(course):
-    """Per-course admin surface: its reference hierarchies (add / delete) plus
-    course-level actions. The course outline is managed on the plan page, not
-    here."""
-    with db() as conn:
-        crow = conn.execute("SELECT title, primary_reference FROM courses WHERE course=?",
-                            (course,)).fetchone()
-        if not crow:
-            abort(404)
-        refs = conn.execute(
-            "SELECT hierarchy, kind, title, source FROM hierarchies "
-            "WHERE course=? AND editable=0 ORDER BY (kind='ced') DESC, hierarchy",
-            (course,)).fetchall()
-        counts = {r["hierarchy"]: r["n"] for r in conn.execute(
-            "SELECT hierarchy, count(*) n FROM nodes GROUP BY hierarchy")}
-        primary_ref = reference_hierarchy(conn, course)  # resolved (explicit or fallback)
-    refs = [dict(r, nodes=counts.get(r["hierarchy"], 0)) for r in refs]
-    return render_template("setup.html", course=course, refs=refs,
-                           primary_ref=primary_ref,
-                           course_title=crow["title"], page_title=f"{course.upper()} setup")
+    # The new course appears in the sidebar; land on it (its empty outline).
+    return redirect(url_for("tree", course=course))
 
 
 @app.route("/<course>/primary", methods=["POST"])
@@ -565,7 +548,7 @@ def set_primary_reference(course):
         if not ok:
             abort(404)
         conn.execute("UPDATE courses SET primary_reference=? WHERE course=?", (ref, course))
-    return redirect(url_for("setup", course=course))
+    return redirect(request.referrer or url_for("tree", course=course))
 
 
 @app.route("/<course>/hierarchy/load", methods=["POST"])
@@ -579,7 +562,7 @@ def hierarchy_load_course(course):
         crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
         if not crow:
             abort(404)
-    back = request.referrer or url_for("setup", course=course)
+    back = request.referrer or url_for("tree", course=course)
     f = request.files.get("file")
     if not f or not f.filename:
         flash("No file chosen.")
@@ -646,7 +629,7 @@ def hierarchy_delete(course, hierarchy):
             abort(404)
         if row["editable"]:
             flash("The course outline can't be deleted here.")
-            return redirect(url_for("setup", course=course))
+            return redirect(url_for("tree", course=course))
         n = conn.execute("SELECT count(*) FROM coverage WHERE hierarchy=?",
                          (hierarchy,)).fetchone()[0]
         conn.execute("DELETE FROM coverage WHERE hierarchy=?", (hierarchy,))
@@ -659,7 +642,7 @@ def hierarchy_delete(course, hierarchy):
         conn.execute("UPDATE courses SET primary_reference=NULL "
                      "WHERE course=? AND primary_reference=?", (course, hierarchy))
     flash(f"Deleted hierarchy {hierarchy!r} ({n} coverage edge(s) removed).")
-    return redirect(url_for("setup", course=course))
+    return redirect(url_for("tree", course=course))
 
 
 @app.route("/<course>/rename", methods=["POST"])
@@ -674,7 +657,7 @@ def course_rename(course):
             conn.execute("UPDATE courses SET title=? WHERE course=?", (title, course))
     if request.headers.get("HX-Request"):
         return ("", 204)
-    return redirect(request.referrer or url_for("setup", course=course))
+    return redirect(request.referrer or url_for("tree", course=course))
 
 
 @app.route("/<course>/delete", methods=["POST"])

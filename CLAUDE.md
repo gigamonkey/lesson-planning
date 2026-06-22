@@ -60,9 +60,11 @@ uv run load_nodes.py <your-hierarchy>.md db.db --course <course>
 uv run python -c "import plan_io; plan_io.write_course('db.db', '<course>', '<corpus>/<course>')"
 
 # Web app (port 5001): bootstraps an empty db from schema.sql, then loads the
-# corpus dir. Setup is sidebar-driven: "+" creates (or imports) a course; each
-# course's "⚙" setup page uploads hierarchy markdown / exports / deletes; the
-# Settings page does global restore-from-corpus.
+# corpus dir. Setup is sidebar-driven: the top "+" creates (or imports) a course;
+# each course's controls live on its sidebar block -- "+" uploads a hierarchy
+# markdown, the title is click-to-edit, per-reference star/trash set-primary/delete,
+# and the course header has bundle-export + delete; the Settings page does global
+# restore-from-corpus.
 uv run app.py
 LESSON_CORPUS_DIR=examples uv run app.py       # load the bundled widgets example
 ```

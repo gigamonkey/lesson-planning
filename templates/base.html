@@ -59,6 +59,20 @@
                 border-radius: 3px; padding: .05rem .2rem; }
     .ctitle-input:hover { border-color: var(--line); }
     .ctitle-input:focus { border-color: #bcd; background: #fff; color: #222; outline: none; }
+    .coursehead-actions .cdel { margin: 0; display: inline-flex; }
+    .coursehead-actions .cdel button:hover { color: var(--gap); }
+    /* Per-hierarchy row controls: a primary star (when >1 ref) and a hover trash. */
+    .sidebar ul.hiers li.hieritem { gap: .25rem; }
+    .pform { margin: 0; display: inline-flex; flex: none; }
+    .pstar { flex: none; font-size: .8rem; line-height: 1; padding: 0; border: none;
+             background: none; cursor: pointer; color: #c9c9c9; }
+    .pstar.on { color: #e0a800; cursor: default; }
+    button.pstar:hover { color: #e0a800; }
+    .hdel { margin: 0; display: inline-flex; flex: none; visibility: hidden; }
+    .sidebar ul.hiers li.hieritem:hover .hdel { visibility: visible; }
+    .hdel button { border: none; background: none; cursor: pointer; color: #c4c4c4;
+             font-size: .76rem; line-height: 1; padding: 0; }
+    .hdel button:hover { color: var(--gap); }
     .sidebar .course { margin-bottom: 1rem; }
     .sidebar .coursename { font-weight: 700; color: #222; text-decoration: none; font-size: .95rem; }
     .sidebar .course.active .coursename { color: #2b6cb0; }
@@ -388,8 +402,12 @@
                   <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
                 </label>
               </form>
-              <a class="gear" href="{{ url_for('setup', course=c.course) }}"
-                 title="{{ c.course|upper }} setup"><i class="bi bi-gear"></i></a>
+              <a class="gear" href="{{ url_for('course_bundle_download', course=c.course) }}" download
+                 title="Download {{ c.course|upper }} as a bundle (.json)"><i class="bi bi-box-arrow-down"></i></a>
+              <form method="post" action="{{ url_for('course_delete', course=c.course) }}" class="cdel"
+                    onsubmit="return confirm('Delete the entire {{ c.course|upper }} course — all its hierarchies, objectives, and the plan? This cannot be undone.');">
+                <button type="submit" class="gear" title="Delete course"><i class="bi bi-trash"></i></button>
+              </form>
             </span>
           </div>
           <form class="ctitle-form autosave" method="post"
@@ -406,10 +424,25 @@
               <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
             </li>
             {% for h in c.hierarchies %}
-              <li class="{{ 'active' if h.hierarchy == active_hierarchy else '' }}">
+              <li class="hieritem {{ 'active' if h.hierarchy == active_hierarchy else '' }}">
+                {% if c.hierarchies|length > 1 %}
+                  {% if h.is_primary %}
+                    <span class="pstar on" title="Primary reference (the plan is measured against this)">★</span>
+                  {% else %}
+                    <form method="post" action="{{ url_for('set_primary_reference', course=c.course) }}" class="pform">
+                      <button type="submit" name="reference" value="{{ h.hierarchy }}" class="pstar"
+                              title="Make this the primary reference">☆</button>
+                    </form>
+                  {% endif %}
+                {% endif %}
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
                    title="{{ h.label }}">{{ h.label }}</a>
                 <span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>
+                <form method="post" class="hdel"
+                      action="{{ url_for('hierarchy_delete', course=c.course, hierarchy=h.hierarchy) }}"
+                      onsubmit="return confirm('Delete {{ h.hierarchy }} and its coverage edges?');">
+                  <button type="submit" title="Delete hierarchy"><i class="bi bi-trash"></i></button>
+                </form>
               </li>
             {% endfor %}
           </ul>

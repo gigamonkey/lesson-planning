@@ -87,8 +87,8 @@
   </dl>
   <p>And in the sidebar footer, two course-independent pages: <b>Help</b> (this
      page) and <b><a href="{{ url_for('data') }}">Settings</a></b> (restore from
-     version control). Create a course with <b>+</b> next to the title; manage a
-     course's hierarchies from its <b>⚙ setup</b> page.</p>
+     version control). Create a course with <b>+</b> next to the title; each course
+     in the sidebar has its own controls (see below).</p>
 
   <h2>Adding material in the app</h2>
   <ol>
@@ -120,11 +120,11 @@
   <ol>
     <li><b>Create the course.</b> Click <b>+</b> next to <b>Lesson Planning</b>,
         enter a course id and title.</li>
-    <li><b>Add a reference hierarchy.</b> Open the course's <b>⚙ setup</b> page and
-        upload a hierarchy <b>markdown</b> file (hand-authored, or produced by the
-        hierarchy-extractors repo from a PDF/book). The flavor is detected from its
-        headings; the slug defaults to <code>&lt;course&gt;-&lt;kind&gt;</code>. Add
-        as many as you need.</li>
+    <li><b>Add a reference hierarchy.</b> Click the <b>+</b> in the course's sidebar
+        header and upload a hierarchy <b>markdown</b> file (hand-authored, or produced
+        by the hierarchy-extractors repo from a PDF/book). The flavor is detected from
+        its headings; title/kind come from its front matter; the slug defaults to
+        <code>&lt;course&gt;-&lt;kind&gt;</code>. Add as many as you need.</li>
     <li><b>Seed objectives (optional).</b> On the <b>Objectives</b> page, upload a
         plain-text list (one objective per line) or a TSV with an
         <code>objective</code> column to bulk-add raw objectives to the pool. (Any
@@ -132,10 +132,12 @@
         an objective onto the node.)</li>
     <li><b>Then plan in the app</b> as above.</li>
   </ol>
-  <p>A course's <b>⚙ setup</b> page also lets you delete a hierarchy, rename or
-     delete the whole course, and <b>export the course</b> as a single bundle file.
-     Recreate it elsewhere (or after a delete) with <b>…or import a course bundle</b>
-     under the sidebar <b>+</b>.</p>
+  <p>The sidebar has the rest of a course's controls: click its <b>title</b> to
+     rename it; on each reference, a <b>★</b> sets the primary (shown only with more
+     than one) and a trash deletes it; the course header has a <b>download</b>
+     (export the whole course as a bundle file) and a <b>trash</b> (delete the
+     course). Recreate a course elsewhere with <b>…or import a course bundle</b>
+     under the top <b>+</b>.</p>
   <p class="hint">Equivalent from a terminal:
      <code>uv run load_nodes.py my-course-hierarchy.md db.db</code>
      and <code>uv run import_objectives.py &lt;objectives.tsv&gt;
