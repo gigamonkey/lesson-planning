@@ -33,6 +33,7 @@ REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO_ROOT)
 import course_bundle  # noqa: E402
 import export_planning  # noqa: E402
+import seed as seed_module  # noqa: E402
 import import_objectives  # noqa: E402
 import load_nodes  # noqa: E402
 import rebuild_db  # noqa: E402
@@ -1184,6 +1185,16 @@ def lesson_arrange(course):
 
 
 ensure_schema()
+
+# Optional unattended population: with LESSON_SEED_DIR set, create+load any course
+# in its manifest.toml that doesn't already exist (see seed.py / the plan). Safe to
+# run every boot; never fatal.
+_seed_dir = os.environ.get("LESSON_SEED_DIR")
+if _seed_dir:
+    try:
+        seed_module.seed(DB_PATH, _seed_dir)
+    except Exception as e:  # a broken seed must not stop the app booting
+        print(f"seed: failed: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

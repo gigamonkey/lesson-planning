@@ -118,3 +118,24 @@ the outline) so a course is portable and re-creatable; from a terminal:
 uv run course_bundle.py export db.db <course> <course>.json
 uv run course_bundle.py import db.db <course>.json [--as <new-id>]
 ```
+
+## Seeding on startup
+
+Point the app at a directory of input files and it will populate a blank database
+automatically — no clicking. Set `LESSON_SEED_DIR` to a directory containing a
+`manifest.toml` that says which course each file belongs to (the input files
+themselves don't carry that):
+
+```bash
+LESSON_SEED_DIR=examples/seed uv run app.py     # or set it before serve.sh
+```
+
+The manifest lists each course with its hierarchies (node-list JSON) and
+objectives files; an objectives entry with a `hierarchy =` is categorized into that
+hierarchy, otherwise it's pool-only. See `examples/seed/manifest.toml`. Seeding is
+**create-if-absent per course**, so it's safe on every restart (existing courses
+are left untouched). The same thing from a terminal:
+
+```bash
+uv run seed.py examples/seed db.db
+```

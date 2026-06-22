@@ -26,7 +26,8 @@ parser moved entirely to the extractors repo.)
   `export/` — git-diffable TSV snapshots (shipped empty)
 - `examples/` — a synthetic example course ("Intro to Widgets"):
   `widgets-hierarchy.md` (the markdown authoring source / format reference),
-  `widgets-hierarchy.json` (the node-list JSON that loads), and `objectives.tsv`
+  `widgets-hierarchy.json` (the node-list JSON that loads), `objectives.tsv`, and
+  `seed/manifest.toml` (a sample `LESSON_SEED_DIR` manifest)
 - `plans/` — implementation plans (design record). Do **not** read `plans/done/`
   unless explicitly asked — those describe the code as it was when written.
 
@@ -41,6 +42,7 @@ parser moved entirely to the extractors repo.)
 | `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load `nodes` from the hierarchy node-list JSON file(s), reload planning tables from the export dir. No hierarchies are baked in — pass your own. |
 | `render_outline.py`    | Renders a course's lesson plan to markdown: ordered lessons with objectives, a traceability appendix (every leaf → covering lesson(s)), and a gap list. The deliverable. |
 | `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the `export/` TSV snapshots. |
+| `seed.py`              | Populate a db from a `<dir>/manifest.toml` of input files: create-if-absent each course, load its hierarchy node-list JSON, import its objectives (pool-only or categorized into a named hierarchy). Run on startup when `LESSON_SEED_DIR` is set; also a CLI (`uv run seed.py <dir> [db]`). |
 
 ## Running
 
@@ -60,6 +62,9 @@ uv run rebuild_db.py <your-hierarchy>.json     # deletes db.db; export + stop th
 # deletes hierarchies and exports/deletes the course; the slimmed Settings page
 # (formerly Data) does global restore/export of the TSV snapshots.
 uv run app.py
+
+# Auto-populate a blank db on startup from a manifest dir (see examples/seed/):
+LESSON_SEED_DIR=examples/seed uv run app.py
 ```
 
 The `examples/` fixture works as a drop-in for `<your-hierarchy>.json` /
