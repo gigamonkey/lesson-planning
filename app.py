@@ -829,32 +829,39 @@ def place(course, hierarchy):
 
 @app.route("/<course>/h/<hierarchy>/upload", methods=["POST"])
 def hierarchy_upload(course, hierarchy):
-    """Import an uploaded file (import_objectives) with coverage into THIS hierarchy.
-    Node ids not in the hierarchy are dropped (objective kept in the pool) and
-    reported, so a mis-classified id doesn't strand an objective on a phantom node."""
+    """Upload a (uuid, text, node_id) TSV placing objectives into THIS hierarchy.
+    Identity is the uuid (text updated to match); each named objective's placement
+    in this hierarchy is REPLACED by its node_id (previously-unplaced ones are added
+    and placed). Unknown node_ids are reported and leave the prior placement be."""
     back = redirect(url_for("hierarchy_view", course=course, hierarchy=hierarchy))
     f = request.files.get("file")
     if not f or not f.filename:
         flash("No file chosen.")
         return back
     try:
-        items, mode = import_objectives.parse_text(f.read().decode("utf-8", "replace"))
+        rows, _mode = import_objectives.parse_coverage(
+            f.read().decode("utf-8", "replace"), default_hierarchy=hierarchy)
     except ValueError as e:
         flash(f"Upload failed: {e}")
         return back
-    with db() as conn:
-        known = {r[0] for r in conn.execute(
-            "SELECT node_id FROM nodes WHERE hierarchy=?", (hierarchy,))}
-    unknown = sorted({n for _, _, n in items if n and n not in known})
-    clean = [(u, t, (n if n in known else None)) for u, t, n in items]
-    _, stats, _, _ = import_objectives.load(DB_PATH, course, clean, hierarchy=hierarchy)
-    msg = (f"Imported {f.filename!r} ({mode}) into {hierarchy}: {stats['objectives_new']} "
-           f"new, {stats['pooled']} added to the pool, {stats['coverage']} coverage edges")
+    stats, dangling = import_objectives.upsert(DB_PATH, course, rows)
+    msg = _upsert_msg(f.filename, stats)
+    unknown = dangling.get(hierarchy, [])
     if unknown:
-        msg += (f" · {len(unknown)} id(s) not in this hierarchy (left in the pool): "
+        msg += (f" · {len(unknown)} id(s) not in this hierarchy (placement kept): "
                 f"{', '.join(unknown[:6])}{'…' if len(unknown) > 6 else ''}")
     flash(msg)
     return back
+
+
+def _upsert_msg(filename, stats):
+    msg = (f"Imported {filename!r}: {stats['objectives_new']} new, "
+           f"{stats['pooled']} added to the pool, {stats['placed']} placement(s)")
+    if stats["text_updated"]:
+        msg += f", {stats['text_updated']} text update(s)"
+    if stats["text_conflicts"]:
+        msg += f" · {stats['text_conflicts']} text update(s) skipped (text already in use)"
+    return msg
 
 
 # --------------------------------------------------------------------------
@@ -951,32 +958,28 @@ def outline_md(course):
 
 @app.route("/<course>/objectives/upload", methods=["POST"])
 def objectives_upload(course):
-    """Upload a file of objectives into the course POOL only (import_objectives):
-    plain text, or a TSV with an objective/text column. Any node-id column is
-    ignored here -- categorize on a hierarchy page (see hierarchy_upload), where
-    the target hierarchy is unambiguous."""
+    """Upload objectives for the course. Either a plain-text list (one objective
+    per line -> interned and pooled) or a full (uuid, text, hierarchy_id, node_id)
+    TSV -> objectives pooled and placed, with each named (hierarchy, objective)'s
+    placement REPLACED by its node_id (identity is the uuid; text updated to match).
+    Unknown node_ids per hierarchy are reported."""
+    back = redirect(url_for("objectives", course=course))
     f = request.files.get("file")
     if not f or not f.filename:
         flash("No file chosen.")
-        return redirect(url_for("objectives", course=course))
+        return back
     try:
-        items, mode = import_objectives.parse_text(f.read().decode("utf-8", "replace"))
+        rows, _mode = import_objectives.parse_coverage(f.read().decode("utf-8", "replace"))
     except ValueError as e:
         flash(f"Upload failed: {e}")
-        return redirect(url_for("objectives", course=course))
-    # Import here is POOL-ONLY: never create coverage edges. Categorizing an
-    # objective to a node is done on a hierarchy page, where the target hierarchy
-    # is unambiguous -- doing it here made it too easy to hit the wrong one. Strip
-    # any node-id column.
-    had_nodes = any(n for _, _, n in items)
-    items = [(u, t, None) for u, t, n in items]
-    _ref, stats, _dangling, _known = import_objectives.load(DB_PATH, course, items)
-    msg = (f"Imported {f.filename!r}: read {stats['read']}, "
-           f"{stats['objectives_new']} new objectives, {stats['pooled']} added to the pool.")
-    if had_nodes:
-        msg += " · node-id column ignored — categorize objectives on a hierarchy page."
+        return back
+    stats, dangling = import_objectives.upsert(DB_PATH, course, rows)
+    msg = _upsert_msg(f.filename, stats)
+    if dangling:
+        n = sum(len(v) for v in dangling.values())
+        msg += f" · {n} unknown node id(s) across {len(dangling)} hierarchy(ies)"
     flash(msg)
-    return redirect(url_for("objectives", course=course))
+    return back
 
 
 def _back(course):

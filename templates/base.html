@@ -24,7 +24,7 @@
     .pagetitle { font-size: 1.3rem; font-weight: 700; margin: 0 0 .9rem; }
 
     /* Left sidebar: courses -> their hierarchies (references then the outline). */
-    .sidebar { width: 460px; flex: none; background: #fff; border-right: 1px solid var(--line);
+    .sidebar { width: 345px; flex: none; background: #fff; border-right: 1px solid var(--line);
                padding: .8rem .9rem; position: sticky; top: 0; height: 100vh;
                overflow-y: auto; }
     .sidebar h1 { font-size: 1rem; margin: 0; font-weight: 700; }
@@ -68,6 +68,9 @@
              background: none; cursor: pointer; color: #c9c9c9; }
     .pstar.on { color: #e0a800; cursor: default; }
     button.pstar:hover { color: #e0a800; }
+    .objadd { margin: 0; display: inline-flex; flex: none; }
+    .miniadd { color: #bbb; cursor: pointer; font-size: .8rem; line-height: 1; padding: 0; }
+    .miniadd:hover { color: #2b6cb0; }
     .hdel { margin: 0; display: inline-flex; flex: none; visibility: hidden; }
     .sidebar ul.hiers li.hieritem:hover .hdel { visibility: visible; }
     .hdel button { border: none; background: none; cursor: pointer; color: #c4c4c4;
@@ -422,6 +425,13 @@
             </li>
             <li class="objitem {{ 'active' if request.endpoint == 'objectives' and c.course == nav_course else '' }}">
               <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
+              <form method="post" class="objadd" enctype="multipart/form-data"
+                    action="{{ url_for('objectives_upload', course=c.course) }}">
+                <label class="miniadd" title="Upload objectives — plain text (one per line), or a (uuid, text, hierarchy_id, node_id) TSV">
+                  <i class="bi bi-plus-lg"></i>
+                  <input type="file" name="file" accept=".tsv,.txt,.csv" hidden onchange="this.form.submit()">
+                </label>
+              </form>
             </li>
             {% for h in c.hierarchies %}
               <li class="hieritem {{ 'active' if h.hierarchy == active_hierarchy else '' }}">
@@ -438,6 +448,13 @@
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
                    title="{{ h.label }}">{{ h.label }}</a>
                 <span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>
+                <form method="post" class="objadd" enctype="multipart/form-data"
+                      action="{{ url_for('hierarchy_upload', course=c.course, hierarchy=h.hierarchy) }}">
+                  <label class="miniadd" title="Upload an objectives TSV (uuid, text, node_id) into this hierarchy">
+                    <i class="bi bi-plus-lg"></i>
+                    <input type="file" name="file" accept=".tsv,.txt,.csv" hidden onchange="this.form.submit()">
+                  </label>
+                </form>
                 <form method="post" class="hdel"
                       action="{{ url_for('hierarchy_delete', course=c.course, hierarchy=h.hierarchy) }}"
                       onsubmit="return confirm('Delete {{ h.hierarchy }} and its coverage edges?');">
