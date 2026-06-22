@@ -241,7 +241,9 @@ def read_course(db_path, course_dir):
         for uuid, text in reg:
             conn.execute("INSERT OR IGNORE INTO objectives(uuid, text) VALUES (?, ?)",
                          (uuid, text))
-        known_uuids = [u for (u,) in conn.execute("SELECT uuid FROM objectives")]
+        # Resolve tokens against THIS course's registry only (tokens are the
+        # shortest prefix unique within the course); newly minted uuids join it.
+        known_uuids = [u for u, _ in reg]
         pos = 0
         for otext, token, placement in bullets:
             uuid = resolve_token(token, known_uuids) if token else None
