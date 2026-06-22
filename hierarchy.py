@@ -295,3 +295,57 @@ def to_nodes(md, title=None):
         "levels": levels,
         "nodes": nodes,
     }
+
+
+def _flavor_for_tags(used):
+    """The heading-based flavor whose level tags cover the set `used`. The 'course'
+    flavor is skipped (its level-3 is bulleted, not headings, so it can't be
+    round-tripped by to_markdown). Raises ValueError if none fits."""
+    for flavor, levels in LEVEL_TAGS.items():
+        if flavor != "course" and set(used) <= set(levels.values()):
+            return flavor
+    raise ValueError(f"no heading-based flavor for tags {sorted(used)}")
+
+
+def _level1_heading(flavor, n, node_id, head):
+    """A level-1 heading line, the inverse of parse_top_heading. `n` is the 1-based
+    position among level-1 nodes (only used to number CSP big ideas)."""
+    if flavor == "csp":
+        return f"# Big Idea {n}: {head} ({node_id})"
+    if flavor == "ib":
+        return f"# Theme {node_id}: {head}"
+    if flavor == "book":
+        return f"# Chapter {node_id}: {head}"
+    return f"# Unit {node_id}: {head}"   # csa
+
+
+def to_markdown(rows, title=None, kind=None):
+    """Serialize already-parsed nodes back to hierarchy markdown that `to_nodes`
+    re-parses to the same nodes. `rows` are mappings with keys node_id, level (the
+    TAG string, e.g. 'unit'), and text, in document (pre-order) order. Emits
+    optional `title`/`kind` front matter. Heading-based flavors only -- raises
+    ValueError for tags it can't represent (e.g. the bulleted 'course' flavor)."""
+    flavor = _flavor_for_tags({r["level"] for r in rows})
+    level_of = {tag: lvl for lvl, tag in LEVEL_TAGS[flavor].items()}
+    out = []
+    if title or kind:
+        out.append("---")
+        if title:
+            out.append(f"title: {title}")
+        if kind:
+            out.append(f"kind: {kind}")
+        out.extend(("---", ""))
+    n1 = 0
+    for r in rows:
+        lines = (r["text"] or "").split("\n")
+        head, body = lines[0], lines[1:]
+        lvl = level_of[r["level"]]
+        if out and out[-1] != "":
+            out.append("")   # readability blank before each node (trimmed on reparse)
+        if lvl == 1:
+            n1 += 1
+            out.append(_level1_heading(flavor, n1, r["node_id"], head))
+        else:
+            out.append(f"{'#' * lvl} {r['node_id']} {head}".rstrip())
+        out.extend(body)
+    return "\n".join(out).rstrip() + "\n"

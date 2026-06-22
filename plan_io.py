@@ -404,9 +404,32 @@ def render_course(conn, course):
              COVERAGE_TSV: cov_buf.getvalue()}, len(pool), len(cov))
 
 
+def _reference_files(conn, course):
+    """{<slug>.md: markdown} for each reference hierarchy, serialized from its db
+    nodes so the corpus is self-contained (reloadable). Skips a hierarchy whose
+    flavor to_markdown can't represent (e.g. bulleted 'course')."""
+    conn.row_factory = sqlite3.Row
+    files = {}
+    for h in conn.execute("SELECT hierarchy, kind, title FROM hierarchies "
+                          "WHERE course=? AND editable=0", (course,)).fetchall():
+        rows = [dict(r) for r in conn.execute(
+            "SELECT node_id, level, text FROM nodes WHERE hierarchy=? ORDER BY ordinal, node_id",
+            (h["hierarchy"],))]
+        if not rows:
+            continue
+        try:
+            files[f"{h['hierarchy']}.md"] = hierarchy.to_markdown(
+                rows, title=h["title"], kind=h["kind"])
+        except ValueError:
+            continue
+    return files
+
+
 def write_course(db_path, course, course_dir):
-    """Serialize a course's authored state to `course_dir`: plan.md + the two
-    TSVs. Reference markdown files are inputs and are left untouched.
+    """Serialize a course's authored state to `course_dir`: plan.md + the two TSVs,
+    plus a markdown file for each reference hierarchy that isn't already on disk
+    (so the corpus is self-contained / reloadable). An existing reference .md --
+    hand-authored or uploaded, same nodes but different formatting -- is left as is.
 
     Returns (plan_path, n_objectives, n_coverage).
     """
@@ -414,18 +437,26 @@ def write_course(db_path, course, course_dir):
     conn = sqlite3.connect(db_path)
     try:
         files, n_obj, n_cov = render_course(conn, course)
+        ref_files = _reference_files(conn, course)
     finally:
         conn.close()
     for name, text in files.items():
         with open(os.path.join(course_dir, name), "w", encoding="utf-8", newline="") as f:
             f.write(text)
+    for name, text in ref_files.items():
+        path = os.path.join(course_dir, name)
+        if not os.path.exists(path):   # don't churn an existing reference file
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(text)
     return os.path.join(course_dir, PLAN_FILE), n_obj, n_cov
 
 
 def is_dirty(conn, course, course_dir):
-    """True if the on-disk corpus differs from what write_course would now produce
-    (or any file is missing) -- i.e. the course has unsaved changes. False when the
-    course is absent or fully in sync."""
+    """True if the course has unsaved changes: the authored files (plan.md + TSVs)
+    differ from what write_course would produce, or any reference hierarchy has no
+    .md on disk yet. (References are read-only, so once present they're in sync --
+    an existence check keeps this cheap, no per-render serialization.) False when
+    the course is absent or fully in sync."""
     try:
         files, _n_obj, _n_cov = render_course(conn, course)
     except KeyError:
@@ -436,6 +467,10 @@ def is_dirty(conn, course, course_dir):
                 if f.read() != text:
                     return True
         except FileNotFoundError:
+            return True
+    for (slug,) in conn.execute(
+            "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0", (course,)):
+        if not os.path.exists(os.path.join(course_dir, f"{slug}.md")):
             return True
     return False
 
