@@ -32,17 +32,22 @@ from markupsafe import Markup
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO_ROOT)
 import course_bundle  # noqa: E402
-import export_planning  # noqa: E402
+import hierarchy  # noqa: E402
 import seed as seed_module  # noqa: E402
 import import_objectives  # noqa: E402
 import load_nodes  # noqa: E402
-import rebuild_db  # noqa: E402
+import plan_io  # noqa: E402
 import render_outline  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
 )
-EXPORT_DIR = os.path.join(os.path.dirname(__file__), "export")
+# The corpus: a directory of course directories that is BOTH the load source and
+# the export target (markdown hierarchies + objectives.tsv / coverage.tsv per
+# course). See FORMAT.md / plan_io.py. Tracked in git -- the canonical state.
+CORPUS_DIR = os.environ.get(
+    "LESSON_CORPUS_DIR", os.path.join(os.path.dirname(__file__), "courses")
+)
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 app = Flask(__name__)
@@ -465,9 +470,9 @@ def help_page():
 
 
 # --------------------------------------------------------------------------
-# Data: bootstrap & populate from files / version control. These wire the
-# load_nodes / import_planning / rebuild_db library functions to the UI so the
-# whole lifecycle -- start empty, load real data, snapshot -- happens in the app.
+# Data: bootstrap & populate from the corpus / version control. These wire the
+# load_nodes / plan_io / seed library functions to the UI so the whole lifecycle
+# -- start empty, load real data, export markdown -- happens in the app.
 
 @app.route("/data")
 def data():
@@ -478,27 +483,19 @@ def data():
         cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
         n_obj = conn.execute("SELECT count(*) FROM objectives").fetchone()[0]
     return render_template("data.html", courses=cs, n_obj=n_obj,
-                           export_dir=os.path.relpath(EXPORT_DIR, REPO_ROOT),
+                           export_dir=os.path.relpath(CORPUS_DIR, REPO_ROOT),
                            page_title="Settings")
 
 
 @app.route("/data/restore", methods=["POST"])
 def data_restore():
-    """Restore everything from version control: load any reference nodes from the
-    configured hierarchy markdown files (none by default in this generic tool --
-    upload yours via the form above first), then the planning tables from the
-    export dir (rebuild_db's populate step -- WITHOUT the destructive db-file
-    delete)."""
-    specs = [dict(s, path=os.path.join(REPO_ROOT, s["path"]))
-             for s in rebuild_db.DEFAULT_HIERARCHIES]
-    node_loads, table_loads = rebuild_db.populate(DB_PATH, EXPORT_DIR, specs)
-    refs = ", ".join(f"{slug} ({n})" for _, slug, _, n in node_loads if slug) or "none"
-    tables = ", ".join(f"{t} ({n})" for t, n in table_loads) or "none"
-    missing = [os.path.relpath(p, REPO_ROOT) for p, slug, _, _ in node_loads if slug is None]
-    msg = f"Restored from version control · references: {refs} · planning: {tables}"
-    if missing:
-        msg += f" · skipped missing file(s): {', '.join(missing)}"
-    flash(msg)
+    """Restore everything from version control: reload every course in the corpus
+    directory from its markdown + TSVs (each read_course is a scoped replace, so
+    un-exported in-db edits to those courses are overwritten)."""
+    dirs = seed_module.course_dirs(CORPUS_DIR)
+    seed_module.load_corpus(DB_PATH, CORPUS_DIR)
+    names = ", ".join(os.path.basename(d) for d in dirs) or "none"
+    flash(f"Restored from {os.path.relpath(CORPUS_DIR, REPO_ROOT)} · courses: {names}")
     return redirect(url_for("data"))
 
 
@@ -573,10 +570,11 @@ def set_primary_reference(course):
 
 @app.route("/<course>/hierarchy/load", methods=["POST"])
 def hierarchy_load_course(course):
-    """Load an uploaded node-list JSON as a reference hierarchy of THIS course.
-    The course is fixed by context; flavor comes from the document; kind defaults
-    from the flavor and the slug defaults to <course>-<kind> (NOT the flavor's own
-    slug). Optional form fields override kind / slug / title."""
+    """Load an uploaded hierarchy MARKDOWN file as a reference of THIS course, and
+    persist it into the course's corpus directory so the on-disk corpus stays
+    complete. The course is fixed by context; flavor/kind/title come from the
+    markdown (front matter); the slug defaults to <course>-<kind>. Optional form
+    fields override kind / slug / title."""
     with db() as conn:
         crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
         if not crow:
@@ -585,20 +583,26 @@ def hierarchy_load_course(course):
     if not f or not f.filename:
         flash("No file chosen.")
         return redirect(url_for("setup", course=course))
+    text = f.read().decode("utf-8", "replace")
     try:
-        doc = load_nodes.load_doc(json.loads(f.read().decode("utf-8", "replace")))
+        doc = load_nodes.parse(text)
         flavor = doc["flavor"]
-    except Exception as e:  # bad JSON, unsupported version, or missing flavor
+    except Exception as e:  # unparseable markdown / unknown flavor
         flash(f"Could not load {f.filename!r}: {e}")
         return redirect(url_for("setup", course=course))
     over = lambda k: (request.form.get(k) or "").strip() or None
-    # Resolve kind/title: explicit form override, else what the doc carries, else
-    # derived (kind from flavor; title from course+kind inside load_nodes.load).
+    # Resolve kind/title: explicit form override, else what the markdown carries,
+    # else derived (kind from flavor; title from course+kind inside load_nodes.load).
     kind = over("kind") or doc.get("kind") or load_nodes.meta_for(flavor)["kind"]
     slug = over("hierarchy") or f"{course}-{kind}"
     title = over("title") or doc.get("title")
     m = load_nodes.meta_for(flavor, course=course, kind=kind, slug=slug)
     rows = load_nodes.build_rows(m["slug"], doc["nodes"])
+    # Persist the markdown into the corpus as <slug>.md (the load source of truth).
+    course_dir = os.path.join(CORPUS_DIR, course)
+    os.makedirs(course_dir, exist_ok=True)
+    with open(os.path.join(course_dir, f"{m['slug']}.md"), "w", encoding="utf-8") as out:
+        out.write(text if text.endswith("\n") else text + "\n")
     # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage
     # edges into ids the new version no longer has (a renamed/removed id surfaces).
     new_ids = {r[1] for r in rows}
@@ -1063,11 +1067,13 @@ def objective_edit(course, uuid):
 
 @app.route("/<course>/export", methods=["POST"])
 def export(course):
-    written, pruned = export_planning.export(DB_PATH, EXPORT_DIR)
-    msg = "Exported snapshot: " + ", ".join(f"{t} ({n})" for t, n in written)
-    if pruned:
-        msg += " · removed " + ", ".join(pruned)
-    flash(msg)
+    """Serialize this course back to its corpus directory: plan.md (the outline +
+    course wiring) plus objectives.tsv / coverage.tsv. Reference markdown files are
+    inputs and are left untouched."""
+    course_dir = os.path.join(CORPUS_DIR, course)
+    plan_path, n_obj, n_cov = plan_io.write_course(DB_PATH, course, course_dir)
+    rel = os.path.relpath(course_dir, REPO_ROOT)
+    flash(f"Exported {course!r} to {rel}/ · {n_obj} objectives, {n_cov} coverage edges")
     return redirect(request.referrer or url_for("objectives", course=course))
 
 
@@ -1243,14 +1249,12 @@ def lesson_arrange(course):
 
 ensure_schema()
 
-# Optional unattended population: with LESSON_SEED_DIR set, create+load any course
-# in its manifest.toml that doesn't already exist (see seed.py / the plan). Safe to
-# run every boot; never fatal.
-_seed_dir = os.environ.get("LESSON_SEED_DIR")
-if _seed_dir:
+# Unattended population: load any course in the corpus directory that doesn't
+# already exist (see seed.py). Safe to run every boot; never fatal.
+if os.path.isdir(CORPUS_DIR):
     try:
-        seed_module.seed(DB_PATH, _seed_dir)
-    except Exception as e:  # a broken seed must not stop the app booting
+        seed_module.seed(DB_PATH, CORPUS_DIR)
+    except Exception as e:  # a broken corpus must not stop the app booting
         print(f"seed: failed: {e}", file=sys.stderr)
 
 

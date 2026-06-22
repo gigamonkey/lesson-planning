@@ -4,10 +4,9 @@
 {% block body %}
 <div class="help">
   <p>Manage the reference hierarchies behind <b>{{ course|upper }}</b>. Add a
-     hierarchy by uploading its node-list JSON (from the hierarchy-extractors
-     repo's <code>build_hierarchy_json.py</code>); the course outline itself is
-     edited on the <a href="{{ url_for('plan', course=course) }}">Course outline</a>
-     page.</p>
+     hierarchy by uploading its <b>markdown</b> (hand-authored, or produced by the
+     hierarchy-extractors repo); the course outline itself is edited on the
+     <a href="{{ url_for('plan', course=course) }}">Course outline</a> page.</p>
 
   <h2>Reference hierarchies</h2>
   {% if refs %}
@@ -46,12 +45,13 @@
   {% endif %}
 
   <h2>Add a hierarchy</h2>
-  <p>Upload a node-list JSON file. The flavor comes from the document; the kind
-     defaults from it and the slug defaults to <code>{{ course }}-&lt;kind&gt;</code>.
-     Re-uploading a hierarchy replaces its nodes.</p>
+  <p>Upload a hierarchy <b>markdown</b> file. The flavor is detected from its
+     headings; the kind defaults from the markdown (front matter) and the slug
+     defaults to <code>{{ course }}-&lt;kind&gt;</code>. The file is saved into the
+     course's corpus directory; re-uploading replaces its nodes.</p>
   <form method="post" action="{{ url_for('hierarchy_load_course', course=course) }}"
         enctype="multipart/form-data" class="dataform">
-    <p><input type="file" name="file" accept=".json" required></p>
+    <p><input type="file" name="file" accept=".md" required></p>
     <p>
       <label>Kind
         <select name="kind">

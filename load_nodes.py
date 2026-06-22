@@ -1,13 +1,12 @@
-"""Load a hierarchy node-list JSON file into the lesson-planning `nodes` table.
+"""Load a hierarchy markdown file into the lesson-planning `nodes` table.
 
-Consumes the node-list JSON emitted by the hierarchy-extractors repo's
-`build_hierarchy_json.py` -- the cross-repo data contract (see that repo's
-`json-format.md`). Each node already carries its resolved level `tag`, structural
-`parent`, leaf flag, sibling ordinal, and text, so this loader does **no markdown
-parsing** and needs no curriculum-flavor knowledge beyond mapping the `flavor`
-string to local course/kind/slug policy (`FLAVOR_META`). It flattens the document
-into one uniform table so the app can run gap/coverage queries without caring
-about the per-flavor level structure:
+Parses a curriculum-hierarchy markdown file directly (via the in-repo
+`hierarchy.py`, which this repo now owns -- see `FORMAT.md`) into a flat,
+already-tagged node list, then flattens that into one uniform table. Each node
+carries its resolved level `tag`, structural `parent`, leaf flag, sibling
+ordinal, and text, so the app can run gap/coverage queries without caring about
+the per-flavor level structure; the only curriculum-flavor knowledge here is
+mapping the detected `flavor` to local course/kind/slug policy (`FLAVOR_META`):
 
     nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)
 
@@ -20,16 +19,17 @@ several hierarchies can share one database. The hierarchy is registered in
 `course` is upserted into `courses` -- the slug/course/kind default from the
 document's flavor and can be overridden with the matching flags.
 
-    uv run load_nodes.py my-course-hierarchy.json db.db
-    uv run load_nodes.py another-hierarchy.json db.db --course mycourse
+    uv run load_nodes.py my-course-hierarchy.md db.db
+    uv run load_nodes.py another-hierarchy.md db.db --course mycourse
 
-Author hierarchies as markdown, then run `build_hierarchy_json.py` (in the
-hierarchy-extractors repo) to produce the JSON this loads.
+The title and kind come from the markdown's `---` front matter (`title:` /
+`kind:`); both fall back to per-flavor defaults.
 """
 
 import argparse
-import json
 import sqlite3
+
+import hierarchy
 
 DDL = """
 CREATE TABLE IF NOT EXISTS nodes (
@@ -96,18 +96,28 @@ def hierarchy_title(course, kind):
     return f"{course.upper()} {kind_label(course, kind)}"
 
 
+def parse(text):
+    """Parse hierarchy markdown into a node-list document (hierarchy.to_nodes).
+
+    Returns {version, flavor, title, kind, levels, nodes:[...]} -- the same shape
+    `build_rows`/`load` consume. Title and kind come from the markdown's front
+    matter (with per-flavor kind fallback). Raises SystemExit on unparseable
+    markdown (propagated from hierarchy.py).
+    """
+    return load_doc(hierarchy.to_nodes(text))
+
+
 def load_doc(doc):
-    """Validate a node-list JSON document and return it.
+    """Validate a parsed hierarchy document and return it.
 
     Checks only the format's MAJOR version (minor/patch are backward-compatible
-    and unknown fields are ignored, per the contract). Raises ValueError on an
-    unsupported major.
+    and unknown fields are ignored). Raises ValueError on an unsupported major.
     """
     version = str(doc.get("version", ""))
     major = version.split(".")[0]
     if not major.isdigit() or int(major) != FORMAT_MAJOR:
         raise ValueError(
-            f"unsupported node-list JSON version {version!r} "
+            f"unsupported hierarchy format version {version!r} "
             f"(this loader handles major {FORMAT_MAJOR})")
     return doc
 
@@ -127,6 +137,29 @@ def build_rows(hierarchy, nodes):
     ]
 
 
+def load_into(conn, slug, course, kind, course_title, rows, source=None, title=None):
+    """Replace one reference hierarchy's nodes + register it, on a caller's conn.
+
+    Does not commit (the caller owns the transaction). See `load` for the
+    self-contained, db_path-taking wrapper.
+    """
+    conn.execute(COURSES_DDL)
+    conn.execute(HIERARCHIES_DDL)
+    conn.execute(DDL)
+    conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)"
+                 " ON CONFLICT(course) DO NOTHING",
+                 (course, course_title))
+    conn.execute("DELETE FROM nodes WHERE hierarchy = ?", (slug,))
+    conn.executemany("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+    title = title or hierarchy_title(course, kind)
+    conn.execute(
+        "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
+        " VALUES (?, ?, ?, 0, ?, ?)"
+        " ON CONFLICT(hierarchy) DO UPDATE SET course=excluded.course, kind=excluded.kind,"
+        " editable=0, title=excluded.title, source=excluded.source",
+        (slug, course, kind, title, source))
+
+
 def load(db_path, slug, course, kind, course_title, rows, source=None, title=None):
     """Replace one reference hierarchy's nodes and register its course/hierarchy.
 
@@ -137,23 +170,7 @@ def load(db_path, slug, course, kind, course_title, rows, source=None, title=Non
     """
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute(COURSES_DDL)
-        conn.execute(HIERARCHIES_DDL)
-        conn.execute(DDL)
-        conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)"
-                     " ON CONFLICT(course) DO NOTHING",
-                     (course, course_title))
-        conn.execute("DELETE FROM nodes WHERE hierarchy = ?", (slug,))
-        conn.executemany(
-            "INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)", rows
-        )
-        title = title or hierarchy_title(course, kind)
-        conn.execute(
-            "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
-            " VALUES (?, ?, ?, 0, ?, ?)"
-            " ON CONFLICT(hierarchy) DO UPDATE SET course=excluded.course, kind=excluded.kind,"
-            " editable=0, title=excluded.title, source=excluded.source",
-            (slug, course, kind, title, source))
+        load_into(conn, slug, course, kind, course_title, rows, source, title)
         conn.commit()
     finally:
         conn.close()
@@ -161,17 +178,17 @@ def load(db_path, slug, course, kind, course_title, rows, source=None, title=Non
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("input", help="hierarchy node-list JSON file")
+    parser.add_argument("input", help="hierarchy markdown file")
     parser.add_argument("database", help="SQLite database file")
     parser.add_argument("--hierarchy", help="hierarchy slug (default: derived from flavor)")
     parser.add_argument("--course", help="course id (default: derived from flavor)")
-    parser.add_argument("--kind", help="hierarchy kind/type (default: derived from flavor)")
+    parser.add_argument("--kind", help="hierarchy kind/type (default: front matter / flavor)")
     parser.add_argument("--course-title", dest="course_title",
                         help="course title (default: derived from flavor)")
     args = parser.parse_args()
 
     with open(args.input) as f:
-        doc = load_doc(json.load(f))
+        doc = parse(f.read())
     flavor = doc["flavor"]
     m = meta_for(flavor, args.course, args.kind or doc.get("kind"),
                  args.hierarchy, args.course_title)

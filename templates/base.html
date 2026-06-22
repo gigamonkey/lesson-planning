@@ -400,7 +400,7 @@
         </span>
         {% if course_nav %}
         <form method="post" action="{{ url_for('export', course=nav_course or course_nav[0].course) }}">
-          <button type="submit">Export snapshot</button>
+          <button type="submit" title="Write this course's plan.md + objectives.tsv / coverage.tsv to the corpus">Export</button>
         </form>
         {% endif %}
       </div>

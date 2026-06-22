@@ -6,10 +6,10 @@ objectives (text + pool membership/order) and the coverage edges into its
 hierarchies, plus its outline<->reference targets. Import recreates it all in one
 transaction.
 
-This is additive to the export/ TSV snapshot mechanism (export_planning.py /
-rebuild_db.py): the snapshots are the git-diffable committed state of the whole
-db; a bundle makes a single course portable as one file (move it between
-databases, or delete-and-restore one course).
+This is additive to the markdown corpus (plan_io.py / seed.py / rebuild_db.py):
+the corpus -- a directory of course directories of markdown + TSVs -- is the
+git-diffable committed state; a bundle makes a single course portable as one
+self-contained file (move it between databases, or delete-and-restore one course).
 
     uv run course_bundle.py export db.db <course> [out.json]
     uv run course_bundle.py import db.db <bundle.json> [--as <course>]

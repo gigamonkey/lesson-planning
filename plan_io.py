@@ -1,0 +1,420 @@
+"""Read and write a course as a directory of markdown + two normalized TSVs.
+
+This is the storage half of "markdown is the fundamental on-disk form of a
+course" (see `plans/markdown-as-storage.md` and `FORMAT.md`). A course directory
+holds:
+
+  * one or more REFERENCE hierarchy markdown files (csa/csp/ib/book flavor) --
+    load-only inputs, never rewritten here (loaded via load_nodes);
+  * the OUTLINE `plan.md` (course flavor) -- the one hierarchy this module writes,
+    whose front matter also carries the course-level wiring (course id, title,
+    primary_reference, primary_outline, targets);
+  * `objectives.tsv` (uuid, text) -- the full uuid<->text registry for the pool;
+  * `coverage.tsv` (uuid, hierarchy_id, node_id) -- the many-to-many coverage
+    edges into the REFERENCE hierarchies (outline placement is structural in
+    plan.md, so it is NOT duplicated here).
+
+`read_course` loads such a directory into the database; `write_course` serializes
+a course back out to one. The corpus root is both the load source and the export
+target, so the pair round-trips. Objective identity rides on a short uuid token
+`(#abcd)` on each bullet, resolved by prefix against `objectives.tsv` -- never a
+full uuid in the markdown. See FORMAT.md for the format.
+"""
+
+import csv
+import os
+import re
+import sqlite3
+
+import hierarchy
+import load_nodes
+
+# A trailing identity token on an objective bullet: " (#abcd)". Recognized only as
+# the LAST parenthesized group of hex with a '#' sigil, so literal parens in the
+# objective text are never mistaken for it.
+TOKEN_RE = re.compile(r"\s*\(#([0-9a-fA-F]+)\)\s*$")
+LO_RE = re.compile(r"^\*\*Learning objective:\*\*\s*(.*)$")
+LESSON_RE = re.compile(r"^(\S+)(?:\s+(.*))?$")   # "1.1 Title" -> id, title
+TOKEN_FLOOR = 4   # shortest token length, to limit diff churn / accidental clashes
+
+PLAN_FILE = "plan.md"
+OBJECTIVES_TSV = "objectives.tsv"
+COVERAGE_TSV = "coverage.tsv"
+OUTLINE_KIND = "course-outline"
+
+
+# --------------------------------------------------------------------------
+# uuid tokens
+
+def abbrev_tokens(uuids, floor=TOKEN_FLOOR):
+    """Map each uuid to its shortest prefix that is unique among `uuids`.
+
+    Falls back to the whole uuid if even that is not unique (duplicate uuids
+    shouldn't happen). Never shorter than `floor`.
+    """
+    uuids = list(uuids)
+    out = {}
+    for u in uuids:
+        length = min(floor, len(u))
+        while length < len(u) and sum(1 for v in uuids if v[:length] == u[:length]) > 1:
+            length += 1
+        out[u] = u[:length]
+    return out
+
+
+def resolve_token(token, uuids):
+    """The unique uuid in `uuids` that starts with `token`, or None if 0 or >1."""
+    matches = [u for u in uuids if u.startswith(token.lower())]
+    return matches[0] if len(matches) == 1 else None
+
+
+# --------------------------------------------------------------------------
+# front matter (a comma-separated `targets:` list rides the scalar parser)
+
+def _split_list(value):
+    return [v.strip() for v in (value or "").split(",") if v.strip()]
+
+
+def _emit_front_matter(meta):
+    lines = ["---"]
+    for key in ("course", "title", "primary_reference", "primary_outline", "targets"):
+        val = meta.get(key)
+        if val:
+            lines.append(f"{key}: {val}")
+    lines.append("---")
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# parsing plan.md
+
+def parse_plan(text):
+    """Parse a plan.md into (meta, units, lessons, los, bullets).
+
+    units   : [(node_id, title)]                positional ids "1", "2", ...
+    lessons : [(node_id, parent_unit_id, title)] positional ids "1.1", "1.2", ...
+    los     : {lesson_id: learning_objective_text}
+    bullets : [(text, token|None, placement_lesson_id|None)] in document order
+              (placement None == pooled / not placed in a lesson)
+    """
+    meta, body = hierarchy.parse_front_matter(text)
+    units, lessons, los, bullets = [], [], {}, []
+    unit_n = 0
+    lesson_n = 0
+    cur_unit = None      # current unit node_id
+    cur_lesson = None    # current lesson node_id (None inside the pool / no lesson)
+    in_pool = False
+
+    for line in body.splitlines():
+        m = hierarchy.HEADING.match(line)
+        if m:
+            depth, rest = len(m.group(1)), m.group(2).strip()
+            if depth == 1:
+                um = hierarchy.UNIT.match(rest)
+                title = um.group(2) if um else rest
+                unit_n += 1
+                lesson_n = 0
+                cur_unit = str(unit_n)
+                cur_lesson, in_pool = None, False
+                units.append((cur_unit, title))
+            elif depth == 2:
+                if rest.lower().startswith("pool"):
+                    cur_lesson, in_pool = None, True
+                    continue
+                lm = LESSON_RE.match(rest)
+                title = (lm.group(2) or "").strip() if lm else rest
+                lesson_n += 1
+                cur_lesson = f"{cur_unit}.{lesson_n}" if cur_unit else str(lesson_n)
+                in_pool = False
+                lessons.append((cur_lesson, cur_unit, title))
+            continue
+        lo = LO_RE.match(line)
+        if lo and cur_lesson:
+            los[cur_lesson] = lo.group(1).strip()
+            continue
+        b = hierarchy.OBJECTIVE_BULLET.match(line)
+        if b:
+            raw = b.group(1)
+            tok = TOKEN_RE.search(raw)
+            token = tok.group(1) if tok else None
+            otext = TOKEN_RE.sub("", raw).strip() if tok else raw.strip()
+            placement = None if in_pool else cur_lesson
+            bullets.append((otext, token, placement))
+    return meta, units, lessons, los, bullets
+
+
+# --------------------------------------------------------------------------
+# load: directory -> database
+
+def _md_files(course_dir):
+    return sorted(f for f in os.listdir(course_dir)
+                  if f.endswith(".md") and os.path.isfile(os.path.join(course_dir, f)))
+
+
+def _slug_of(path, meta):
+    return meta.get("slug") or os.path.splitext(os.path.basename(path))[0]
+
+
+def read_course(db_path, course_dir):
+    """Load one course directory into the database. Idempotent: the course's
+    existing hierarchies/coverage/pool are cleared first, then rebuilt from disk.
+
+    Returns (course, n_refs, n_objectives) for reporting.
+    """
+    # Find the plan file (the .md whose front matter carries a `course:` key) and
+    # classify the rest as reference hierarchies.
+    plan_path, refs = None, []
+    for fn in _md_files(course_dir):
+        path = os.path.join(course_dir, fn)
+        with open(path, encoding="utf-8") as f:
+            meta, _ = hierarchy.parse_front_matter(f.read())
+        if "course" in meta:
+            plan_path = path
+        else:
+            refs.append(path)
+    if not plan_path:
+        raise ValueError(f"no plan.md (a .md with a 'course:' front-matter key) in {course_dir}")
+
+    with open(plan_path, encoding="utf-8") as f:
+        meta, units, lessons, los, bullets = parse_plan(f.read())
+    course = meta["course"]
+    title = meta.get("title") or course.upper()
+    outline = _slug_of(plan_path, meta)
+    targets = _split_list(meta.get("targets"))
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(SCHEMA_DDL)
+        # Scoped reset: drop everything owned by this course, then rebuild.
+        hs = [h for (h,) in conn.execute(
+            "SELECT hierarchy FROM hierarchies WHERE course=?", (course,))] + [outline]
+        ph = ",".join("?" * len(hs))
+        for tbl in ("coverage", "node_attr", "nodes"):
+            conn.execute(f"DELETE FROM {tbl} WHERE hierarchy IN ({ph})", hs)
+        conn.execute(f"DELETE FROM hierarchy_targets WHERE outline IN ({ph})", hs)
+        conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
+        conn.execute("DELETE FROM hierarchies WHERE course=?", (course,))
+        conn.execute(
+            "INSERT INTO courses(course, title, primary_reference, primary_outline)"
+            " VALUES (?, ?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
+            " primary_reference=excluded.primary_reference, primary_outline=excluded.primary_outline",
+            (course, title, meta.get("primary_reference"), outline))
+
+        # Reference hierarchies (editable=0), parsed straight from markdown.
+        n_refs = 0
+        for path in refs:
+            with open(path, encoding="utf-8") as f:
+                doc = load_nodes.parse(f.read())
+            slug = doc.get("slug") or os.path.splitext(os.path.basename(path))[0]
+            rows = load_nodes.build_rows(slug, doc["nodes"])
+            load_nodes.load_into(conn, slug, course, doc.get("kind") or "reference",
+                                 title, rows, source=os.path.basename(path),
+                                 title=doc.get("title"))
+            n_refs += 1
+
+        # Outline hierarchy (editable=1): units + lessons as positional nodes.
+        conn.execute(
+            "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
+            " VALUES (?, ?, ?, 1, ?, ?)",
+            (outline, course, OUTLINE_KIND, "Course outline", os.path.basename(plan_path)))
+        ordinal = 0
+        unit_has_lesson = {u: False for u, _ in units}
+        for _, parent, _ in lessons:
+            if parent in unit_has_lesson:
+                unit_has_lesson[parent] = True
+        for uid, utitle in units:
+            conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                         (outline, uid, None, "unit", 0 if unit_has_lesson[uid] else 1,
+                          ordinal, utitle))
+            ordinal += 1
+        for lid, parent, ltitle in lessons:
+            conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                         (outline, lid, parent, "lesson", 1, ordinal, ltitle))
+            ordinal += 1
+            if los.get(lid):
+                conn.execute("INSERT INTO node_attr(hierarchy, node_id, name, value)"
+                             " VALUES (?, ?, 'learning_objective', ?)", (outline, lid, los[lid]))
+
+        # Objectives: seed the uuid<->text registry, then resolve each bullet's
+        # token (by prefix) to a uuid, or intern by text / mint a fresh uuid.
+        reg = _read_objectives_tsv(course_dir)        # [(uuid, text)]
+        for uuid, text in reg:
+            conn.execute("INSERT OR IGNORE INTO objectives(uuid, text) VALUES (?, ?)",
+                         (uuid, text))
+        known_uuids = [u for (u,) in conn.execute("SELECT uuid FROM objectives")]
+        pos = 0
+        for otext, token, placement in bullets:
+            uuid = resolve_token(token, known_uuids) if token else None
+            if uuid:
+                # Token wins: markdown text is the source of truth -> adopt it.
+                conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (otext, uuid))
+            else:
+                row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (otext,)).fetchone()
+                if row:
+                    uuid = row[0]
+                else:
+                    uuid = _new_uuid()
+                    conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (uuid, otext))
+                    known_uuids.append(uuid)
+            conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid, position)"
+                         " VALUES (?, ?, ?)", (course, uuid, pos))
+            pos += 1
+            if placement:
+                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
+                             " VALUES (?, ?, ?)", (outline, uuid, placement))
+
+        # Reference coverage edges (many-to-many across hierarchies).
+        for uuid, hid, node_id in _read_coverage_tsv(course_dir):
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
+                         " VALUES (?, ?, ?)", (hid, uuid, node_id))
+
+        # Outline -> reference targets.
+        for ref in targets:
+            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
+                         " VALUES (?, ?)", (outline, ref))
+        conn.commit()
+        n_obj = conn.execute("SELECT count(*) FROM course_objectives WHERE course=?",
+                             (course,)).fetchone()[0]
+    finally:
+        conn.close()
+    return course, n_refs, n_obj
+
+
+def _read_objectives_tsv(course_dir):
+    path = os.path.join(course_dir, OBJECTIVES_TSV)
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        return [(r["uuid"], r["text"]) for r in reader if r.get("uuid")]
+
+
+def _read_coverage_tsv(course_dir):
+    path = os.path.join(course_dir, COVERAGE_TSV)
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        return [(r["uuid"], r["hierarchy_id"], r["node_id"]) for r in reader if r.get("uuid")]
+
+
+def _new_uuid():
+    import uuid as uuidlib
+    return str(uuidlib.uuid4())
+
+
+# --------------------------------------------------------------------------
+# export: database -> directory
+
+def write_course(db_path, course, course_dir):
+    """Serialize a course's authored state to `course_dir`: plan.md + the two
+    TSVs. Reference markdown files are inputs and are left untouched.
+
+    Returns (plan_path, n_objectives, n_coverage).
+    """
+    os.makedirs(course_dir, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        crow = conn.execute("SELECT course, title, primary_reference, primary_outline"
+                            " FROM courses WHERE course=?", (course,)).fetchone()
+        if not crow:
+            raise KeyError(course)
+        outline = crow["primary_outline"] or _first_outline(conn, course)
+
+        units = conn.execute("SELECT node_id, text FROM nodes WHERE hierarchy=? AND level='unit'"
+                            " ORDER BY ordinal", (outline,)).fetchall()
+        lessons = conn.execute("SELECT node_id, parent_id, text FROM nodes WHERE hierarchy=?"
+                             " AND level='lesson' ORDER BY ordinal", (outline,)).fetchall()
+        los = {r["node_id"]: r["value"] for r in conn.execute(
+            "SELECT node_id, value FROM node_attr WHERE hierarchy=? AND name='learning_objective'",
+            (outline,))}
+        placed = {}   # lesson_id -> [uuid]
+        for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (outline,)):
+            placed.setdefault(r["node_id"], []).append(r["uuid"])
+
+        pool = conn.execute("SELECT co.uuid, co.position, o.text FROM course_objectives co"
+                          " JOIN objectives o ON o.uuid=co.uuid WHERE co.course=?"
+                          " ORDER BY co.position, o.text", (course,)).fetchall()
+        text_of = {r["uuid"]: r["text"] for r in pool}
+        position = {r["uuid"]: (r["position"] if r["position"] is not None else 0) for r in pool}
+        tokens = abbrev_tokens([r["uuid"] for r in pool])
+
+        def bullet(uuid):
+            return f"- {text_of.get(uuid, '')}  (#{tokens.get(uuid, uuid[:TOKEN_FLOOR])})"
+
+        meta = {"course": course, "title": crow["title"],
+                "primary_reference": crow["primary_reference"],
+                "primary_outline": outline,
+                "targets": ", ".join(r["reference"] for r in conn.execute(
+                    "SELECT reference FROM hierarchy_targets WHERE outline=? ORDER BY reference",
+                    (outline,)))}
+
+        out = [_emit_front_matter(meta), ""]
+        lessons_by_unit = {}
+        for L in lessons:
+            lessons_by_unit.setdefault(L["parent_id"], []).append(L)
+        for i, u in enumerate(units, 1):
+            out.append(f"# Unit {i}: {u['text']}")
+            out.append("")
+            for L in lessons_by_unit.get(u["node_id"], []):
+                num = L["node_id"]
+                out.append(f"## {num} {L['text']}".rstrip())
+                out.append("")
+                if los.get(L["node_id"]):
+                    out.append(f"**Learning objective:** {los[L['node_id']]}")
+                    out.append("")
+                ps = sorted(placed.get(L["node_id"], []), key=lambda u: position.get(u, 0))
+                for uuid in ps:
+                    out.append(bullet(uuid))
+                if ps:
+                    out.append("")
+
+        placed_uuids = {u for us in placed.values() for u in us}
+        unplaced = [r["uuid"] for r in pool if r["uuid"] not in placed_uuids]
+        if unplaced:
+            out.append("## Pool — not yet placed")
+            out.append("")
+            for uuid in unplaced:
+                out.append(bullet(uuid))
+            out.append("")
+
+        plan_path = os.path.join(course_dir, PLAN_FILE)
+        with open(plan_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(out).rstrip() + "\n")
+
+        # objectives.tsv (uuid, text), sorted by uuid for a stable diff.
+        with open(os.path.join(course_dir, OBJECTIVES_TSV), "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f, delimiter="\t", lineterminator="\n")
+            w.writerow(["uuid", "text"])
+            for r in sorted(pool, key=lambda r: r["uuid"]):
+                w.writerow([r["uuid"], r["text"]])
+
+        # coverage.tsv (uuid, hierarchy_id, node_id) -- reference edges only
+        # (outline placement is structural in plan.md), sorted for a stable diff.
+        cov = conn.execute(
+            "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv"
+            " JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?"
+            " WHERE cv.hierarchy<>? ORDER BY cv.hierarchy, cv.uuid, cv.node_id",
+            (course, outline)).fetchall()
+        with open(os.path.join(course_dir, COVERAGE_TSV), "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f, delimiter="\t", lineterminator="\n")
+            w.writerow(["uuid", "hierarchy_id", "node_id"])
+            for r in cov:
+                w.writerow([r["uuid"], r["hierarchy"], r["node_id"]])
+    finally:
+        conn.close()
+    return plan_path, len(pool), len(cov)
+
+
+def _first_outline(conn, course):
+    row = conn.execute("SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1"
+                      " ORDER BY (kind=?) DESC, hierarchy LIMIT 1",
+                      (course, OUTLINE_KIND)).fetchone()
+    return row[0] if row else course + "-plan"
+
+
+# The schema this module needs present (a superset is fine). Applied with IF NOT
+# EXISTS so read_course works against a fresh db without a separate schema step.
+SCHEMA_DDL = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "schema.sql")).read()

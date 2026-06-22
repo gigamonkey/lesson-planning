@@ -1,3 +1,8 @@
+---
+title: Intro to Widgets — Reference
+kind: ced
+---
+
 # Unit 1: Widget Basics
 
 An introductory unit covering what widgets are and how they go together. This is

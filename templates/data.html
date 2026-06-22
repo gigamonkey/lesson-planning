@@ -9,34 +9,30 @@
 
   {% if not courses %}
   <div class="note">This database is empty. Create a course with <b>+</b> in the
-     sidebar, or restore the last committed snapshot below.</div>
+     sidebar, or restore from the corpus below.</div>
   {% endif %}
 
   <h2>Restore from version control</h2>
-  <p>Reload the authored planning tables from the export snapshot
-     (<code>{{ export_dir }}</code>). This is the non-destructive equivalent of
-     <code>rebuild_db.py</code> — it doesn't delete the database. Load a course's
-     reference hierarchies (on its setup page) first, since the planning tables
-     reference their nodes.</p>
+  <p>Reload every course in the corpus directory
+     (<code>{{ export_dir }}</code>) from its markdown + <code>.tsv</code> files.
+     Each course is replaced from disk; the database is not deleted.</p>
   {% if n_obj %}
   <div class="note">There are <b>{{ n_obj }}</b> objective(s) in the live database
-     already. Restoring replaces the authored planning tables with the committed
-     snapshot — any un-exported edits are lost. Export first if you want to keep
-     them.</div>
+     already. Restoring overwrites each corpus course with what's on disk — any
+     un-exported edits are lost. Export first if you want to keep them.</div>
   {% endif %}
   <form method="post" action="{{ url_for('data_restore') }}"
-        onsubmit="return {{ 'confirm(\"Replace authored data with the committed snapshot? Un-exported edits will be lost.\")' if n_obj else 'true' }};">
+        onsubmit="return {{ 'confirm(\"Reload every course from the corpus? Un-exported edits will be lost.\")' if n_obj else 'true' }};">
     <button type="submit" class="{{ 'danger' if n_obj else 'primary' }}">Restore from version control</button>
   </form>
 
   {% if courses %}
-  <h2>Export snapshot</h2>
-  <p>Write the live database's authored tables to the git-diffable
-     <code>.tsv</code> files under <code>{{ export_dir }}</code> — the committable
-     state.</p>
-  <form method="post" action="{{ url_for('export', course=courses[0]['course']) }}">
-    <button type="submit">Export snapshot</button>
-  </form>
+  <h2>Export</h2>
+  <p>Export is per course: open a course and use <b>Export</b> in the sidebar (or
+     its <b>⚙ setup</b> page) to write its <code>plan.md</code> +
+     <code>objectives.tsv</code> / <code>coverage.tsv</code> into
+     <code>{{ export_dir }}/&lt;course&gt;/</code> — the committable state.
+     Reference hierarchy markdown is a load-only input and is never rewritten.</p>
   {% endif %}
 </div>
 

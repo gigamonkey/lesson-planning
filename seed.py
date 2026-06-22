@@ -1,186 +1,95 @@
-"""Seed a database from a directory of input files described by a manifest.
+"""Populate a database from a corpus: a directory of course directories.
 
-Reads <seed_dir>/manifest.toml and, for each course that does NOT already exist,
-creates it, loads its hierarchies (node-list JSON), and imports its objectives
-(pool-only, or categorized into a named hierarchy). Idempotent at course
-granularity: an already-present course is left untouched, so this is safe to run
-on every startup. It supplies the policy the input files don't carry (which course
-a hierarchy/objectives file belongs to, and which hierarchy a node-id column
-indexes) -- see plans/seed-on-startup.md.
+A **corpus** is a directory whose immediate subdirectories are each one course
+(see `plan_io` / `FORMAT.md`): reference hierarchy markdown, the `plan.md`
+outline, and `objectives.tsv` / `coverage.tsv`. This module loads them:
 
-Manifest (TOML; paths are relative to the manifest):
+  * `seed(db, corpus)`   -- load every course that does NOT already exist
+    (idempotent at course granularity; safe to run on every startup);
+  * `load_corpus(db, corpus)` -- (re)load every course in the corpus
+    (each `read_course` is itself a scoped replace), for "restore from disk".
 
-    [[course]]
-    id = "csa"
-    title = "AP Computer Science A"        # optional; default id.upper()
+A course subdirectory is recognized by containing a `plan.md`; its course id
+comes from that file's `course:` front-matter key. The corpus root is both the
+load source and the export target (`plan_io.write_course`), so the pair
+round-trips.
 
-      [[course.hierarchy]]
-      file = "csa-ced.json"                # node-list JSON (flavor read from file)
-      kind = "ced"                         # optional; default from flavor
-      slug = "csa-ced"                     # optional; default <id>-<kind>
-      title = "CSA CED"                    # optional; default derived
-
-      [[course.objectives]]
-      file = "csa-objectives.txt"          # pool-only (no `hierarchy`)
-
-      [[course.objectives]]
-      file = "csa-ced-coverage.tsv"
-      hierarchy = "csa-ced"                # categorize node_ids into this hierarchy
-
-Run as a CLI too (applies schema.sql to a fresh db first):
-
-    uv run seed.py <seed-dir> [db.db]
+    uv run seed.py <corpus-dir> [db.db]        # load new courses
+    uv run seed.py --all <corpus-dir> [db.db]  # reload every course
 """
 
 import argparse
-import json
 import os
 import sqlite3
 import sys
-import tomllib
 
-import import_objectives
-import load_nodes
-
-SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+import hierarchy
+import plan_io
 
 
-def _ensure_outline(conn, course):
-    """Create the course's outline hierarchy if absent (mirrors app.ensure_outline,
-    kept here so seed.py stands alone). Returns the outline slug."""
-    row = conn.execute(
-        "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
-        "ORDER BY (kind='course-outline') DESC, hierarchy LIMIT 1", (course,)).fetchone()
-    outline = row[0] if row else course + "-plan"
-    if not row:
-        conn.execute(
-            "INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title, source)"
-            " VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)", (outline, course))
-    conn.execute("UPDATE courses SET primary_outline=? WHERE course=? AND primary_outline IS NULL",
-                 (outline, course))
-    return outline
+def course_dirs(corpus):
+    """Subdirectories of `corpus` that hold a course (contain a plan.md)."""
+    if not os.path.isdir(corpus):
+        return []
+    out = []
+    for name in sorted(os.listdir(corpus)):
+        path = os.path.join(corpus, name)
+        if os.path.isdir(path) and os.path.exists(os.path.join(path, plan_io.PLAN_FILE)):
+            out.append(path)
+    return out
 
 
-def _load_hierarchy(db_path, course, spec, seed_dir):
-    """Load one node-list JSON as a reference of `course`. Returns (slug, n_nodes)."""
-    with open(os.path.join(seed_dir, spec["file"])) as f:
-        doc = load_nodes.load_doc(json.load(f))
-    kind = spec.get("kind") or doc.get("kind") or load_nodes.meta_for(doc["flavor"])["kind"]
-    slug = spec.get("slug") or f"{course}-{kind}"
-    title = spec.get("title") or doc.get("title")
-    rows = load_nodes.build_rows(slug, doc["nodes"])
-    conn = sqlite3.connect(db_path)
-    try:
-        course_title = conn.execute(
-            "SELECT title FROM courses WHERE course=?", (course,)).fetchone()[0]
-        out = conn.execute(
-            "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 LIMIT 1",
-            (course,)).fetchone()
-    finally:
-        conn.close()
-    load_nodes.load(db_path, slug, course, kind, course_title, rows,
-                    source=spec["file"], title=title)
-    conn = sqlite3.connect(db_path)
-    try:
-        if out:  # measure the outline against this reference
-            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
-                         " VALUES (?, ?)", (out[0], slug))
-        # Make this the course's primary reference if it has none yet.
-        conn.execute("UPDATE courses SET primary_reference=? WHERE course=? "
-                     "AND primary_reference IS NULL", (slug, course))
-        conn.commit()
-    finally:
-        conn.close()
-    return slug, len(rows)
+def course_id(course_dir):
+    """The course id a course directory declares (its plan.md `course:` key)."""
+    with open(os.path.join(course_dir, plan_io.PLAN_FILE), encoding="utf-8") as f:
+        meta, _ = hierarchy.parse_front_matter(f.read())
+    return meta.get("course") or os.path.basename(course_dir)
 
 
-def _load_objectives(db_path, course, spec, seed_dir):
-    """Import one objectives file. With `hierarchy`, categorize node_ids into it
-    (unknown ids dropped, like the hierarchy upload); otherwise pool-only."""
-    items, _mode = import_objectives.parse_items(os.path.join(seed_dir, spec["file"]))
-    target = spec.get("hierarchy")
-    if target:
-        conn = sqlite3.connect(db_path)
-        try:
-            known = {n for (n,) in conn.execute(
-                "SELECT node_id FROM nodes WHERE hierarchy=?", (target,))}
-        finally:
-            conn.close()
-        dropped = sorted({n for (_, _, n) in items if n and n not in known})
-        clean = [(u, t, (n if n in known else None)) for (u, t, n) in items]
-        _ref, stats, _dangling, _known = import_objectives.load(
-            db_path, course, clean, hierarchy=target)
-        msg = (f"objectives <- {spec['file']} -> {target}: {stats['objectives_new']} new, "
-               f"{stats['pooled']} pooled, {stats['coverage']} coverage")
-        if dropped:
-            msg += f" ({len(dropped)} unknown id(s) dropped)"
-        return msg
-    clean = [(u, t, None) for (u, t, _n) in items]  # pool only
-    _ref, stats, _dangling, _known = import_objectives.load(db_path, course, clean)
-    return (f"objectives <- {spec['file']} (pool): {stats['objectives_new']} new, "
-            f"{stats['pooled']} pooled")
-
-
-def seed(db_path, seed_dir):
-    """Create + populate every manifest course that doesn't already exist."""
-    manifest = os.path.join(seed_dir, "manifest.toml")
-    if not os.path.exists(manifest):
-        print(f"seed: no manifest at {manifest}; nothing to load", file=sys.stderr)
-        return
-    with open(manifest, "rb") as f:
-        data = tomllib.load(f)
-
-    for c in data.get("course", []):
-        course = c.get("id")
-        if not course:
-            print("seed: course entry with no id -- skipping", file=sys.stderr)
-            continue
-        title = c.get("title") or course.upper()
-        conn = sqlite3.connect(db_path)
-        try:
-            if conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
-                print(f"seed: course {course!r} already exists -- skipping", file=sys.stderr)
-                continue
-            conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)", (course, title))
-            _ensure_outline(conn, course)
-            conn.commit()
-        finally:
-            conn.close()
-        print(f"seed: created course {course!r} ({title!r})", file=sys.stderr)
-
-        for h in c.get("hierarchy", []):
-            try:
-                slug, n = _load_hierarchy(db_path, course, h, seed_dir)
-                print(f"seed:   hierarchy {slug!r} <- {h.get('file')} ({n} nodes)",
-                      file=sys.stderr)
-            except Exception as e:
-                print(f"seed:   WARN hierarchy {h.get('file')!r}: {e}", file=sys.stderr)
-        for o in c.get("objectives", []):
-            try:
-                print(f"seed:   {_load_objectives(db_path, course, o, seed_dir)}",
-                      file=sys.stderr)
-            except Exception as e:
-                print(f"seed:   WARN objectives {o.get('file')!r}: {e}", file=sys.stderr)
-
-
-def _ensure_schema(db_path):
+def _exists(db_path, course):
+    if not os.path.exists(db_path):
+        return False
     conn = sqlite3.connect(db_path)
     try:
         if not conn.execute("SELECT name FROM sqlite_master WHERE type='table' "
                             "AND name='courses'").fetchone():
-            conn.executescript(open(SCHEMA_PATH).read())
-            conn.commit()
+            return False
+        return conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone() is not None
     finally:
         conn.close()
 
 
+def seed(db_path, corpus, force=False):
+    """Load each corpus course. With force=False, skip courses already present."""
+    dirs = course_dirs(corpus)
+    if not dirs:
+        print(f"seed: no course directories in {corpus!r}; nothing to load", file=sys.stderr)
+        return
+    for cd in dirs:
+        course = course_id(cd)
+        if not force and _exists(db_path, course):
+            print(f"seed: course {course!r} already exists -- skipping", file=sys.stderr)
+            continue
+        try:
+            c, n_refs, n_obj = plan_io.read_course(db_path, cd)
+            print(f"seed: loaded course {c!r} from {os.path.basename(cd)} "
+                  f"({n_refs} reference(s), {n_obj} objective(s))", file=sys.stderr)
+        except Exception as e:  # one broken course must not abort the rest
+            print(f"seed: WARN {os.path.basename(cd)}: {e}", file=sys.stderr)
+
+
+def load_corpus(db_path, corpus):
+    """Reload every course in the corpus (each read_course is a scoped replace)."""
+    seed(db_path, corpus, force=True)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("seed_dir", help="directory containing manifest.toml + input files")
+    p.add_argument("corpus", help="corpus directory (subdirs are courses)")
     p.add_argument("database", nargs="?", default="db.db")
+    p.add_argument("--all", action="store_true", help="reload every course, not just new ones")
     args = p.parse_args()
-    _ensure_schema(args.database)
-    seed(args.database, args.seed_dir)
+    seed(args.database, args.corpus, force=args.all)
 
 
 if __name__ == "__main__":
