@@ -52,6 +52,7 @@ DDL = [
          hierarchy TEXT NOT NULL,
          uuid TEXT NOT NULL REFERENCES objectives(uuid),
          node_id TEXT NOT NULL,
+         position INTEGER,
          PRIMARY KEY (hierarchy, uuid, node_id)
        )""",
 ]
@@ -179,8 +180,10 @@ def load(db_path, course, items, hierarchy=None, replace=False):
             if node:
                 if known and node not in known:
                     dangling.add(node)
-                cur = conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
-                                   " VALUES (?, ?, ?)", (ref, uuid, node))
+                nxt = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM coverage"
+                                   " WHERE hierarchy=? AND node_id=?", (ref, node)).fetchone()[0]
+                cur = conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
+                                   " VALUES (?, ?, ?, ?)", (ref, uuid, node, nxt))
                 stats["coverage"] += cur.rowcount
         conn.commit()
     finally:
@@ -287,11 +290,14 @@ def upsert(db_path, course, rows):
                 else:
                     placements.setdefault((hierarchy, uuid), set()).add(node)
         # Replace placement: only for (hierarchy, uuid) named with valid nodes here.
+        # New edges append after the node's existing objectives (coverage.position).
         for (hierarchy, uuid), nodes in placements.items():
             conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, uuid))
             for node in nodes:
-                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
-                             " VALUES (?, ?, ?)", (hierarchy, uuid, node))
+                nxt = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM coverage"
+                                   " WHERE hierarchy=? AND node_id=?", (hierarchy, node)).fetchone()[0]
+                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
+                             " VALUES (?, ?, ?, ?)", (hierarchy, uuid, node, nxt))
                 stats["placed"] += 1
         conn.commit()
     finally:

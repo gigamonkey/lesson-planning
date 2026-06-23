@@ -19,7 +19,7 @@ import argparse
 import json
 import sqlite3
 
-BUNDLE_VERSION = "1.0.0"
+BUNDLE_VERSION = "1.1.0"   # 1.1.0 added coverage.position (per-node objective order)
 FORMAT_MAJOR = 1
 
 
@@ -55,8 +55,8 @@ def export_course(conn, course):
     if slugs:
         ph = ",".join("?" * len(slugs))
         coverage = [dict(r) for r in conn.execute(
-            f"SELECT hierarchy, uuid, node_id FROM coverage WHERE hierarchy IN ({ph}) "
-            "ORDER BY hierarchy, uuid, node_id", slugs)]
+            f"SELECT hierarchy, uuid, node_id, position FROM coverage WHERE hierarchy IN ({ph}) "
+            "ORDER BY hierarchy, node_id, position, uuid", slugs)]
 
     targets = [dict(r) for r in conn.execute(
         "SELECT ht.outline, ht.reference FROM hierarchy_targets ht "
@@ -130,8 +130,10 @@ def import_course(conn, doc, course=None):
                      " VALUES (?, ?, ?)", (cid, uid, o.get("position")))
 
     for cv in doc["coverage"]:
-        conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) VALUES (?, ?, ?)",
-                     (cv["hierarchy"], uuid_map.get(cv["uuid"], cv["uuid"]), cv["node_id"]))
+        conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
+                     " VALUES (?, ?, ?, ?)",
+                     (cv["hierarchy"], uuid_map.get(cv["uuid"], cv["uuid"]), cv["node_id"],
+                      cv.get("position")))
     for t in doc["hierarchy_targets"]:
         conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference) VALUES (?, ?)",
                      (t["outline"], t["reference"]))

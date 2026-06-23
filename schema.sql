@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS coverage (
   hierarchy TEXT NOT NULL,
   uuid      TEXT NOT NULL REFERENCES objectives(uuid),
   node_id   TEXT NOT NULL,
+  position  INTEGER,                  -- order of this objective WITHIN (hierarchy, node_id);
+                                      -- independent of course_objectives.position (the master
+                                      -- per-course pool order). NULL sorts last (append).
   PRIMARY KEY (hierarchy, uuid, node_id),
   FOREIGN KEY (hierarchy, node_id) REFERENCES nodes(hierarchy, node_id)
 );

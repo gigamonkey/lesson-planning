@@ -55,8 +55,8 @@ def fetch(conn, course):
         "WHERE hierarchy=? AND name='learning_objective'", (O,))} if O else {}
     for L in lessons:
         L["lo"] = los.get(L["uuid"], "")
-    placed = {r["uuid"]: r["node_id"] for r in conn.execute(
-        "SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (O,))} if O else {}
+    placed = {r["uuid"]: (r["node_id"], r["position"]) for r in conn.execute(
+        "SELECT uuid, node_id, position FROM coverage WHERE hierarchy=?", (O,))} if O else {}
 
     raws = {}
     for r in conn.execute(
@@ -64,19 +64,25 @@ def fetch(conn, course):
              FROM objectives o
              JOIN course_objectives co ON co.uuid=o.uuid AND co.course=?
             WHERE o.status='active'""", (course,)):
-        node = placed.get(r["uuid"])
+        node, ppos = placed.get(r["uuid"], (None, None))
         level = node_level.get(node)
         raws[r["uuid"]] = {"uuid": r["uuid"], "text": r["text"],
                            "nodes": sorted(coverage.get(r["uuid"], [])),
+                           "plan_pos": ppos,
                            "plan_unit": node if level == "unit" else None,
                            "plan_lesson": node if level == "lesson" else None}
 
+    # Within a lesson / a unit's rough area, objectives read in their per-node
+    # order (coverage.position), text as the tiebreak.
     by_lesson, rough_by_unit = {}, {}
-    for o in sorted(raws.values(), key=lambda o: o["text"].lower()):
+    for o in raws.values():
         if o["plan_lesson"]:
             by_lesson.setdefault(o["plan_lesson"], []).append(o)
         elif o["plan_unit"]:
             rough_by_unit.setdefault(o["plan_unit"], []).append(o)
+    for lst in (*by_lesson.values(), *rough_by_unit.values()):
+        lst.sort(key=lambda o: (o["plan_pos"] if o["plan_pos"] is not None else 1 << 30,
+                                o["text"].lower()))
     for L in lessons:
         L["raws"] = by_lesson.get(L["uuid"], [])
     lessons_by_unit = {}

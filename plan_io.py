@@ -252,6 +252,7 @@ def read_course(db_path, course_dir):
         # shortest prefix unique within the course); newly minted uuids join it.
         known_uuids = [u for u, _ in reg]
         pos = 0
+        outline_pos = {}   # outline node_id -> next per-node coverage position
         for otext, token, placement in bullets:
             uuid = resolve_token(token, known_uuids) if token else None
             if uuid:
@@ -269,13 +270,20 @@ def read_course(db_path, course_dir):
                          " VALUES (?, ?, ?)", (course, uuid, pos))
             pos += 1
             if placement:
-                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
-                             " VALUES (?, ?, ?)", (outline, uuid, placement))
+                # The bullet order within a lesson/unit is the per-node order.
+                p = outline_pos.get(placement, 0)
+                outline_pos[placement] = p + 1
+                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
+                             " VALUES (?, ?, ?, ?)", (outline, uuid, placement, p))
 
-        # Reference coverage edges (many-to-many across hierarchies).
+        # Reference coverage edges (many-to-many across hierarchies). The row order
+        # within each (hierarchy, node_id) in coverage.tsv is the per-node order.
+        ref_pos = {}
         for uuid, hid, node_id in _read_coverage_tsv(course_dir):
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
-                         " VALUES (?, ?, ?)", (hid, uuid, node_id))
+            p = ref_pos.get((hid, node_id), 0)
+            ref_pos[(hid, node_id)] = p + 1
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
+                         " VALUES (?, ?, ?, ?)", (hid, uuid, node_id, p))
 
         # Outline -> reference targets.
         for ref in targets:
@@ -334,15 +342,15 @@ def render_course(conn, course):
     los = {r["node_id"]: r["value"] for r in conn.execute(
         "SELECT node_id, value FROM node_attr WHERE hierarchy=? AND name='learning_objective'",
         (outline,))}
-    placed = {}   # lesson_id -> [uuid]
-    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (outline,)):
+    placed = {}   # node_id -> [uuid], in per-node coverage.position order
+    for r in conn.execute("SELECT uuid, node_id, position FROM coverage WHERE hierarchy=?"
+                          " ORDER BY position, uuid", (outline,)):
         placed.setdefault(r["node_id"], []).append(r["uuid"])
 
     pool = conn.execute("SELECT co.uuid, co.position, o.text FROM course_objectives co"
                       " JOIN objectives o ON o.uuid=co.uuid WHERE co.course=?"
                       " ORDER BY co.position, o.text", (course,)).fetchall()
     text_of = {r["uuid"]: r["text"] for r in pool}
-    position = {r["uuid"]: (r["position"] if r["position"] is not None else 0) for r in pool}
     tokens = abbrev_tokens([r["uuid"] for r in pool])
 
     def bullet(uuid):
@@ -364,7 +372,7 @@ def render_course(conn, course):
         out.append("")
         # Unit-level "rough" placements: bullets directly under the unit heading,
         # before its lessons (parse_plan reads these back as placed on the unit).
-        rough = sorted(placed.get(u["node_id"], []), key=lambda u: position.get(u, 0))
+        rough = placed.get(u["node_id"], [])   # already in per-node order
         for uuid in rough:
             out.append(bullet(uuid))
         if rough:
@@ -377,7 +385,7 @@ def render_course(conn, course):
             if los.get(L["node_id"]):
                 out.append(f"**Learning objective:** {los[L['node_id']]}")
                 out.append("")
-            ps = sorted(placed.get(L["node_id"], []), key=lambda u: position.get(u, 0))
+            ps = placed.get(L["node_id"], [])   # already in per-node order
             for uuid in ps:
                 out.append(bullet(uuid))
             if ps:
@@ -401,12 +409,14 @@ def render_course(conn, course):
     for r in sorted(pool, key=lambda r: r["uuid"]):
         w.writerow([r["uuid"], r["text"]])
 
-    # coverage.tsv (uuid, hierarchy_id, node_id) -- reference edges only
-    # (outline placement is structural in plan.md), sorted for a stable diff.
+    # coverage.tsv (uuid, hierarchy_id, node_id) -- reference edges only (outline
+    # placement is structural in plan.md). Ordered by (hierarchy, node_id, position)
+    # so the row order WITHIN each node encodes the per-node objective order (read
+    # back by encounter order); stable across saves until the order changes.
     cov = conn.execute(
         "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv"
         " JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?"
-        " WHERE cv.hierarchy<>? ORDER BY cv.hierarchy, cv.uuid, cv.node_id",
+        " WHERE cv.hierarchy<>? ORDER BY cv.hierarchy, cv.node_id, cv.position, cv.uuid",
         (course, outline)).fetchall()
     cov_buf = io.StringIO()
     w = csv.writer(cov_buf, delimiter="\t", lineterminator="\n")
@@ -489,7 +499,7 @@ def is_dirty(conn, course, course_dir):
     return False
 
 
-def import_structure(conn, course, outline, reference):
+def import_structure(conn, outline, reference):
     """Rebuild `outline`'s structure from the first two levels of `reference`.
 
     Each level-1 (root) node of the reference becomes a unit; each of its level-2
@@ -500,12 +510,10 @@ def import_structure(conn, course, outline, reference):
 
     The outline is single-placement per objective (see app.place), so an objective
     is placed in only the FIRST lesson (document order) whose subtree covers it.
-
-    The course pool is reordered to the reference's reading order: covered
-    objectives take the front, in the order their nodes appear in the reference,
-    so within each lesson (and in the pool) objectives read in document order
-    rather than by their prior, unrelated pool position. Objectives the reference
-    doesn't cover keep their relative order, after the covered ones.
+    Within each lesson, objectives are ordered (coverage.position) by the reading
+    order of their covering nodes in the reference -- so the lesson reads in CED
+    order. The master pool order (course_objectives.position) is left untouched;
+    the two orders are independent.
 
     The outline's existing nodes, learning objectives, and placements are cleared
     first. Returns (n_units, n_lessons, n_placed).
@@ -527,8 +535,9 @@ def import_structure(conn, course, outline, reference):
             ids.extend(subtree(c["node_id"]))
         return ids
 
-    cov = {}   # reference node_id -> [uuid]
-    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (reference,)):
+    cov = {}   # reference node_id -> [uuid], in the reference's per-node order
+    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?"
+                          " ORDER BY position, uuid", (reference,)):
         cov.setdefault(r["node_id"], []).append(r["uuid"])
 
     # Replace the outline's structure wholesale.
@@ -537,7 +546,7 @@ def import_structure(conn, course, outline, reference):
     conn.execute("DELETE FROM nodes WHERE hierarchy=?", (outline,))
 
     placed = set()   # global: each objective lands in exactly one lesson/unit
-    order = []       # uuids in reference reading order (for the pool reordering)
+    node_pos = {}    # outline node_id -> next per-node coverage position
     ordinal = 0
     n_units = n_lessons = n_placed = 0
 
@@ -547,9 +556,10 @@ def import_structure(conn, course, outline, reference):
             if u in placed:
                 continue
             placed.add(u)
-            order.append(u)
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
-                         " VALUES (?, ?, ?)", (outline, u, node_id))
+            p = node_pos.get(node_id, 0)
+            node_pos[node_id] = p + 1
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
+                         " VALUES (?, ?, ?, ?)", (outline, u, node_id, p))
             n_placed += 1
 
     for unit in children.get(None, []):
@@ -572,18 +582,6 @@ def import_structure(conn, course, outline, reference):
         # Objectives mapped straight onto the unit node (not under any lesson) go
         # rough on the unit.
         place(uid, cov.get(unit["node_id"], []))
-
-    # Reorder the course pool to the reference's reading order: covered objectives
-    # first (in document order), then everything else in its current order. render
-    # orders within-lesson bullets by pool position, so this is what makes them
-    # read in CED order.
-    existing = [u for (u,) in conn.execute(
-        "SELECT uuid FROM course_objectives WHERE course=? ORDER BY position, uuid",
-        (course,))]
-    rest = [u for u in existing if u not in placed]
-    for i, u in enumerate(order + rest):
-        conn.execute("UPDATE course_objectives SET position=? WHERE course=? AND uuid=?",
-                     (i, course, u))
 
     return n_units, n_lessons, n_placed
 

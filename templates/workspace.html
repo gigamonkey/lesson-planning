@@ -194,10 +194,10 @@
           const body = new URLSearchParams();
           body.set('uuid', evt.item.dataset.uuid);
           body.set('to', evt.to.dataset.to);
-          if (evt.to.dataset.to === 'pool') {
-            body.set('ids', Array.from(evt.to.querySelectorAll('.rawitem'))
-              .map(li => li.dataset.uuid).join(','));
-          }
+          // The destination zone's full order, so the per-node order (or the
+          // master pool order, when dropped in the pool) is persisted.
+          body.set('ids', Array.from(evt.to.querySelectorAll('.rawitem'))
+            .map(li => li.dataset.uuid).join(','));
           fetch(placeURL, { method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
             .then(function () { refreshStats(); if (window.saveRefresh) window.saveRefresh(); });

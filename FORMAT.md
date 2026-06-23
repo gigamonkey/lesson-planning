@@ -128,7 +128,13 @@ A column-0 bullet under a lesson is a **raw objective placed in that lesson** (n
 a node): it is interned into the objective pool and given a coverage edge to the
 lesson. A `## Pool …` section (a level-2 heading whose text starts with “Pool”)
 holds pooled objectives not yet placed in any lesson. Document order of all
-bullets is the pool order.
+bullets is the **master pool order** (`course_objectives.position`).
+
+The bullet order **within a single lesson** (or a unit's rough zone) is that
+node's own **per-node order** (`coverage.position`) — independent of the master
+pool order. So an objective can sit third in the master list yet first in its
+lesson; both orders round-trip (the master from overall document order, the
+per-node from the order of bullets under each heading).
 
 The outline hierarchy's own nodes are therefore only **units and lessons**, with
 positional ids (`1`, `1.1`, `1.2`, …) regenerated on each load. Placement and the
@@ -163,6 +169,11 @@ resolution and export's prefix computation run against.
 ## `coverage.tsv` — (uuid, hierarchy_id, node_id)
 
 The many-to-many coverage edges into the **reference** hierarchies (one objective
-can cover nodes in several), sorted for a stable diff. Outline placement is *not*
-duplicated here — it lives structurally in `plan.md`. (Rule: `coverage.tsv` holds
-every coverage row whose `hierarchy_id` is not the course's outline.)
+can cover nodes in several). Outline placement is *not* duplicated here — it lives
+structurally in `plan.md`. (Rule: `coverage.tsv` holds every coverage row whose
+`hierarchy_id` is not the course's outline.)
+
+Rows are sorted by `(hierarchy_id, node_id, position)`, and the **row order within
+each `(hierarchy_id, node_id)` group is that node's per-node objective order**
+(`coverage.position`) — there is no explicit position column; the order is carried
+by the rows' sequence and re-derived (by encounter order per node) on load.

@@ -254,6 +254,27 @@ def ensure_schema():
                     "UPDATE courses SET primary_outline = (SELECT h.hierarchy FROM hierarchies h"
                     " WHERE h.course=courses.course AND h.editable=1"
                     " ORDER BY (h.kind='course-outline') DESC, h.hierarchy LIMIT 1)")
+
+            # Per-node objective order: each coverage edge gets a `position` within
+            # its (hierarchy, node_id) -- independent of the master pool order. On
+            # first add, backfill it from the existing de-facto order (the objective's
+            # master pool position, which is what render used to sort by).
+            if "position" not in [r[1] for r in conn.execute("PRAGMA table_info(coverage)")]:
+                conn.execute("ALTER TABLE coverage ADD COLUMN position INTEGER")
+                rows = conn.execute(
+                    "SELECT cv.hierarchy, cv.node_id, cv.uuid, co.position AS mpos "
+                    "FROM coverage cv JOIN hierarchies h ON h.hierarchy=cv.hierarchy "
+                    "LEFT JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=h.course"
+                ).fetchall()
+                groups = {}
+                for r in rows:
+                    groups.setdefault((r["hierarchy"], r["node_id"]), []).append(
+                        (r["mpos"] if r["mpos"] is not None else 1 << 30, r["uuid"]))
+                for (h, n), lst in groups.items():
+                    lst.sort()
+                    for pos, (_m, u) in enumerate(lst):
+                        conn.execute("UPDATE coverage SET position=? WHERE hierarchy=? "
+                                     "AND node_id=? AND uuid=?", (pos, h, n, u))
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)
@@ -733,25 +754,30 @@ def course_import():
 def workspace_data(conn, course, H):
     """Node tree of hierarchy H with the raw objectives mapped onto each node, plus
     the unplaced pool. Single placement per hierarchy: an objective sits under one
-    node of H or in the pool."""
+    node of H or in the pool. Objectives within a node are ordered by the coverage
+    edge's `position` (the per-node order); the pool by the master pool position."""
     objs = {r["uuid"]: {"uuid": r["uuid"], "text": r["text"], "position": r["position"],
-                        "node": None}
+                        "node": None, "cpos": None}
             for r in conn.execute(
                 "SELECT o.uuid, o.text, co.position FROM objectives o "
                 "JOIN course_objectives co ON co.uuid=o.uuid AND co.course=? "
                 "WHERE o.status='active'", (course,))}
     for r in conn.execute(
-        "SELECT cv.uuid, cv.node_id FROM coverage cv "
+        "SELECT cv.uuid, cv.node_id, cv.position FROM coverage cv "
         "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=? "
         "WHERE cv.hierarchy=?", (course, H)):
         o = objs.get(r["uuid"])
         if o:
             o["node"] = r["node_id"]
+            o["cpos"] = r["position"]
 
     by_node = {}
-    for o in sorted(objs.values(), key=lambda o: o["text"].lower()):
+    for o in objs.values():
         if o["node"]:
             by_node.setdefault(o["node"], []).append(o)
+    for lst in by_node.values():
+        lst.sort(key=lambda o: (o["cpos"] if o["cpos"] is not None else 1 << 30,
+                                o["text"].lower()))
     pool = sorted((o for o in objs.values() if not o["node"]),
                   key=lambda o: (0, o["position"]) if o["position"] is not None
                   else (1, o["text"].lower()))
@@ -827,7 +853,9 @@ def workspace_stats_partial(course, hierarchy):
 @app.route("/<course>/h/<hierarchy>/place", methods=["POST"])
 def place(course, hierarchy):
     """Drag a raw objective: `to` is "node-<id>" (map/recategorize) or "pool"
-    (unmap, + reorder via `ids`). Single placement per hierarchy."""
+    (unmap). Single placement per hierarchy. `ids` carries the destination zone's
+    full order so the per-node order (coverage.position) -- or the master pool
+    order (course_objectives.position) when dropped in the pool -- is persisted."""
     uuid = request.form.get("uuid")
     to = (request.form.get("to") or "").strip()
     node = to[5:] if to.startswith("node-") else None
@@ -839,8 +867,13 @@ def place(course, hierarchy):
             abort(409, "hierarchy no longer exists -- reload the page")
         conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, uuid))
         if node:
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
-                         "VALUES (?, ?, ?)", (hierarchy, uuid, node))
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position) "
+                         "VALUES (?, ?, ?, 0)", (hierarchy, uuid, node))
+            # Renumber the destination node by the zone's order (the dropped item
+            # included). ids not in this node (defensive) simply match nothing.
+            for i, u in enumerate(_id_list("ids")):
+                conn.execute("UPDATE coverage SET position=? WHERE hierarchy=? "
+                             "AND node_id=? AND uuid=?", (i, hierarchy, node, u))
         if to == "pool":
             for i, u in enumerate(_id_list("ids")):
                 conn.execute("UPDATE course_objectives SET position=? "
@@ -1040,8 +1073,10 @@ def objective_new(course):
             conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid) VALUES (?, ?)",
                          (course, u))
             if node:
-                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "
-                             "VALUES (?, ?, ?)", (R, u, node))
+                nxt = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM coverage "
+                                   "WHERE hierarchy=? AND node_id=?", (R, node)).fetchone()[0]
+                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position) "
+                             "VALUES (?, ?, ?, ?)", (R, u, node, nxt))
             conn.commit()
     # Workspace (htmx): return just the new raw item to drop into the target zone.
     if request.form.get("as") == "item":
@@ -1159,7 +1194,7 @@ def outline_import(course):
                 (reference, course)).fetchone():
             abort(404, f"no reference {reference!r} for course {course!r}")
         O = ensure_outline(conn, course)
-        nu, nl, npl = plan_io.import_structure(conn, course, O, reference)
+        nu, nl, npl = plan_io.import_structure(conn, O, reference)
         conn.commit()
     flash(f"Built the outline from {reference}: {nu} unit(s), {nl} lesson(s), "
           f"{npl} objective placement(s).")
