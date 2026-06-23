@@ -6,13 +6,32 @@
    column, then the node text + its objectives. Depth drives the typography. #}
 {% macro reftable(nodes, depth=1) %}
   {% for n in nodes %}
-    <tr class="depth-{{ depth }} lvl-{{ n.level }}">
+    <tr class="depth-{{ depth }} lvl-{{ n.level }}{{ ' leaf' if n.is_leaf else '' }}">
       <td class="nid">{{ n.id }}</td>
       <td class="rcontent">
-        <div class="wlabel">{{ n.label|inline }}</div>
-        <ul class="sortable rawzone" data-to="node-{{ n.id }}">
-          {% for o in n.objectives %}{% include "_rawitem.html" %}{% endfor %}
-        </ul>
+        <div class="wlabel">{{ n.label|inline }}{% if n.is_leaf %}
+          <button type="button" class="addobjbtn" title="Add or edit objectives for this node">+</button>{% endif %}</div>
+        {% if n.is_leaf %}
+          {# Only leaf nodes take objectives: a droppable zone plus a bulk editor. #}
+          <ul class="sortable rawzone" data-to="node-{{ n.id }}">
+            {% for o in n.objectives %}{% include "_rawitem.html" %}{% endfor %}
+          </ul>
+          <form class="bulkobj" hidden method="post"
+                action="{{ url_for('node_objectives_bulk', course=course, hierarchy=ref, node_id=n.id) }}">
+            <textarea name="objectives" rows="4" placeholder="One objective per line…"
+              >{% for o in n.objectives %}{{ o.text }}
+{% endfor %}</textarea>
+            <div class="bulkctl">
+              <button type="submit" class="primary">Save objectives</button>
+              <button type="button" class="cancel">Cancel</button>
+            </div>
+          </form>
+        {% elif n.objectives %}
+          {# Higher-level nodes are not drop targets, but show any legacy objectives. #}
+          <ul class="rawzone readonly">
+            {% for o in n.objectives %}{% include "_rawitem.html" %}{% endfor %}
+          </ul>
+        {% endif %}
       </td>
     </tr>
     {% if n.children %}{{ reftable(n.children, depth + 1) }}{% endif %}
@@ -28,6 +47,7 @@
           hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
       <textarea name="title" rows="1" placeholder="Lesson title…">{{ L.label }}</textarea>
     </form>
+    <button type="button" class="addobjbtn" title="Add or edit objectives for this lesson">+</button>
     <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}">
       <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
     </form>
@@ -41,6 +61,16 @@
   <ul class="sortable rawzone" data-to="node-{{ L.id }}">
     {% for o in L.objectives %}{% include "_rawitem.html" %}{% endfor %}
   </ul>
+  <form class="bulkobj" hidden method="post"
+        action="{{ url_for('node_objectives_bulk', course=course, hierarchy=ref, node_id=L.id) }}">
+    <textarea name="objectives" rows="4" placeholder="One objective per line…"
+      >{% for o in L.objectives %}{{ o.text }}
+{% endfor %}</textarea>
+    <div class="bulkctl">
+      <button type="submit" class="primary">Save objectives</button>
+      <button type="button" class="cancel">Cancel</button>
+    </div>
+  </form>
 </li>
 {% endmacro %}
 
@@ -49,8 +79,8 @@
 
   {% if editable %}
     <p>Build the course outline: create <b>units</b>, add <b>lessons</b>, and drag raw
-       objectives from the pool into a lesson — or onto a unit's <i>rough</i> zone.
-       Each lesson gets one learning objective.</p>
+       objectives from the pool into a lesson — or use a lesson's <b>+</b> to type
+       several at once. Each lesson gets one learning objective.</p>
     <div class="addrow">
       <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addlesson">
         <input type="text" name="title" placeholder="New unit title…" required>
@@ -92,12 +122,16 @@
                 </form>
               </div>
             </div>
-            <div class="roughzone">
-              <span class="zonelabel">rough (whole unit)</span>
-              <ul class="sortable rawzone rough" data-to="node-{{ u.id }}">
-                {% for o in u.objectives %}{% include "_rawitem.html" %}{% endfor %}
-              </ul>
-            </div>
+            {% if u.objectives %}
+              {# Units are not drop targets; surface any legacy unit-level
+                 objectives read-only so they aren't silently orphaned. #}
+              <div class="roughzone">
+                <span class="zonelabel">objectives on this unit (move into a lesson)</span>
+                <ul class="rawzone readonly">
+                  {% for o in u.objectives %}{% include "_rawitem.html" %}{% endfor %}
+                </ul>
+              </div>
+            {% endif %}
             <ul class="sortable unitlessons" data-unit="{{ u.id }}">
               {% for L in u.children if L.level == 'lesson' %}{{ lessoncard(L) }}{% endfor %}
             </ul>
@@ -203,6 +237,42 @@
             .then(function () { refreshStats(); if (window.saveRefresh) window.saveRefresh(); });
           applyRawFilter();
         }
+      });
+    });
+
+    // The + by a leaf node's title (reference) or a lesson's title (outline) opens
+    // a textarea for adding/editing that node's objectives in bulk (one per line).
+    // Save reconciles the node's set. The host is the table cell or the lessoncard.
+    function bulkHost(el) { return el.closest('.rcontent, .lessoncard'); }
+    document.querySelectorAll('.addobjbtn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const form = bulkHost(btn).querySelector('form.bulkobj');
+        form.hidden = !form.hidden;
+        if (!form.hidden) {
+          const ta = form.querySelector('textarea');
+          ta.focus();
+          ta.setSelectionRange(ta.value.length, ta.value.length);
+        }
+      });
+    });
+    document.querySelectorAll('form.bulkobj').forEach(function (form) {
+      const ta = form.querySelector('textarea');
+      form.querySelector('.cancel').addEventListener('click', function () {
+        ta.value = ta.defaultValue;  // discard edits, restore the last saved state
+        form.hidden = true;
+      });
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        fetch(form.action, { method: 'POST', body: new URLSearchParams(new FormData(form)) })
+          .then(function (r) { return r.text(); })
+          .then(function (html) {
+            // Replace the node's objective list; the <ul> (and its Sortable) stays.
+            bulkHost(form).querySelector('ul.rawzone').innerHTML = html;
+            ta.defaultValue = ta.value;  // this is the new saved baseline
+            form.hidden = true;
+            refreshStats();
+            if (window.saveRefresh) window.saveRefresh();
+          });
       });
     });
 

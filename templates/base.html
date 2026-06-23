@@ -307,6 +307,19 @@
     table.reftable li.rawitem::marker { color: #c4c4c4; }
     body.dragging table.reftable ul.rawzone { outline: 1px dashed #b9cbe0; background: #f5f9fe;
             min-height: 1.1rem; list-style-position: inside; }
+    table.reftable ul.rawzone.readonly { opacity: .8; }
+    /* The + by a leaf title opens that node's bulk objective editor. */
+    .addobjbtn { border: none; background: none; color: var(--muted); cursor: pointer;
+            font-size: 1.05em; line-height: 1; font-weight: 400; padding: 0 .2rem;
+            margin-left: .15rem; border-radius: 4px; vertical-align: baseline; }
+    .addobjbtn:hover { color: #2b6cb0; background: #eef3f8; }
+    form.bulkobj { margin: .2rem 0 .45rem 1.4rem; display: flex; flex-direction: column;
+            gap: .35rem; }
+    form.bulkobj[hidden] { display: none; }  /* else display:flex overrides [hidden] */
+    form.bulkobj textarea { width: 100%; min-height: 4.5rem; font: inherit;
+            padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px;
+            resize: vertical; box-sizing: border-box; }
+    form.bulkobj .bulkctl { display: flex; gap: .4rem; }
 
     /* Objectives page: compact sortable table (text column + one per hierarchy). */
     .objbar { display: flex; gap: .6rem; align-items: center; margin-bottom: .4rem; }

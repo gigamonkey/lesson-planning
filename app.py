@@ -882,6 +882,52 @@ def place(course, hierarchy):
     return ("", 204)
 
 
+@app.route("/<course>/h/<hierarchy>/node/<node_id>/objectives", methods=["POST"])
+def node_objectives_bulk(course, hierarchy, node_id):
+    """Set a leaf node's objectives in bulk from a textarea (one per line). Each
+    non-blank line is interned by text (reused or created) and added to the course
+    pool; the listed objectives are placed under this node in order (single
+    placement per hierarchy, like a drag). Objectives previously under this node
+    that are no longer listed are unmapped back to the pool. Returns the node's
+    refreshed objective list (the body of its zone)."""
+    raw = request.form.get("objectives") or ""
+    texts, seen = [], set()
+    for line in raw.splitlines():
+        t = line.strip()
+        if t and t not in seen:
+            seen.add(t)
+            texts.append(t)
+    with db() as conn:
+        # A stale tab can POST to a renamed/removed hierarchy; refuse rather than
+        # write orphan coverage under a slug that no longer exists.
+        if not conn.execute("SELECT 1 FROM hierarchies WHERE hierarchy=? AND course=?",
+                            (hierarchy, course)).fetchone():
+            abort(409, "hierarchy no longer exists -- reload the page")
+        before = {r["uuid"] for r in conn.execute(
+            "SELECT uuid FROM coverage WHERE hierarchy=? AND node_id=?",
+            (hierarchy, node_id))}
+        objs = []
+        for i, t in enumerate(texts):
+            row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (t,)).fetchone()
+            u = row[0] if row else str(uuidlib.uuid4())
+            if not row:
+                conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, t))
+            conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid) VALUES (?, ?)",
+                         (course, u))
+            # Single placement per hierarchy: clear any prior home, then place here.
+            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, u))
+            conn.execute("INSERT INTO coverage(hierarchy, uuid, node_id, position) "
+                         "VALUES (?, ?, ?, ?)", (hierarchy, u, node_id, i))
+            objs.append({"uuid": u, "text": t})
+        # Objectives dropped from the list go back to the pool (coverage removed).
+        keep = {o["uuid"] for o in objs}
+        for u in before - keep:
+            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND node_id=? AND uuid=?",
+                         (hierarchy, node_id, u))
+        conn.commit()
+    return render_template("_rawitems.html", objectives=objs)
+
+
 @app.route("/<course>/h/<hierarchy>/upload", methods=["POST"])
 def hierarchy_upload(course, hierarchy):
     """Upload a (uuid, text, node_id) TSV placing objectives into THIS hierarchy.
@@ -1358,5 +1404,9 @@ if os.path.isdir(CORPUS_DIR):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host=os.environ.get("HOST", "127.0.0.1"),
+    # In a yolo container the app must bind 0.0.0.0 to be reachable from the host
+    # browser (127.0.0.1 inside the container isn't); on a normal machine keep the
+    # safer localhost default. An explicit HOST env var always wins.
+    default_host = "0.0.0.0" if os.environ.get("YOLO_SESSION") == "1" else "127.0.0.1"
+    app.run(debug=True, host=os.environ.get("HOST", default_host),
             port=int(os.environ.get("PORT", "5001")))
