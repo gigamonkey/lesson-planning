@@ -793,7 +793,12 @@ def hierarchy_view(course, hierarchy):
         h = conn.execute("SELECT * FROM hierarchies WHERE hierarchy=? AND course=?",
                          (hierarchy, course)).fetchone()
         if not h:
-            abort(404, f"no hierarchy {hierarchy!r} for course {course!r}")
+            # Stale/renamed hierarchy URL (e.g. an old tab after a rename): fall
+            # back to the course's landing rather than hard-404, so old links and
+            # post-save redirects recover instead of erroring.
+            if conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+                return redirect(url_for("tree", course=course))
+            abort(404, f"no course {course!r}")
         nodes, by_node, pool = workspace_data(conn, course, hierarchy)
         los = {r["node_id"]: r["value"] for r in conn.execute(
             "SELECT node_id, value FROM node_attr "
