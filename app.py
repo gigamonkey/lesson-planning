@@ -832,6 +832,11 @@ def place(course, hierarchy):
     to = (request.form.get("to") or "").strip()
     node = to[5:] if to.startswith("node-") else None
     with db() as conn:
+        # A stale tab can POST to a renamed/removed hierarchy; refuse rather than
+        # write orphan coverage under a slug that no longer exists.
+        if not conn.execute("SELECT 1 FROM hierarchies WHERE hierarchy=? AND course=?",
+                            (hierarchy, course)).fetchone():
+            abort(409, "hierarchy no longer exists -- reload the page")
         conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, uuid))
         if node:
             conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id) "

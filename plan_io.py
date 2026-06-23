@@ -139,7 +139,9 @@ def parse_plan(text):
             tok = TOKEN_RE.search(raw)
             token = tok.group(1) if tok else None
             otext = TOKEN_RE.sub("", raw).strip() if tok else raw.strip()
-            placement = None if in_pool else cur_lesson
+            # In a lesson -> that lesson; under a unit before any lesson -> the unit
+            # (rough); in the pool section (or before any unit) -> unplaced.
+            placement = None if in_pool else (cur_lesson or cur_unit)
             bullets.append((otext, token, placement))
     return meta, units, lessons, los, bullets
 
@@ -360,6 +362,13 @@ def render_course(conn, course):
     for i, u in enumerate(units, 1):
         out.append(f"# Unit {i}: {u['text']}")
         out.append("")
+        # Unit-level "rough" placements: bullets directly under the unit heading,
+        # before its lessons (parse_plan reads these back as placed on the unit).
+        rough = sorted(placed.get(u["node_id"], []), key=lambda u: position.get(u, 0))
+        for uuid in rough:
+            out.append(bullet(uuid))
+        if rough:
+            out.append("")
         for j, L in enumerate(lessons_by_unit.get(u["node_id"], []), 1):
             # Positional id ("1.1"), matching what parse_plan recomputes on read --
             # the db node_id is an opaque uuid and must not leak into the markdown.
