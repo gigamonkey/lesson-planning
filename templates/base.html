@@ -32,6 +32,16 @@
     .pagetitle .editmd { font-size: .78rem; font-weight: 400; vertical-align: middle;
             margin-left: .6rem; color: var(--muted); text-decoration: none; }
     .pagetitle .editmd:hover { color: #2b6cb0; }
+    /* A help "?" in the header opens a popup with the page's guidance. */
+    .pagetitle .helpbtn { font-size: 1.05rem; line-height: 1; vertical-align: middle;
+            margin-left: .5rem; color: var(--muted); background: none; border: none;
+            cursor: pointer; padding: 0; }
+    .pagetitle .helpbtn:hover { color: #2b6cb0; }
+    .help-dialog { border: 1px solid var(--line); border-radius: 8px; padding: 1.1rem 1.3rem;
+            max-width: 34rem; box-shadow: 0 8px 30px rgba(0,0,0,.18); color: #333; }
+    .help-dialog::backdrop { background: rgba(0,0,0,.3); }
+    .help-dialog p { margin: 0 0 .8rem; font-size: .92rem; line-height: 1.5; }
+    .help-dialog menu { display: flex; justify-content: flex-end; margin: 0; padding: 0; }
 
     /* Left sidebar: courses -> their hierarchies (references then the outline). */
     .sidebar { width: 345px; flex: none; background: #fff; border-right: 1px solid var(--line);
