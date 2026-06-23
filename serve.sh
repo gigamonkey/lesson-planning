@@ -11,6 +11,14 @@
 # so re-running it at startup won't pile up servers.
 set -euo pipefail
 cd "$(dirname "$0")"
+# In a yolo container the project's .venv lives on the macOS bind mount, so a Linux
+# `uv run` recreates it every time -- and Flask's debug reloader then dies when
+# .venv/bin/python is swapped out under it. Use a container-local environment off
+# the mount instead, leaving the host's .venv untouched. (YOLO_SESSION=1 is
+# exported into every yolo container; respect an explicit override.)
+if [ -n "${YOLO_SESSION:-}" ]; then
+  export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-/tmp/lesson-planning-venv}"
+fi
 export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-5001}"
 # Auto-populate a blank db on startup from the corpus: a directory of course
