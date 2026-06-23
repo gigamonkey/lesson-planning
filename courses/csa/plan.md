@@ -6,9 +6,9 @@ primary_outline: csa-plan
 targets: csa-book, csa-ced
 ---
 
-# Unit 1: Introduction
+# Unit: Introduction
 
-## 1.1 What is programming? What is Java?
+## What is programming? What is Java?
 
 - Compile and run HelloWorld.java  (#ed5c)
 - Add useful comments to code.  (#938b)
@@ -19,7 +19,7 @@ targets: csa-book, csa-ced
 - Use comments to temporarily disable chunks of code.  (#d5b6)
 - Remove redundant comments from code  (#6581)
 
-## 1.2 Debugging and being stuck
+## Debugging and being stuck
 
 - Distinguish between compile-time and run-time errors from an error message.  (#aabe)
 - Describe the kinds of errors that can be detected without running the program.  (#08d8)
@@ -31,15 +31,15 @@ targets: csa-book, csa-ced
 - Distinguish between syntax, run-time, and logic errors.  (#e550)
 - List some situations when Java will throw a runtime Exception  (#f6ad)
 
-## 1.3 Transitioning from AP CSP to AP CSA
+## Transitioning from AP CSP to AP CSA
 
-## 1.4 Java Development Environments
+## Java Development Environments
 
-## 1.5 Growth mindset and pair programming
+## Growth mindset and pair programming
 
-# Unit 2: Values, variables, and expressions
+# Unit: Values, variables, and expressions
 
-## 2.1 Values and variables
+## Values and variables
 
 - Distinguish between declaring, initializing, assigning, and using a variable  (#456c)
 - List the three primitive data types we will use in this course.  (#9d51)
@@ -48,7 +48,7 @@ targets: csa-book, csa-ced
 - Describe the kinds of values in, non-computer terms, represented by `int`, `double`, and `boolean`.  (#c979)
 - Distinguish between variables and values.  (#f344)
 
-## 2.2 Text output
+## Text output
 
 - Write code that reads user input with Scanner  (#0d9d)
 - Explain the difference between string literals and variables  (#243f)
@@ -61,7 +61,7 @@ targets: csa-book, csa-ced
 - State why we can use the String class anywhere.  (#efac)
 - Write string literals with escape characters  (#f057)
 
-## 2.3 Arithmetic expressions
+## Arithmetic expressions
 
 - Write arithmetic expressions that include variables  (#1cb1)
 - Write expressions using +, -, *, and /  (#32e8)
@@ -74,7 +74,7 @@ targets: csa-book, csa-ced
 - Write expressions using arithmetic operators obeying precedence  (#c220)
 - Explain 2-3 uses of the remainder operator  (#d181)
 
-## 2.4 Assignment statements
+## Assignment statements
 
 - Write code using += with ints and Strings.  (#1c9c)
 - Evaluate code including assignment statements  (#67ee)
@@ -83,7 +83,7 @@ targets: csa-book, csa-ced
 - Translate code between compound operators and not (incl. ++ & --)  (#cb9a)
 - Explain code that uses post-increment and decrement operators.  (#d3c5)
 
-## 2.5 Getting math right
+## Getting math right
 
 - Describe the limitations of doubles  (#0bfe)
 - Explain how ints & doubles are an approximation  (#30e1)
@@ -99,9 +99,9 @@ targets: csa-book, csa-ced
 - Explain integer overflow: both when & why it occurs.  (#e6fa)
 - State when double contagion ("zombification") occurs.  (#f9f2)
 
-# Unit 3: Methods
+# Unit: Methods
 
-## 3.1 Writing methods
+## Writing methods
 
 - Write static methods that call other static methods.  (#40d8)
 - Trace code that contains return statements  (#5d29)
@@ -121,13 +121,13 @@ targets: csa-book, csa-ced
 - Explain how method calls affect the flow of control.  (#d33c)
 - Write a `void` method.  (#e386)
 
-## 3.2 APIs and Libraries
+## APIs and Libraries
 
 - Explain the purpose of import in Java  (#4048)
 - Define "attribute"  (#9bee)
 - Describe the relationship between classes, libraries, & APIs  (#b0ca)
 
-## 3.3 The `Math` class
+## The `Math` class
 
 - Write expressions to generate random numbers from a speci  (#002c)
 - Write expressions using Math.random() to generate random numbers  (#15d5)
@@ -135,9 +135,9 @@ targets: csa-book, csa-ced
 - State why the `Math` class can be used in any code.  (#ac1c)
 - Write arithmetic expressions with Math.pow, Math.sqrt, and Math.abs  (#bd0a)
 
-# Unit 4: Booleans and conditionals
+# Unit: Booleans and conditionals
 
-## 4.1 Building blocks of algorithms
+## Building blocks of algorithms
 
 - Describe "repetition"  (#0532)
 - Describe the default flow of control in Java code.  (#1367)
@@ -153,7 +153,7 @@ targets: csa-book, csa-ced
 - Describe an algorithm that combines sequencing, selection, and repetition.  (#f5ad)
 - Match "selection" with decisions and "repetition" with looping  (#fefc)
 
-## 4.2 Booleans and `if` statements
+## Booleans and `if` statements
 
 - Write one-way selections with if  (#0a44)
 - Simplify mutually-exclusive consecutive ifs into chained else ifs  (#1d9a)
@@ -167,7 +167,7 @@ targets: csa-book, csa-ced
 - Write code that uses `if`/`else if`/`else` chains to create multiway branches.  (#e021)
 - Write multi-way selections with if/else if/else  (#f092)
 
-## 4.3 Where do booleans come from?
+## Where do booleans come from?
 
 - Write expressions using the relational operators <, >, <=, >=  (#3071)
 - Write code to test if a number is even  (#4525)
@@ -178,7 +178,7 @@ targets: csa-book, csa-ced
 - Write chained relational expressions with && as standard form  (#a2f0)
 - Explain the use of short circuiting boolean operators  (#fd15)
 
-## 4.4 Manipulating boolean expressions
+## Manipulating boolean expressions
 
 - Create truth tables for boolean expressions of 2 & 3 variables  (#671f)
 - Apply De Morgan's laws to boolean expressions  (#8d09)
@@ -187,16 +187,16 @@ targets: csa-book, csa-ced
 - Explain what it means for expressions to be equivalent  (#a9b7)
 - Simplify boolean expressions (2 and 3 variables)  (#b0a1)
 
-## 4.5 `if` statement traps and pitfalls
+## `if` statement traps and pitfalls
 
 - Explain why you should always use braces with if & else  (#65b9)
 - Explain why else if is an (okay) violation of the always use braces rule  (#c395)
 - Distinguish between = and == and !=  (#dc9b)
 - Explain why we should never use == & != with booleans  (#eafc)
 
-# Unit 5: Loops
+# Unit: Loops
 
-## 5.1 While loops
+## While loops
 
 - State when a `while` loop will not run its body at all.  (#14d0)
 - Check loops by checking their bounds.  (#2e82)
@@ -211,7 +211,7 @@ targets: csa-book, csa-ced
 - State when you might want an infinite loop  (#fbcd)
 - Identify infinite while loops  (#fc0d)
 
-## 5.2 For loops
+## For loops
 
 - Write a canonical reverse for loop that runs N times  (#16f2)
 - Explain the rule of thumb for choosing between while & for loops  (#3612)
@@ -221,7 +221,7 @@ targets: csa-book, csa-ced
 - Write a canonical for loop that runs N times  (#ac4f)
 - Trace the execution of a for loop including the 3 header clauses  (#d2ae)
 
-## 5.3 Basic loop algorithms
+## Basic loop algorithms
 
 - Write a loop to do something with the digits of an int.  (#1adf)
 - Write a counting loop  (#49b7)
@@ -229,17 +229,17 @@ targets: csa-book, csa-ced
 - Write a summing loop  (#bef5)
 - Write a reducing loop  (#c090)
 
-## 5.4 Nested loops
+## Nested loops
 
-## 5.5 Analyzing loops
+## Analyzing loops
 
 - Trace the execution of a nested loop.  (#3284)
 - Compute how many times a for loop will run.  (#4fa8)
 - Compute how many times the inner body of a nested for loop runs.  (#9a82)
 
-# Unit 6: Arrays
+# Unit: Arrays
 
-## 6.1 Creating and using arrays
+## Creating and using arrays
 
 - Distinguish between modifying an array variable and an array element  (#38aa)
 - List the default values for array elements of different types of array.  (#4474)
@@ -263,7 +263,7 @@ targets: csa-book, csa-ced
 - Distinguish between the two ways of allocating an array with new  (#f5f7)
 - Write code that uses the length property of an array  (#f6cf)
 
-## 6.2 Looping over arrays
+## Looping over arrays
 
 - Distinguish regular for loops that can be written as enhanced for loops  (#312e)
 - Write regular for loops to traverse arrays  (#899a)
@@ -275,7 +275,7 @@ targets: csa-book, csa-ced
 - Translate between regular and enhanced for loops  (#e0a7)
 - Explain why code in an enhanced for loop can't modify the array  (#ff94)
 
-## 6.3 Array algorithms
+## Array algorithms
 
 - Write code to detect duplicate elements in an array  (#23c9)
 - Write code to process consecutive pairs of elements in an array  (#6bb0)
@@ -288,7 +288,7 @@ targets: csa-book, csa-ced
 - Write a finding loop  (#eec9)
 - Write code to process all pairs of elements in an array, unordered  (#f087)
 
-## 6.4 Two-dimensional arrays
+## Two-dimensional arrays
 
 - Explain how a 2D array is just a 1D array in disguise  (#2bb6)
 - State the component type of a 2D array  (#418b)
@@ -302,7 +302,7 @@ targets: csa-book, csa-ced
 - Write code to access individual elements of a 2D array  (#b263)
 - Write code to access individual rows of a 2D array  (#cbf1)
 
-## 6.5 Two-dimensional array algorithms
+## Two-dimensional array algorithms
 
 - Write code using standard loop algorithms over rows & columns of 2D array  (#474d)
 - Write code to process all elements of a 2D array w/ regular for loops  (#733b)
@@ -310,9 +310,9 @@ targets: csa-book, csa-ced
 - Write code to process cells and their neighbors in a 2D array  (#9dd3)
 - Write code using standard loop algorithms over all elements of 2D array  (#ddb7)
 
-# Unit 7: Strings
+# Unit: Strings
 
-## 7.1 Manipulating strings
+## Manipulating strings
 
 - Define "immutable."  (#299b)
 - Write code to extract a one-character string at an index  (#58fd)
@@ -324,7 +324,7 @@ targets: csa-book, csa-ced
 - Calculate the String and int values returned by String method calls  (#eb6f)
 - Write code that uses String length  (#fa78)
 
-## 7.2 Implementing string algorithms
+## Implementing string algorithms
 
 - Write a loop over all fixed-size substrings of a String  (#389d)
 - Write a loop over all the characters (as Strings) in a String  (#6e4e)
@@ -332,9 +332,9 @@ targets: csa-book, csa-ced
 - Write a String accumulator loop  (#874c)
 - Write a loop to reverse a String  (#b296)
 
-# Unit 8: Classes
+# Unit: Classes
 
-## 8.1 Anatomy of a class
+## Anatomy of a class
 
 - Write a class based on an abstract description.  (#0179)
 - Sketch diagram of how instances and classes relate in memory  (#4382d)
@@ -342,7 +342,7 @@ targets: csa-book, csa-ced
 - Describe the relationship between class attributes, methods, and constructors  (#c982)
 - Explain the difference between allocating & initializing an object.  (#fad5)
 
-## 8.2 Instance variables
+## Instance variables
 
 - Define "encapsulation"  (#13df)
 - Describe the two main ways instance variables are initialized.  (#2695)
@@ -357,7 +357,7 @@ targets: csa-book, csa-ced
 - Describe how instance variables are used by instance methods.  (#ef0b)
 - Explain the purpose of the null value  (#efab)
 
-## 8.3 Constructors
+## Constructors
 
 - Identify which overloaded constructor will be invoked by a call.  (#0fad)
 - Evaluate code involving pass by value and changes to local variables.  (#3362)
@@ -378,7 +378,7 @@ targets: csa-book, csa-ced
 - Describe the differences between methods and constructors.  (#f2fb)
 - Write a class with at least one `public` constructor.  (#f783)
 
-## 8.4 Instance methods
+## Instance methods
 
 - Write void methods that have internal side effects  (#0d0b)
 - Identify which of several overloaded methods will be invoked by a call.  (#1c16)
@@ -396,9 +396,9 @@ targets: csa-book, csa-ced
 - Write correct overriding to String methods.  (#d9e7)
 - Explain the relationship between + and toString  (#e906)
 
-# Unit 9: Objects
+# Unit: Objects
 
-## 9.1 Connecting objects
+## Connecting objects
 
 - Write methods within a class that access `private` instance variables on multiple instances of the class.  (#20eb)
 - State where you can use this as a variable  (#28d9)
@@ -412,7 +412,7 @@ targets: csa-book, csa-ced
 - Explain passing references as arguments in terms of the call stack  (#e8d2)
 - Explain the consequences of passing mutable types by reference  (#f04d)
 
-## 9.2 Object equality
+## Object equality
 
 - Explain why classes often override equals  (#1f9a)
 - Distinguish between the reference value & object data of an instance.  (#564b)
@@ -425,7 +425,7 @@ targets: csa-book, csa-ced
 - Explain why equals probably doesn't do what we want with arrays.  (#cfa1)
 - Explain the difference between Object.equals & String.equals.  (#dcad)
 
-## 9.3 Some odds and ends
+## Some odds and ends
 
 - Write correct calls to a static method from inside the class.  (#0a1a)
 - Write a class that declares a `public final static` member variable.  (#11fa)
@@ -449,11 +449,11 @@ targets: csa-book, csa-ced
 - Write static methods that access static member variables.  (#e9f8)
 - Write correct calls to a static method from outside the class.  (#fc34)
 
-## 9.4 More turtles
+## More turtles
 
-# Unit 10: ArrayLists
+# Unit: ArrayLists
 
-## 10.1 `ArrayList` and its methods
+## `ArrayList` and its methods
 
 - Write code to declare an ArrayList of type T  (#14a9)
 - State the relationship between the size() of an ArrayList and its last index  (#26c7)
@@ -463,21 +463,21 @@ targets: csa-book, csa-ced
 - State what happens if you try to use a negative index or one greater than or equal to the size of an `ArrayList` with `get` or `set`  (#ab09)
 - State the import statement needed to use ArrayList  (#d229)
 
-## 10.2 Wrapper classes
+## Wrapper classes
 
 - Defining unboxing.  (#10d1)
 - State the two places you must use the names of wrapper types  (#2f74)
 - Distinguish between primitive values and wrapper types.  (#8282)
 - Translate code that uses autoboxing/unboxing to explicit boxing.  (#ebee)
 
-## 10.3 `ArrayList` traversals
+## `ArrayList` traversals
 
 - Write code that uses all the standard loop algorithms with ArrayLists  (#3d15)
 - State what happens if you add or remove items to or from an `ArrayList` while iterating over it with an enhanced `for` loop.  (#7740)
 - State when you must use a regular for loop with an ArrayList  (#9f70)
 - Write code that uses enhanced for loops with ArrayLists  (#cbba)
 
-## 10.4 `ArrayList` algorithms
+## `ArrayList` algorithms
 
 - Debug code that incorrectly removes elements from an ArrayList  (#092d)
 - Write code to remove elements from an ArrayList  (#423f)
@@ -485,11 +485,11 @@ targets: csa-book, csa-ced
 - Write code to traverse multiple Strings, arrays, or ArrayLists in parallel  (#a809)
 - Write a filtering loop with an ArrayList (copying)  (#eed0)
 
-## 10.5 Summary and exercises
+## Summary and exercises
 
-# Unit 11: Data from files
+# Unit: Data from files
 
-## 11.1 Files
+## Files
 
 - Write code to close a Scanner.  (#31ef)
 - Write code to construct a `File` object.  (#5f91)
@@ -499,7 +499,7 @@ targets: csa-book, csa-ced
 - Explain why Scanner.nextLine and other next methods interact badly  (#e072)
 - Explain the purpose of closing a Scanner.  (#f975)
 
-## 11.2 Data sets
+## Data sets
 
 - Construct tables to represent a dataset  (#2dcf)
 - Write code that uses Integer.parseInt  (#34ef)
@@ -510,9 +510,9 @@ targets: csa-book, csa-ced
 - Write code to produce various summary statistics of a data set  (#c57f)
 - Explain the difference between parseInt(s.nextLine()) & s.nextInt()  (#fe42)
 
-# Unit 12: Algorithms
+# Unit: Algorithms
 
-## 12.1 Searching Algorithms
+## Searching Algorithms
 
 - Give examples of O(N) loops and O(N²) loops  (#0594)
 - Write an iterative binary search  (#3dde)
@@ -522,7 +522,7 @@ targets: csa-book, csa-ced
 - Explain what a half-open intervals (is- closed)  (#c6f3)
 - Write code to apply a linear search over a 2d array, row by row and then column by column.  (#f638)
 
-## 12.2 Sorting algorithms
+## Sorting algorithms
 
 - Write selection sort.  (#7b96)
 - Write insertion sort.  (#93ab)
@@ -530,7 +530,7 @@ targets: csa-book, csa-ced
 - Identify sorting algorithm from code (bubble, insertion, selection, merge)  (#aca3)
 - Demonstrate insertion sort with cards  (#caea)
 
-## 12.3 Recursion
+## Recursion
 
 - State what mystery recursive methods do.  (#0bf1)
 - Define recursion  (#5c48)
@@ -540,24 +540,24 @@ targets: csa-book, csa-ced
 - Explain return in terms of the call stack  (#c3ea)
 - Write recursive methods over ints, Strings, arrays, and ArrayLists  (#d2c8)
 
-## 12.4 Recursive searching and sorting
+## Recursive searching and sorting
 
 - Demonstrate merge sort with cards  (#1495)
 - Describe merge sort.  (#7e6f)
 - Write a recursive binary search  (#c3ed)
 - Write merge sort  (#d60c)
 
-## 12.5 Searching and sorting multiple-choice questions
+## Searching and sorting multiple-choice questions
 
-## 12.6 Easier searching and sorting MCQs
+## Easier searching and sorting MCQs
 
-## 12.7 Medium searching and sorting MCQs
+## Medium searching and sorting MCQs
 
-## 12.8 Hard searching and sorting MCQs
+## Hard searching and sorting MCQs
 
-# Unit 13: Abstraction and program design
+# Unit: Abstraction and program design
 
-## 13.1 Abstraction
+## Abstraction
 
 - List three features of Java that provide data abstraction.  (#133b)
 - Describe what kind of details a procedural abstraction hides.  (#1667)
@@ -573,7 +573,7 @@ targets: csa-book, csa-ced
 - Define "abstraction"  (#cb0a)
 - Explain how procedural abstraction simplifies code.  (#ea8e)
 
-## 13.2 Documentation and invariants
+## Documentation and invariants
 
 - Define a "class invariant"  (#e175)
 - Explain how preconditions constrain other code.  (#11b3)
@@ -582,7 +582,7 @@ targets: csa-book, csa-ced
 - Write comments documenting a method's pre- and post-conditions.  (#b306)
 - Define preconditions.  (#e803)
 
-## 13.3 Impact of program design
+## Impact of program design
 
 - Describe ways a dataset can be biased  (#0121)
 - Describe ways you give up some privacy when using software  (#1949)
@@ -594,51 +594,51 @@ targets: csa-book, csa-ced
 - Describe ways software or operation failures can compromise privacy  (#eb1d)
 - Explain the purpose of an open source license.  (#f08c)
 
-# Unit 14: AP practice
+# Unit: AP practice
 
-## 14.1 MCQ practice
+## MCQ practice
 
-## 14.2 FRQ practice
+## FRQ practice
 
-# Unit 15: Free Response Practice
+# Unit: Free Response Practice
 
-## 15.1 FRQ 1A - Methods and Control - Part 1
+## FRQ 1A - Methods and Control - Part 1
 
-## 15.2 FRQ 1A - Methods and Control - Part 2
+## FRQ 1A - Methods and Control - Part 2
 
-## 15.3 FRQ 1A - Methods and Control - Part 3
+## FRQ 1A - Methods and Control - Part 3
 
-## 15.4 FRQ 1B - Strings - Part 1
+## FRQ 1B - Strings - Part 1
 
-## 15.5 FRQ 1B - Strings - Part 2
+## FRQ 1B - Strings - Part 2
 
-## 15.6 FRQ 1B - Strings - Part 3
+## FRQ 1B - Strings - Part 3
 
-## 15.7 FRQ 2 - Class Design - Part 1
+## FRQ 2 - Class Design - Part 1
 
-## 15.8 FRQ 2 - Class Design - Part 2
+## FRQ 2 - Class Design - Part 2
 
-## 15.9 FRQ 2 - Class Design - Part 3
+## FRQ 2 - Class Design - Part 3
 
-## 15.10 FRQ3 - ArrayLists - Part 1
+## FRQ3 - ArrayLists - Part 1
 
-## 15.11 FRQ3 - ArrayLists - Part 2
+## FRQ3 - ArrayLists - Part 2
 
-## 15.12 FRQ3 - ArrayLists - Part 3
+## FRQ3 - ArrayLists - Part 3
 
-## 15.13 FRQ4 - 2D Arrays - Part 1
+## FRQ4 - 2D Arrays - Part 1
 
-## 15.14 FRQ4 - 2D Arrays - Part 2
+## FRQ4 - 2D Arrays - Part 2
 
-## 15.15 FRQ4 - 2D Arrays - Part 3
+## FRQ4 - 2D Arrays - Part 3
 
-## 15.16 Retired FRQ - Arrays - ArrayTester - Part A
+## Retired FRQ - Arrays - ArrayTester - Part A
 
-## 15.17 Retired FRQ - Arrays - ArrayTester - Part B
+## Retired FRQ - Arrays - ArrayTester - Part B
 
-## 15.18 Retired FRQ - Inheritance - NumberGroup - Part B
+## Retired FRQ - Inheritance - NumberGroup - Part B
 
-## 15.19 Retired FRQ - Inheritance - NumberGroup - Part C
+## Retired FRQ - Inheritance - NumberGroup - Part C
 
 ## Pool — not yet placed
 
