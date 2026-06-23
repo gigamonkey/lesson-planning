@@ -1011,6 +1011,51 @@ def outline_md(course):
         headers={"Content-Disposition": f'attachment; filename="{course}-plan.md"'})
 
 
+@app.route("/<course>/outline/edit")
+def outline_edit(course):
+    """Full-page Markdown editor for the course's round-trippable plan.md (the
+    storage form from plan_io.render_course -- NOT the one-way rendered report at
+    /outline.md). Saving posts to outline_source."""
+    with db() as conn:
+        try:
+            files, _n_obj, _n_cov = plan_io.render_course(conn, course)
+        except KeyError:
+            abort(404, f"no course {course!r}")
+    return render_template("outline_edit.html", course=course,
+                           page_title=f"{course.upper()} outline source",
+                           text=files[plan_io.PLAN_FILE])
+
+
+@app.route("/<course>/outline/source", methods=["GET", "POST"])
+def outline_source(course):
+    """GET: the editable plan.md text (the round-trippable storage form). POST:
+    load the edited markdown into the db (plan_io.load_plan_text) then write the
+    canonical plan.md + TSVs to the corpus, leaving the course clean. A parse/load
+    error is reported and writes nothing (the db and disk stay untouched)."""
+    if request.method == "GET":
+        with db() as conn:
+            try:
+                files, *_ = plan_io.render_course(conn, course)
+            except KeyError:
+                abort(404, f"no course {course!r}")
+        return Response(files[plan_io.PLAN_FILE], mimetype="text/markdown")
+
+    text = request.form.get("text", "")
+    try:
+        plan_io.load_plan_text(DB_PATH, course, text)
+    except (ValueError, sqlite3.Error) as e:
+        # Don't clobber: db and disk are untouched. Re-render with the user's buffer
+        # intact so the failed edit isn't lost.
+        flash(f"Couldn't save: {e}")
+        return render_template("outline_edit.html", course=course,
+                               page_title=f"{course.upper()} outline source",
+                               text=text, error=str(e))
+    course_dir = os.path.join(CORPUS_DIR, course)
+    _path, n_obj, n_cov = plan_io.write_course(DB_PATH, course, course_dir)
+    flash(f"Saved outline · {n_obj} objectives, {n_cov} coverage edges")
+    return redirect(url_for("outline_edit", course=course))
+
+
 @app.route("/<course>/objectives/upload", methods=["POST"])
 def objectives_upload(course):
     """Upload objectives for the course. Either a plain-text list (one objective

@@ -162,6 +162,68 @@ def _slug_of(path, meta):
     return meta.get("slug") or os.path.splitext(os.path.basename(path))[0]
 
 
+def _rebuild_outline_nodes(conn, outline, units, lessons, los):
+    """Insert the outline's unit + lesson nodes (positional ids "1", "1.1", ...) and
+    each lesson's learning-objective attr. The caller has already cleared the
+    outline's existing nodes/node_attr. Shared by read_course and load_plan_text."""
+    ordinal = 0
+    unit_has_lesson = {u: False for u, _ in units}
+    for _, parent, _ in lessons:
+        if parent in unit_has_lesson:
+            unit_has_lesson[parent] = True
+    for uid, utitle in units:
+        conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (outline, uid, None, "unit", 0 if unit_has_lesson[uid] else 1,
+                      ordinal, utitle))
+        ordinal += 1
+    for lid, parent, ltitle in lessons:
+        conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (outline, lid, parent, "lesson", 1, ordinal, ltitle))
+        ordinal += 1
+        if los.get(lid):
+            conn.execute("INSERT INTO node_attr(hierarchy, node_id, name, value)"
+                         " VALUES (?, ?, 'learning_objective', ?)", (outline, lid, los[lid]))
+
+
+def _resolve_bullets(conn, course, outline, bullets, known_uuids):
+    """Resolve each plan.md bullet to an objective and (re)build the course's pool
+    membership/order + outline placements. Each bullet's token is matched (by
+    shortest-unique prefix) against `known_uuids` -- the course's existing
+    objective registry; a token win adopts the bullet text (markdown is the source
+    of truth), while a tokenless/ambiguous bullet interns by text or mints a fresh
+    uuid (appended to `known_uuids`). Shared by read_course and load_plan_text.
+
+    Returns the number of outline placements made.
+    """
+    pos = 0
+    n_place = 0
+    outline_pos = {}   # outline node_id -> next per-node coverage position
+    for otext, token, placement in bullets:
+        uuid = resolve_token(token, known_uuids) if token else None
+        if uuid:
+            # Token wins: markdown text is the source of truth -> adopt it.
+            conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (otext, uuid))
+        else:
+            row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (otext,)).fetchone()
+            if row:
+                uuid = row[0]
+            else:
+                uuid = _new_uuid()
+                conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (uuid, otext))
+                known_uuids.append(uuid)
+        conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid, position)"
+                     " VALUES (?, ?, ?)", (course, uuid, pos))
+        pos += 1
+        if placement:
+            # The bullet order within a lesson/unit is the per-node order.
+            p = outline_pos.get(placement, 0)
+            outline_pos[placement] = p + 1
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
+                         " VALUES (?, ?, ?, ?)", (outline, uuid, placement, p))
+            n_place += 1
+    return n_place
+
+
 def read_course(db_path, course_dir):
     """Load one course directory into the database. Idempotent: the course's
     existing hierarchies/coverage/pool are cleared first, then rebuilt from disk.
@@ -228,57 +290,17 @@ def read_course(db_path, course_dir):
             "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
             " VALUES (?, ?, ?, 1, ?, ?)",
             (outline, course, OUTLINE_KIND, "Course outline", os.path.basename(plan_path)))
-        ordinal = 0
-        unit_has_lesson = {u: False for u, _ in units}
-        for _, parent, _ in lessons:
-            if parent in unit_has_lesson:
-                unit_has_lesson[parent] = True
-        for uid, utitle in units:
-            conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
-                         (outline, uid, None, "unit", 0 if unit_has_lesson[uid] else 1,
-                          ordinal, utitle))
-            ordinal += 1
-        for lid, parent, ltitle in lessons:
-            conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
-                         (outline, lid, parent, "lesson", 1, ordinal, ltitle))
-            ordinal += 1
-            if los.get(lid):
-                conn.execute("INSERT INTO node_attr(hierarchy, node_id, name, value)"
-                             " VALUES (?, ?, 'learning_objective', ?)", (outline, lid, los[lid]))
+        _rebuild_outline_nodes(conn, outline, units, lessons, los)
 
         # Objectives: seed the uuid<->text registry, then resolve each bullet's
         # token (by prefix) to a uuid, or intern by text / mint a fresh uuid.
+        # Resolve against THIS course's registry only (tokens are the shortest
+        # prefix unique within the course); newly minted uuids join it.
         reg = _read_objectives_tsv(course_dir)        # [(uuid, text)]
         for uuid, text in reg:
             conn.execute("INSERT OR IGNORE INTO objectives(uuid, text) VALUES (?, ?)",
                          (uuid, text))
-        # Resolve tokens against THIS course's registry only (tokens are the
-        # shortest prefix unique within the course); newly minted uuids join it.
-        known_uuids = [u for u, _ in reg]
-        pos = 0
-        outline_pos = {}   # outline node_id -> next per-node coverage position
-        for otext, token, placement in bullets:
-            uuid = resolve_token(token, known_uuids) if token else None
-            if uuid:
-                # Token wins: markdown text is the source of truth -> adopt it.
-                conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (otext, uuid))
-            else:
-                row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (otext,)).fetchone()
-                if row:
-                    uuid = row[0]
-                else:
-                    uuid = _new_uuid()
-                    conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (uuid, otext))
-                    known_uuids.append(uuid)
-            conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid, position)"
-                         " VALUES (?, ?, ?)", (course, uuid, pos))
-            pos += 1
-            if placement:
-                # The bullet order within a lesson/unit is the per-node order.
-                p = outline_pos.get(placement, 0)
-                outline_pos[placement] = p + 1
-                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
-                             " VALUES (?, ?, ?, ?)", (outline, uuid, placement, p))
+        _resolve_bullets(conn, course, outline, bullets, [u for u, _ in reg])
 
         # Reference coverage edges (many-to-many across hierarchies). The row order
         # within each (hierarchy, node_id) in coverage.tsv is the per-node order.
@@ -299,6 +321,74 @@ def read_course(db_path, course_dir):
     finally:
         conn.close()
     return course, n_refs, n_obj
+
+
+def load_plan_text(db_path, course, text):
+    """Load an edited plan.md *text* into the database -- the in-memory counterpart
+    to read_course's plan half. It rebuilds ONLY the outline hierarchy
+    (units/lessons + learning-objective attrs), the course's objective pool
+    (membership + order), and the outline placements, resolving each bullet's
+    identity token against the course's EXISTING objectives. Reference hierarchies
+    and their coverage edges are left untouched -- those live in the reference .md
+    files / coverage.tsv, not in plan.md.
+
+    The course must already exist (this edits its outline). Returns
+    (n_objectives, n_placements). Raises ValueError if the front matter is missing,
+    names a different course, or the course is unknown.
+    """
+    meta, units, lessons, los, bullets = parse_plan(text)
+    if "course" not in meta:
+        raise ValueError("plan front matter is missing a 'course:' key")
+    if meta["course"] != course:
+        raise ValueError(
+            f"front-matter course {meta['course']!r} does not match {course!r}")
+    targets = _split_list(meta.get("targets"))
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(SCHEMA_DDL)
+        row = conn.execute(
+            "SELECT primary_outline, title FROM courses WHERE course=?",
+            (course,)).fetchone()
+        if not row:
+            raise ValueError(f"unknown course {course!r}")
+        cur_outline, cur_title = row
+        outline = meta.get("primary_outline") or cur_outline or f"{course}-plan"
+        title = meta.get("title") or cur_title or course.upper()
+
+        # The token registry is the course's CURRENT pool (what render_course
+        # computed the tokens against). Capture it before we clear the pool.
+        known_uuids = [u for (u,) in conn.execute(
+            "SELECT uuid FROM course_objectives WHERE course=? ORDER BY position", (course,))]
+
+        # Reset ONLY the outline + the pool; reference hierarchies and their
+        # coverage edges are not represented in plan.md, so they stay as they are.
+        conn.execute("DELETE FROM coverage WHERE hierarchy=?", (outline,))
+        conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (outline,))
+        conn.execute("DELETE FROM nodes WHERE hierarchy=?", (outline,))
+        conn.execute("DELETE FROM hierarchy_targets WHERE outline=?", (outline,))
+        conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
+
+        conn.execute(
+            "UPDATE courses SET title=?, primary_reference=?, primary_outline=? WHERE course=?",
+            (title, meta.get("primary_reference"), outline, course))
+        # The outline hierarchy row normally already exists; ensure it does.
+        conn.execute(
+            "INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title, source)"
+            " VALUES (?, ?, ?, 1, ?, ?)",
+            (outline, course, OUTLINE_KIND, "Course outline", PLAN_FILE))
+
+        _rebuild_outline_nodes(conn, outline, units, lessons, los)
+        n_place = _resolve_bullets(conn, course, outline, bullets, known_uuids)
+        for ref in targets:
+            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
+                         " VALUES (?, ?)", (outline, ref))
+        conn.commit()
+        n_obj = conn.execute("SELECT count(*) FROM course_objectives WHERE course=?",
+                             (course,)).fetchone()[0]
+    finally:
+        conn.close()
+    return n_obj, n_place
 
 
 def _read_objectives_tsv(course_dir):

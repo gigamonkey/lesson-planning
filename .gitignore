@@ -5,3 +5,4 @@ __pycache__/
 .venv/
 .claude/settings.local.json
 db-backups/
+node_modules/

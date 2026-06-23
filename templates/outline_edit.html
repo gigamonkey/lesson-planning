@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+  .editwrap { display: flex; flex-direction: column; gap: .6rem; }
+  .edithint { color: var(--muted); font-size: .9rem; margin: 0; max-width: var(--content-max); }
+  .editbar { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
+  .editbar .spacer { flex: 1; }
+  .editbar label { font-size: .85rem; color: var(--muted); display: inline-flex;
+                   align-items: center; gap: .35rem; }
+  .editbar select { font: inherit; font-size: .85rem; padding: .2rem .3rem;
+                    border: 1px solid var(--line); border-radius: 4px; }
+  .editbar .savebtn { font: inherit; font-size: .9rem; padding: .35rem .9rem;
+                      border: 1px solid #2b6cb0; background: #2b6cb0; color: #fff;
+                      border-radius: 5px; cursor: pointer; }
+  .editbar .savebtn:hover { background: #245a96; }
+  .editbar .revert { font-size: .85rem; color: var(--muted); text-decoration: none; }
+  .editbar .revert:hover { color: #2b6cb0; text-decoration: underline; }
+  .editerr { color: var(--gap); font-size: .9rem; margin: 0; }
+  /* The CodeMirror view fills the column; it manages its own internal scroll. */
+  #editor { border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+            background: #fff; }
+  #editor .cm-editor { height: calc(100vh - 12rem); }
+  #editor .cm-scroller { font: 13.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #editor .cm-focused { outline: none; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="editwrap">
+  <p class="edithint">Editing the course outline as its round-trippable
+    <code>plan.md</code>. Units are <code># Unit: …</code>, lessons
+    <code>## …</code>, and each objective is a <code>-</code> bullet whose trailing
+    <code>(#token)</code> preserves its identity — reword the text freely, but leave
+    the token to keep an objective's coverage. Saving writes <code>plan.md</code> +
+    the TSVs to the corpus and refreshes the database.</p>
+
+  {% if error %}<p class="editerr">{{ error }}</p>{% endif %}
+
+  <form id="editform" method="post"
+        action="{{ url_for('outline_source', course=course) }}">
+    <div class="editbar">
+      <button type="submit" class="savebtn">Save</button>
+      <a class="revert" href="{{ url_for('outline_edit', course=course) }}">Revert</a>
+      <span class="spacer"></span>
+      <label>Keymap
+        <select id="keymap-select">
+          <option value="default">Default</option>
+          <option value="vim">Vim</option>
+          <option value="emacs">Emacs</option>
+        </select>
+      </label>
+    </div>
+    <div id="editor"></div>
+    <textarea id="editor-src" name="text" hidden>{{ text }}</textarea>
+  </form>
+</div>
+
+<script src="{{ url_for('static', filename='editor.bundle.js') }}"></script>
+<script>
+  (function () {
+    var src = document.getElementById('editor-src');
+    LessonEditor.mount({
+      parent: document.getElementById('editor'),
+      textarea: src,
+      doc: src.value,
+    });
+  })();
+</script>
+{% endblock %}

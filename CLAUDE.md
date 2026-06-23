@@ -14,15 +14,21 @@ format and `plans/markdown-as-storage.md` for the design.
 
 ## Tech Stack
 
-- Python 3.13, Flask (the only third-party dependency)
+- Python 3.13, Flask (the only third-party runtime dependency)
 - SQLite as a cache; a git-tracked **corpus** of markdown + TSVs is the committed
   state
 - Package manager: `uv` (run scripts with `uv run <script>.py`)
+- Frontend is server-rendered + htmx (CDN), **no build step except** the outline
+  Markdown editor: CodeMirror 6 bundled by esbuild (`npm run build`) into the
+  committed `static/editor.bundle.js`. The committed bundle keeps the Python
+  runtime node-free; only rebuilding the editor needs `npm install`.
 
 ## Project Structure
 
 - `*.py` — the engine scripts (see Key Scripts below)
 - `app.py` + `templates/` + `static/` — the Flask app
+- `frontend/editor.js` + `package.json` — CodeMirror 6 source for the outline
+  editor, bundled to `static/editor.bundle.js` (committed) via `npm run build`
 - `hierarchy.py` — the curriculum-hierarchy markdown parser (this repo owns it);
   `FORMAT.md` — the on-disk format spec
 - `schema.sql` — canonical schema; `db.db` — live working copy (gitignored);
@@ -39,7 +45,7 @@ format and `plans/markdown-as-storage.md` for the design.
 |------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `hierarchy.py`         | The curriculum-hierarchy **markdown parser** (this repo owns it): front-matter parsing, flavor detection, `LEVEL_TAGS`/`FLAVOR_KIND`, and `to_nodes` (markdown → flat, already-tagged node-list dict). Used by `load_nodes` (references) and `plan_io` (helpers). |
 | `load_nodes.py`        | Parses a hierarchy **markdown** file (`hierarchy.to_nodes`) into the `nodes` table (one uniform, hierarchy-scoped table), registers the hierarchy and upserts its `course`. Overridable course/kind/slug; holds `FLAVOR_META` policy. `load_into` does it on a caller's connection. |
-| `plan_io.py`           | Read/write a course as a directory: `read_course` (references + `plan.md` outline + the two TSVs → db) and `write_course` (db → `plan.md` + `objectives.tsv` / `coverage.tsv`; reference markdown left untouched). Objective identity via abbreviated uuid tokens. |
+| `plan_io.py`           | Read/write a course as a directory: `read_course` (references + `plan.md` outline + the two TSVs → db) and `write_course` (db → `plan.md` + `objectives.tsv` / `coverage.tsv`; reference markdown left untouched). `load_plan_text` loads an edited `plan.md` *text* (outline + pool only, tokens resolved against the live db) — the in-memory loader behind the web Markdown editor. Objective identity via abbreviated uuid tokens. |
 | `import_objectives.py` | Imports raw objectives into a course's pool, interning by text (idempotent). Plain-text (pool only) or TSV (`objective`/`text`, optional `node_id`/`ek` coverage edge, optional `uuid`). `--replace` re-seeds. |
 | `seed.py`              | Corpus loader: load each course directory in a corpus (`plan_io.read_course`). `seed` skips courses already present (create-if-absent; run on startup); `load_corpus`/`--all` reloads all. CLI: `uv run seed.py <corpus> [db]`. |
 | `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load every course in the corpus. `--corpus <dir>` (default `courses`). |
@@ -67,6 +73,22 @@ uv run python -c "import plan_io; plan_io.write_course('db.db', '<course>', '<co
 # restore-from-corpus.
 uv run app.py
 LESSON_CORPUS_DIR=examples uv run app.py       # load the bundled widgets example
+```
+
+The outline workspace has an **"Edit as Markdown"** button (only on the editable
+outline) opening a CodeMirror 6 editor (`/<course>/outline/edit`) on the
+round-trippable `plan.md`. Saving posts to `/<course>/outline/source`, which runs
+`plan_io.load_plan_text` then `plan_io.write_course` — so a save updates the db
+**and** writes `plan.md` + the TSVs to disk, leaving the course clean. (Distinct
+from `/<course>/outline.md`, the one-way rendered *report*.)
+
+```bash
+# Rebuild the editor bundle after editing frontend/editor.js (needs Node/npm).
+npm install        # first time only
+npm run build      # -> static/editor.bundle.js (committed)
+
+# Run the plan_io / load_plan_text round-trip checks.
+uv run test_plan_io.py
 ```
 
 The `examples/` corpus (`examples/widgets/`) is a drop-in example course — see

@@ -1,0 +1,20 @@
+{
+  "name": "lesson-planning-editor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CodeMirror 6 bundle for the course-outline Markdown editor. Build with `npm run build`; the committed static/editor.bundle.js is what the app serves.",
+  "scripts": {
+    "build": "esbuild frontend/editor.js --bundle --format=iife --global-name=LessonEditor --outfile=static/editor.bundle.js --minify --legal-comments=none"
+  },
+  "devDependencies": {
+    "@codemirror/commands": "^6.6.0",
+    "@codemirror/lang-markdown": "^6.3.0",
+    "@codemirror/language": "^6.10.0",
+    "@codemirror/search": "^6.5.0",
+    "@codemirror/state": "^6.4.0",
+    "@codemirror/view": "^6.34.0",
+    "@replit/codemirror-emacs": "^6.1.0",
+    "@replit/codemirror-vim": "^6.3.0",
+    "esbuild": "^0.24.0"
+  }
+}
