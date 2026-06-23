@@ -23,8 +23,8 @@ import sqlite3
 import sys
 import uuid as uuidlib
 
-from flask import (Flask, Response, abort, flash, redirect, render_template,
-                   request, url_for)
+from flask import (Flask, Response, abort, flash, jsonify, redirect,
+                   render_template, request, url_for)
 from markupsafe import Markup
 
 # Import sibling repo-root modules (the lesson-planning scripts). The app wires
@@ -739,6 +739,14 @@ def workspace_data(conn, course, H):
             o["node"] = r["node_id"]
             o["cpos"] = r["position"]
 
+    # The bulk editor edits objectives as plan.md-style bullets, so every objective
+    # carries the same abbreviated identity token the markdown editor shows (unique
+    # over the course pool); editing a bullet's text while keeping its token keeps
+    # the objective's identity (see node_objectives_bulk).
+    tokens = plan_io.abbrev_tokens(list(objs))
+    for u, o in objs.items():
+        o["token"] = tokens.get(u, u[:plan_io.TOKEN_FLOOR])
+
     by_node = {}
     for o in objs.values():
         if o["node"]:
@@ -850,21 +858,38 @@ def place(course, hierarchy):
     return ("", 204)
 
 
+# An optional leading list marker on a bulk-editor line ("- " / "* "); tolerated
+# so the markdown bullets the editor renders parse, as do plain unmarked lines.
+_BULLET_PREFIX = re.compile(r"^\s*[-*]\s+")
+
+
+def _parse_objective_lines(raw):
+    """A bulk-editor buffer -> [(text, token|None)] in order, blanks dropped. Each
+    line is a plan.md-style objective bullet: an optional "- " marker, the text,
+    and an optional trailing "(#token)" identity token (see plan_io.TOKEN_RE)."""
+    out = []
+    for line in raw.splitlines():
+        s = _BULLET_PREFIX.sub("", line, count=1).strip()
+        tok = plan_io.TOKEN_RE.search(s)
+        token = tok.group(1) if tok else None
+        text = (plan_io.TOKEN_RE.sub("", s) if tok else s).strip()
+        if text:
+            out.append((text, token))
+    return out
+
+
 @app.route("/<course>/h/<hierarchy>/node/<node_id>/objectives", methods=["POST"])
 def node_objectives_bulk(course, hierarchy, node_id):
-    """Set a leaf node's objectives in bulk from a textarea (one per line). Each
-    non-blank line is interned by text (reused or created) and added to the course
-    pool; the listed objectives are placed under this node in order (single
-    placement per hierarchy, like a drag). Objectives previously under this node
-    that are no longer listed are unmapped back to the pool. Returns the node's
-    refreshed objective list (the body of its zone)."""
-    raw = request.form.get("objectives") or ""
-    texts, seen = [], set()
-    for line in raw.splitlines():
-        t = line.strip()
-        if t and t not in seen:
-            seen.add(t)
-            texts.append(t)
+    """Set a leaf node's objectives in bulk from the editor's plan.md-style bullets.
+
+    Each line is "[- ]text [(#token)]". A line whose token resolves (by shortest-
+    unique prefix) against the course pool keeps that objective's identity and
+    adopts the line's text (so an existing objective can be reworded in place);
+    a tokenless line interns by text (reused or minted). The resulting objectives
+    are placed under this node in order (single placement per hierarchy, like a
+    drag); those previously here but no longer listed go back to the pool. Returns
+    JSON {items: refreshed zone HTML, doc: the re-tokenized editor buffer}."""
+    parsed = _parse_objective_lines(request.form.get("objectives") or "")
     with db() as conn:
         # A stale tab can POST to a renamed/removed hierarchy; refuse rather than
         # write orphan coverage under a slug that no longer exists.
@@ -874,26 +899,43 @@ def node_objectives_bulk(course, hierarchy, node_id):
         before = {r["uuid"] for r in conn.execute(
             "SELECT uuid FROM coverage WHERE hierarchy=? AND node_id=?",
             (hierarchy, node_id))}
-        objs = []
-        for i, t in enumerate(texts):
-            row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (t,)).fetchone()
-            u = row[0] if row else str(uuidlib.uuid4())
-            if not row:
-                conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, t))
+        # Resolve tokens against the course's existing pool (its objective registry).
+        known = [r["uuid"] for r in conn.execute(
+            "SELECT uuid FROM course_objectives WHERE course=?", (course,))]
+        objs, seen = [], set()
+        for text, token in parsed:
+            uuid = plan_io.resolve_token(token, known) if token else None
+            if uuid:
+                # Token wins: the edited text is the source of truth -> adopt it.
+                conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (text, uuid))
+            else:
+                row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
+                uuid = row["uuid"] if row else str(uuidlib.uuid4())
+                if not row:
+                    conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (uuid, text))
+                    known.append(uuid)
+            if uuid in seen:        # a repeated token/text collapses to one placement
+                continue
+            seen.add(uuid)
             conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid) VALUES (?, ?)",
-                         (course, u))
+                         (course, uuid))
             # Single placement per hierarchy: clear any prior home, then place here.
-            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, u))
+            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, uuid))
             conn.execute("INSERT INTO coverage(hierarchy, uuid, node_id, position) "
-                         "VALUES (?, ?, ?, ?)", (hierarchy, u, node_id, i))
-            objs.append({"uuid": u, "text": t})
+                         "VALUES (?, ?, ?, ?)", (hierarchy, uuid, node_id, len(objs)))
+            objs.append({"uuid": uuid, "text": text})
         # Objectives dropped from the list go back to the pool (coverage removed).
-        keep = {o["uuid"] for o in objs}
-        for u in before - keep:
+        for u in before - seen:
             conn.execute("DELETE FROM coverage WHERE hierarchy=? AND node_id=? AND uuid=?",
                          (hierarchy, node_id, u))
         conn.commit()
-    return render_template("_rawitems.html", objectives=objs)
+        # Re-tokenize against the (now-updated) pool so the editor's buffer reflects
+        # tokens minted this save -- a second save then keeps those identities.
+        tokens = plan_io.abbrev_tokens([r["uuid"] for r in conn.execute(
+            "SELECT uuid FROM course_objectives WHERE course=?", (course,))])
+    doc = "".join(f"- {o['text']}  (#{tokens.get(o['uuid'], o['uuid'][:plan_io.TOKEN_FLOOR])})\n"
+                  for o in objs)
+    return jsonify(items=render_template("_rawitems.html", objectives=objs), doc=doc)
 
 
 @app.route("/<course>/h/<hierarchy>/upload", methods=["POST"])

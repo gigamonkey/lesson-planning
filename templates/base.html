@@ -337,6 +337,14 @@
     form.bulkobj textarea { width: 100%; min-height: 4.5rem; font: inherit;
             padding: .35rem .5rem; border: 1px solid var(--line); border-radius: 6px;
             resize: vertical; box-sizing: border-box; }
+    /* The bulk editor is a CodeMirror instance: bullets of "text (#token)", one per
+       objective. It grows with its content up to a scroll cap. */
+    form.bulkobj .bulkeditor { border: 1px solid var(--line); border-radius: 6px;
+            overflow: hidden; background: #fff; }
+    form.bulkobj .bulkeditor .cm-editor { max-height: 40vh; }
+    form.bulkobj .bulkeditor .cm-scroller { font: 13px/1.5 ui-monospace, SFMono-Regular,
+            Menlo, monospace; }
+    form.bulkobj .bulkeditor .cm-focused { outline: none; }
     form.bulkobj .bulkctl { display: flex; gap: .4rem; }
 
     /* Objectives page: compact sortable table (text column + one per hierarchy). */

@@ -18,8 +18,8 @@
           </ul>
           <form class="bulkobj" hidden method="post"
                 action="{{ url_for('node_objectives_bulk', course=course, hierarchy=ref, node_id=n.id) }}">
-            <textarea name="objectives" rows="4" placeholder="One objective per line…"
-              >{% for o in n.objectives %}{{ o.text }}
+            <div class="bulkeditor"></div>
+            <textarea name="objectives" hidden>{% for o in n.objectives %}- {{ o.text }}  (#{{ o.token }})
 {% endfor %}</textarea>
             <div class="bulkctl">
               <button type="submit" class="primary">Save objectives</button>
@@ -63,8 +63,8 @@
   </ul>
   <form class="bulkobj" hidden method="post"
         action="{{ url_for('node_objectives_bulk', course=course, hierarchy=ref, node_id=L.id) }}">
-    <textarea name="objectives" rows="4" placeholder="One objective per line…"
-      >{% for o in L.objectives %}{{ o.text }}
+    <div class="bulkeditor"></div>
+    <textarea name="objectives" hidden>{% for o in L.objectives %}- {{ o.text }}  (#{{ o.token }})
 {% endfor %}</textarea>
     <div class="bulkctl">
       <button type="submit" class="primary">Save objectives</button>
@@ -95,10 +95,14 @@
     {% if editable %}
       <p>Build the course outline: add <b>units</b> with the <b>+</b> by the title, add
          <b>lessons</b>, and drag raw objectives from the pool into a lesson — or use a
-         lesson's <b>+</b> to type several at once. Each lesson gets one learning objective.</p>
+         lesson's <b>+</b> to edit its objectives as <code>plan.md</code>-style bullets
+         (reword the text freely; leave each trailing <code>(#token)</code> to keep an
+         objective's identity). Each lesson gets one learning objective.</p>
     {% else %}
-      <p>Drag raw objectives from the pool onto the nodes they belong to (or write new
-         ones in place). The outline itself is fixed — it comes from the source.</p>
+      <p>Drag raw objectives from the pool onto the nodes they belong to, or use a leaf's
+         <b>+</b> to edit its objectives as <code>plan.md</code>-style bullets (reword the
+         text freely; leave each trailing <code>(#token)</code> to keep an objective's
+         identity). The outline itself is fixed — it comes from the source.</p>
     {% endif %}
     <menu><button type="button" onclick="this.closest('dialog').close()">Close</button></menu>
   </dialog>
@@ -192,6 +196,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+  <script src="{{ url_for('static', filename='editor.bundle.js') }}"></script>
   <script>
     const course = "{{ course }}";
     const ref = "{{ ref }}";
@@ -249,48 +254,63 @@
     });
 
     // The + by a leaf node's title (reference) or a lesson's title (outline) opens
-    // a textarea for adding/editing that node's objectives in bulk (one per line).
-    // Save reconciles the node's set. The host is the table cell or the lessoncard.
+    // a bulk editor for that node's objectives. Save reconciles the node's set. The
+    // host is the table cell (reference) or the lessoncard (outline).
     function bulkHost(el) { return el.closest('.rcontent, .lessoncard'); }
-    // Editing replaces the objective list with the textarea (rather than stacking
-    // below it), so the textarea is sized to hold the current objectives plus room
-    // for ~two more. Cancel/save restore the (refreshed) list.
-    function sizeBulk(ta) {
-      const lines = ta.value.split('\n').filter(function (s) { return s.trim(); }).length;
-      ta.rows = Math.max(4, lines + 2);
+    // Editing replaces the objective list with a CodeMirror editor (rather than
+    // stacking below it). The buffer is the node's objectives as plan.md-style
+    // bullets -- "- text  (#token)" -- so existing objectives can be reworded while
+    // their trailing token preserves identity. The hidden <textarea> mirrors the
+    // editor for form submit; the CodeMirror view is mounted lazily on first open.
+    const cmReady = typeof LessonEditor !== 'undefined';
+    function setDoc(view, text) {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
+    }
+    function openBulk(form) {
+      const ta = form.querySelector('textarea');
+      if (form._cm) { form._cm.focus(); return; }
+      if (cmReady) {
+        form._cm = LessonEditor.mount({
+          parent: form.querySelector('.bulkeditor'), textarea: ta, doc: ta.value });
+      } else {                       // bundle missing: fall back to the raw textarea
+        ta.hidden = false;
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }
     }
     document.querySelectorAll('.addobjbtn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         const host = bulkHost(btn);
         const form = host.querySelector('form.bulkobj');
         const zone = host.querySelector('ul.rawzone');
+        const opening = form.hidden;
         form.hidden = !form.hidden;
         if (zone) zone.hidden = !form.hidden;  // swap the list out for the editor
-        if (!form.hidden) {
-          const ta = form.querySelector('textarea');
-          sizeBulk(ta);
-          ta.focus();
-          ta.setSelectionRange(ta.value.length, ta.value.length);
-        }
+        if (opening) openBulk(form);
       });
     });
     document.querySelectorAll('form.bulkobj').forEach(function (form) {
       const ta = form.querySelector('textarea');
       const zone = bulkHost(form).querySelector('ul.rawzone');
+      let baseline = ta.value;       // the last saved buffer, restored on cancel
+      function restore(text) {       // put `text` back in both the editor and mirror
+        if (form._cm) setDoc(form._cm, text); else ta.value = text;
+      }
       form.querySelector('.cancel').addEventListener('click', function () {
-        ta.value = ta.defaultValue;  // discard edits, restore the last saved state
+        restore(baseline);           // discard edits, restore the last saved state
         form.hidden = true;
         if (zone) zone.hidden = false;
       });
       form.addEventListener('submit', function (e) {
         e.preventDefault();
         fetch(form.action, { method: 'POST', body: new URLSearchParams(new FormData(form)) })
-          .then(function (r) { return r.text(); })
-          .then(function (html) {
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
             // Replace the node's objective list; the <ul> (and its Sortable) stays.
-            zone.innerHTML = html;
+            zone.innerHTML = data.items;
             zone.hidden = false;
-            ta.defaultValue = ta.value;  // this is the new saved baseline
+            baseline = data.doc;       // re-tokenized buffer is the new saved baseline
+            restore(data.doc);
             form.hidden = true;
             refreshStats();
             if (window.saveRefresh) window.saveRefresh();
