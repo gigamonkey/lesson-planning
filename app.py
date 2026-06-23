@@ -1054,7 +1054,8 @@ def outline_source(course):
     course_dir = os.path.join(CORPUS_DIR, course)
     _path, n_obj, n_cov = plan_io.write_course(DB_PATH, course, course_dir)
     flash(f"Saved outline · {n_obj} objectives, {n_cov} coverage edges")
-    return redirect(url_for("outline_edit", course=course))
+    # Back to the regular (non-markdown) outline workspace after a successful save.
+    return redirect(url_for("plan", course=course))
 
 
 @app.route("/<course>/objectives/upload", methods=["POST"])

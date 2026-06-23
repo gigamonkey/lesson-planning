@@ -10,12 +10,15 @@
                    align-items: center; gap: .35rem; }
   .editbar select { font: inherit; font-size: .85rem; padding: .2rem .3rem;
                     border: 1px solid var(--line); border-radius: 4px; }
-  .editbar .savebtn { font: inherit; font-size: .9rem; padding: .35rem .9rem;
-                      border: 1px solid #2b6cb0; background: #2b6cb0; color: #fff;
-                      border-radius: 5px; cursor: pointer; }
-  .editbar .savebtn:hover { background: #245a96; }
-  .editbar .revert { font-size: .85rem; color: var(--muted); text-decoration: none; }
-  .editbar .revert:hover { color: #2b6cb0; text-decoration: underline; }
+  /* Save / Revert as plain icon buttons (floppy + cycle). */
+  .editbar .savebtn, .editbar .revert { display: inline-flex; align-items: center;
+                      font-size: 1.15rem; line-height: 1; padding: .3rem .55rem;
+                      border: 1px solid var(--line); background: #fff; border-radius: 5px;
+                      cursor: pointer; text-decoration: none; }
+  .editbar .savebtn { color: #2b6cb0; }
+  .editbar .revert { color: var(--muted); }
+  .editbar .savebtn:hover, .editbar .revert:hover { background: #eef3f8; border-color: #bcd;
+                      color: #2b6cb0; }
   .editerr { color: var(--gap); font-size: .9rem; margin: 0; }
   /* The CodeMirror view fills the column; it manages its own internal scroll. */
   #editor { border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
@@ -40,8 +43,9 @@
   <form id="editform" method="post"
         action="{{ url_for('outline_source', course=course) }}">
     <div class="editbar">
-      <button type="submit" class="savebtn">Save</button>
-      <a class="revert" href="{{ url_for('outline_edit', course=course) }}">Revert</a>
+      <button type="submit" class="savebtn" title="Save"><i class="bi bi-floppy"></i></button>
+      <a class="revert" href="{{ url_for('outline_edit', course=course) }}" title="Revert">
+        <i class="bi bi-arrow-repeat"></i></a>
       <span class="spacer"></span>
       <label>Keymap
         <select id="keymap-select">
