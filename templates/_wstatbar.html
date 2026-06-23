@@ -1,6 +1,7 @@
 {% macro wstatbar(stats, id=None) %}
 <div class="wstats"{% if id %} id="{{ id }}"{% endif %}
      title="{{ stats.covered }}/{{ stats.leaves }} leaves have an objective · {{ stats.placed }}/{{ stats.total }} objectives placed · {{ stats.pool }} in the pool">
-  <b>{{ stats.pct }}%</b> leaf coverage<span class="sep">·</span><b>{{ stats.placed_pct }}%</b> objectives placed
+  <span class="wstats-note"></span>
+  <span class="wstats-figures"><b>{{ stats.pct }}%</b> leaf coverage<span class="sep">·</span><b>{{ stats.placed_pct }}%</b> objectives placed</span>
 </div>
 {% endmacro %}

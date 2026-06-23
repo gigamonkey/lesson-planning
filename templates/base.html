@@ -138,10 +138,19 @@
     .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0 0 1rem;
              padding: .8rem 1rem; background: #fff; border: 1px solid var(--line);
              border-radius: 6px; }
-    /* Coverage summary: a subtle one-line readout, top-right of the page. */
-    .wstats { text-align: right; color: var(--muted); font-size: .8rem; margin: 0 0 .8rem; }
+    /* Coverage summary: a subtle one-line readout, top-right of the page. A
+       transient save message rides the left of the same line (see flash JS). */
+    .wstats { display: flex; align-items: baseline; gap: 1rem;
+              color: var(--muted); font-size: .8rem; margin: 0 0 .8rem; }
     .wstats b { color: #555; font-weight: 600; }
     .wstats .sep { opacity: .45; margin: 0 .25rem; }
+    .wstats-figures { margin-left: auto; }   /* keep the figures right-aligned */
+    .wstats-note { transition: opacity .7s ease; }
+    .wstats-note.fade { opacity: 0; }
+    /* Fallback transient message on pages without a stats line. */
+    .flashnote-block { color: var(--muted); font-size: .85rem; margin: 0 0 .8rem;
+              transition: opacity .7s ease; }
+    .flashnote-block.fade { opacity: 0; }
     .stat { line-height: 1.2; }
     .stat b { font-size: 1.4rem; display: block; }
     .stat span { color: var(--muted); font-size: .8rem; }
@@ -184,8 +193,6 @@
     button.iconbtn { border: none; background: none; color: #b8b8b8; cursor: pointer;
             padding: .1rem .35rem; font-size: 1rem; line-height: 1; border-radius: 4px; }
     button.iconbtn:hover { color: var(--gap); background: #f5ebeb; }
-    .flash { background: #fffbe6; border: 1px solid #f0e0a0; border-radius: 6px;
-             padding: .5rem .8rem; margin-bottom: 1rem; }
 
     /* Raw-objective pool (drag target). */
     ul.sortable.rawpool { list-style: none; margin: .4rem 0 0;
@@ -543,7 +550,7 @@
     <main>
       {% if page_title %}<h1 class="pagetitle">{{ page_title }}{% block titlebtn %}{% endblock %}</h1>{% endif %}
       {% with msgs = get_flashed_messages() %}
-        {% if msgs %}<div class="flash">{% for m in msgs %}<div>{{ m }}</div>{% endfor %}</div>{% endif %}
+        {% if msgs %}<div id="flash-data" hidden>{{ msgs|join(' · ') }}</div>{% endif %}
       {% endwith %}
       {% block body %}{% endblock %}
     </main>
@@ -557,6 +564,31 @@
         form.hidden = !form.hidden;
         if (!form.hidden) document.getElementById('newcourse-id').focus();
       });
+    })();
+
+    // Flash messages (e.g. "Saved …"): show subtly on the coverage-stats line
+    // (or as a muted line where there isn't one), then fade away after ~2s.
+    (function () {
+      const data = document.getElementById('flash-data');
+      if (!data) return;
+      const text = data.textContent.trim();
+      data.remove();
+      if (!text) return;
+      const note = document.querySelector('.wstats .wstats-note');
+      let el;
+      if (note) { el = note; el.textContent = text; }
+      else {
+        el = document.createElement('div');
+        el.className = 'flashnote-block';
+        el.textContent = text;
+        const main = document.querySelector('main');
+        main.insertBefore(el, main.firstChild);
+      }
+      setTimeout(function () { el.classList.add('fade'); }, 1600);
+      setTimeout(function () {
+        if (el.classList.contains('wstats-note')) { el.textContent = ''; el.classList.remove('fade'); }
+        else el.remove();
+      }, 2400);
     })();
 
     // Auto-save: an inline field in a `.autosave` form saves on blur if it
