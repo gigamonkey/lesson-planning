@@ -6,9 +6,9 @@ primary_outline: plan
 targets: widgets-ced
 ---
 
-# Unit 1: Widget Basics
+# Unit: Widget Basics
 
-## 1.1 What Is a Widget
+## What Is a Widget
 
 **Learning objective:** Describe a widget and name its parts.
 
@@ -16,16 +16,16 @@ targets: widgets-ced
 - Explain what the frobnicator does.  (#221a)
 - Tell a round widget apart from a square one.  (#bfff)
 
-## 1.2 Assembling Widgets
+## Assembling Widgets
 
 **Learning objective:** Assemble a widget in the correct order.
 
 - List the assembly steps for a widget in order.  (#5653)
 - Use a torque wrench to tighten widget bolts evenly.  (#c1ad)
 
-# Unit 2: Advanced Widgetry
+# Unit: Advanced Widgetry
 
-## 2.1 Widget Maintenance
+## Widget Maintenance
 
 **Learning objective:** Diagnose and fix a common widget fault.
 

@@ -77,9 +77,15 @@ and treated as opaque.
 
 ## The outline: `plan.md`
 
-`plan.md` is the `course` flavor (`# Unit N:` → `## N.1 Lesson` → `- objective`
+`plan.md` is the `course` flavor (`# Unit: …` → `## Lesson title` → `- objective`
 bullets) extended in three ways. The file's presence of a `course:` front-matter
 key is what marks it as the course descriptor/outline.
+
+Unlike a reference hierarchy, the outline's headings carry **no ids** — a unit is
+`# Unit: TITLE` and a lesson is `## TITLE` (the title alone). The positional ids
+(`1`, `1.1`, …) are regenerated from heading order on each load (see §3 below), so
+they are never written. A legacy `# Unit N:` / `## N.M …` heading is still read
+(its number discarded), but exports always use the id-free form.
 
 ```markdown
 ---
@@ -90,9 +96,9 @@ primary_outline: plan
 targets: widgets-ced
 ---
 
-# Unit 1: Widget Basics
+# Unit: Widget Basics
 
-## 1.1 What Is a Widget
+## What Is a Widget
 
 **Learning objective:** Describe a widget and name its parts.
 
@@ -137,9 +143,10 @@ lesson; both orders round-trip (the master from overall document order, the
 per-node from the order of bullets under each heading).
 
 The outline hierarchy's own nodes are therefore only **units and lessons**, with
-positional ids (`1`, `1.1`, `1.2`, …) regenerated on each load. Placement and the
-learning objective are structural (they sit under their headings), so they
-survive an export → reload round-trip even as positional ids are renumbered.
+positional ids (`1`, `1.1`, `1.2`, …) regenerated from heading order on each load
+— the markdown carries titles only. Placement and the learning objective are
+structural (they sit under their headings), so they survive an export → reload
+round-trip even as positional ids are renumbered.
 
 ## Objective identity — abbreviated uuid tokens
 
