@@ -38,7 +38,6 @@ import seed as seed_module  # noqa: E402
 import import_objectives  # noqa: E402
 import load_nodes  # noqa: E402
 import plan_io  # noqa: E402
-import render_outline  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
@@ -1045,23 +1044,10 @@ def objectives_tsv(course):
         headers={"Content-Disposition": f'attachment; filename="{course}-objectives.tsv"'})
 
 
-@app.route("/<course>/outline.md")
-def outline_md(course):
-    """Download the course's rendered plan (the deliverable) as markdown -- the
-    render_outline script, in the app."""
-    with db() as conn:
-        data = render_outline.fetch(conn, course)
-    md = render_outline.render(course, *data)
-    return Response(
-        md, mimetype="text/markdown",
-        headers={"Content-Disposition": f'attachment; filename="{course}-plan.md"'})
-
-
 @app.route("/<course>/outline/edit")
 def outline_edit(course):
     """Full-page Markdown editor for the course's round-trippable plan.md (the
-    storage form from plan_io.render_course -- NOT the one-way rendered report at
-    /outline.md). Saving posts to outline_source."""
+    storage form from plan_io.render_course). Saving posts to outline_source."""
     with db() as conn:
         try:
             files, _n_obj, _n_cov = plan_io.render_course(conn, course)

@@ -24,9 +24,9 @@ conforming markdown.
   lessons, and watch coverage fill in — then **export** the course back to
   git-trackable markdown.
 - A command-line pipeline for the same lifecycle: load a course from its markdown
-  corpus, render the plan, rebuild the database from scratch.
-- A **traceability** view: every leaf of the standard maps to the lesson(s) that
-  cover it, plus an explicit list of gaps.
+  corpus and rebuild the database from scratch.
+- Live **coverage**: as you place objectives, every leaf of the standard reads as
+  planned, objective-only, or a gap, with a gaps-only filter.
 
 The only third-party dependency is **Flask**. Requires Python ≥ 3.13; scripts run
 with [`uv`](https://docs.astral.sh/uv/).
@@ -39,11 +39,8 @@ outline (`plan.md`), and the normalized `objectives.tsv` / `coverage.tsv`. Use t
 `examples/` corpus to see the whole pipeline end to end:
 
 ```bash
-# 1. Rebuild a database from the markdown corpus (a dir of course directories).
+# Rebuild a database from the markdown corpus (a dir of course directories).
 uv run rebuild_db.py --corpus examples            # -> db.db
-
-# 2. Render the plan (units → lessons, traceability appendix, gap list).
-uv run render_outline.py db.db /tmp/plan.md --course widgets
 ```
 
 To load a single hierarchy markdown file straight into a database (the lower-level

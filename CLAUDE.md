@@ -49,15 +49,13 @@ format and `plans/markdown-as-storage.md` for the design.
 | `import_objectives.py` | Imports raw objectives into a course's pool, interning by text (idempotent). Plain-text (pool only) or TSV (`objective`/`text`, optional `node_id`/`ek` coverage edge, optional `uuid`). `--replace` re-seeds. |
 | `seed.py`              | Corpus loader: load each course directory in a corpus (`plan_io.read_course`). `seed` skips courses already present (create-if-absent; run on startup); `load_corpus`/`--all` reloads all. CLI: `uv run seed.py <corpus> [db]`. |
 | `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load every course in the corpus. `--corpus <dir>` (default `courses`). |
-| `render_outline.py`    | Renders a course's lesson plan to markdown: ordered lessons with objectives, a traceability appendix (every leaf → covering lesson(s)), and a gap list. The deliverable (a report, distinct from the round-trippable `plan.md`). |
 | `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the markdown corpus. |
 
 ## Running
 
 ```bash
-# Rebuild a db from a markdown corpus (a dir of course directories), then render.
+# Rebuild a db from a markdown corpus (a dir of course directories).
 uv run rebuild_db.py --corpus <corpus>         # deletes db.db; default corpus 'courses'
-uv run render_outline.py db.db plan.md --course <course>
 
 # Load a single hierarchy markdown file into a db (the step rebuild_db orchestrates).
 uv run load_nodes.py <your-hierarchy>.md db.db --course <course>
@@ -79,8 +77,7 @@ The outline workspace has an **"Edit as Markdown"** button (only on the editable
 outline) opening a CodeMirror 6 editor (`/<course>/outline/edit`) on the
 round-trippable `plan.md`. Saving posts to `/<course>/outline/source`, which runs
 `plan_io.load_plan_text` then `plan_io.write_course` — so a save updates the db
-**and** writes `plan.md` + the TSVs to disk, leaving the course clean. (Distinct
-from `/<course>/outline.md`, the one-way rendered *report*.)
+**and** writes `plan.md` + the TSVs to disk, leaving the course clean.
 
 ```bash
 # Rebuild the editor bundle after editing frontend/editor.js (needs Node/npm).
