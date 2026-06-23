@@ -489,6 +489,84 @@ def is_dirty(conn, course, course_dir):
     return False
 
 
+def import_structure(conn, outline, reference):
+    """Rebuild `outline`'s structure from the first two levels of `reference`.
+
+    Each level-1 (root) node of the reference becomes a unit; each of its level-2
+    children becomes a lesson; and every objective covering a lesson's subtree (the
+    level-2 node or any descendant) is placed into that lesson. An objective
+    covering a unit node directly is placed "rough" on the unit. Unit/lesson titles
+    are the reference node's first text line (render adds the "Unit N:" prefix).
+
+    The outline is single-placement per objective (see app.place), so an objective
+    is placed in only the FIRST lesson (document order) whose subtree covers it.
+    The outline's existing nodes, learning objectives, and placements are cleared
+    first. Returns (n_units, n_lessons, n_placed).
+    """
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT node_id, parent_id, ordinal, text FROM nodes WHERE hierarchy=?",
+        (reference,)).fetchall()
+    children = {}
+    for r in rows:
+        children.setdefault(r["parent_id"], []).append(r)
+    for kids in children.values():
+        kids.sort(key=lambda r: (r["ordinal"], r["node_id"]))
+    title_of = {r["node_id"]: (r["text"] or "").split("\n", 1)[0] for r in rows}
+
+    def subtree(node_id):
+        ids = [node_id]
+        for c in children.get(node_id, []):
+            ids.extend(subtree(c["node_id"]))
+        return ids
+
+    cov = {}   # reference node_id -> [uuid]
+    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?", (reference,)):
+        cov.setdefault(r["node_id"], []).append(r["uuid"])
+
+    # Replace the outline's structure wholesale.
+    conn.execute("DELETE FROM coverage WHERE hierarchy=?", (outline,))
+    conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (outline,))
+    conn.execute("DELETE FROM nodes WHERE hierarchy=?", (outline,))
+
+    placed = set()   # global: each objective lands in exactly one lesson/unit
+    ordinal = 0
+    n_units = n_lessons = n_placed = 0
+
+    def place(node_id, uuids):
+        nonlocal n_placed
+        for u in uuids:
+            if u in placed:
+                continue
+            placed.add(u)
+            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
+                         " VALUES (?, ?, ?)", (outline, u, node_id))
+            n_placed += 1
+
+    for unit in children.get(None, []):
+        uid = _new_uuid()
+        lessons = children.get(unit["node_id"], [])
+        conn.execute("INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf,"
+                     " ordinal, text) VALUES (?, ?, NULL, 'unit', ?, ?, ?)",
+                     (outline, uid, 0 if lessons else 1, ordinal, title_of.get(unit["node_id"], "")))
+        ordinal += 1
+        n_units += 1
+        for lesson in lessons:
+            lid = _new_uuid()
+            conn.execute("INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf,"
+                         " ordinal, text) VALUES (?, ?, ?, 'lesson', 1, ?, ?)",
+                         (outline, lid, uid, ordinal, title_of.get(lesson["node_id"], "")))
+            ordinal += 1
+            n_lessons += 1
+            uuids = [u for nid in subtree(lesson["node_id"]) for u in cov.get(nid, [])]
+            place(lid, uuids)
+        # Objectives mapped straight onto the unit node (not under any lesson) go
+        # rough on the unit.
+        place(uid, cov.get(unit["node_id"], []))
+
+    return n_units, n_lessons, n_placed
+
+
 def _first_outline(conn, course):
     row = conn.execute("SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1"
                       " ORDER BY (kind=?) DESC, hierarchy LIMIT 1",

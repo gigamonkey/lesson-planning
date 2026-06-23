@@ -1146,6 +1146,26 @@ def plan(course):
     return redirect(url_for("hierarchy_view", course=course, hierarchy=O))
 
 
+@app.route("/<course>/outline/import", methods=["POST"])
+def outline_import(course):
+    """Build the course outline from a reference hierarchy: its first two levels
+    become units and lessons, and each objective is placed into the lesson whose
+    reference subtree covers it. Replaces the existing outline (see
+    plan_io.import_structure)."""
+    reference = (request.form.get("reference") or "").strip()
+    with db() as conn:
+        if not conn.execute(
+                "SELECT 1 FROM hierarchies WHERE hierarchy=? AND course=? AND editable=0",
+                (reference, course)).fetchone():
+            abort(404, f"no reference {reference!r} for course {course!r}")
+        O = ensure_outline(conn, course)
+        nu, nl, npl = plan_io.import_structure(conn, O, reference)
+        conn.commit()
+    flash(f"Built the outline from {reference}: {nu} unit(s), {nl} lesson(s), "
+          f"{npl} objective placement(s).")
+    return redirect(url_for("plan", course=course))
+
+
 # --- Units ---
 
 @app.route("/<course>/unit/new", methods=["POST"])
