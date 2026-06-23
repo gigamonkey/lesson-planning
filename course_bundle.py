@@ -26,7 +26,7 @@ FORMAT_MAJOR = 1
 def export_course(conn, course):
     """Return a bundle dict for `course`. Raises KeyError if the course is absent."""
     conn.row_factory = sqlite3.Row
-    crow = conn.execute("SELECT course, title, primary_reference, primary_outline "
+    crow = conn.execute("SELECT course, title, primary_outline "
                         "FROM courses WHERE course=?", (course,)).fetchone()
     if not crow:
         raise KeyError(course)
@@ -65,7 +65,6 @@ def export_course(conn, course):
 
     return {"version": BUNDLE_VERSION,
             "course": {"course": crow["course"], "title": crow["title"],
-                       "primary_reference": crow["primary_reference"],
                        "primary_outline": crow["primary_outline"]},
             "hierarchies": hierarchies, "objectives": objectives,
             "coverage": coverage, "hierarchy_targets": targets}
@@ -106,11 +105,10 @@ def import_course(conn, doc, course=None):
             "INSERT INTO node_attr(hierarchy, node_id, name, value) VALUES (?, ?, ?, ?)",
             [(h["hierarchy"], a["node_id"], a["name"], a["value"]) for a in h.get("node_attr", [])])
 
-    # Restore the course's primary pointers now that its hierarchies exist (slugs
-    # are carried verbatim, so they're valid even when importing under a new id).
-    conn.execute("UPDATE courses SET primary_reference=?, primary_outline=? WHERE course=?",
-                 (doc["course"].get("primary_reference"),
-                  doc["course"].get("primary_outline"), cid))
+    # Restore the course's outline pointer now that its hierarchies exist (the slug
+    # is carried verbatim, so it's valid even when importing under a new id).
+    conn.execute("UPDATE courses SET primary_outline=? WHERE course=?",
+                 (doc["course"].get("primary_outline"), cid))
 
     uuid_map = {}
     for o in doc["objectives"]:

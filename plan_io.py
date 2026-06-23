@@ -8,7 +8,7 @@ holds:
     load-only inputs, never rewritten here (loaded via load_nodes);
   * the OUTLINE `plan.md` (course flavor) -- the one hierarchy this module writes,
     whose front matter also carries the course-level wiring (course id, title,
-    primary_reference, primary_outline, targets);
+    primary_outline, targets);
   * `objectives.tsv` (uuid, text) -- the full uuid<->text registry for the pool;
   * `coverage.tsv` (uuid, hierarchy_id, node_id) -- the many-to-many coverage
     edges into the REFERENCE hierarchies (outline placement is structural in
@@ -81,7 +81,7 @@ def _split_list(value):
 
 def _emit_front_matter(meta):
     lines = ["---"]
-    for key in ("course", "title", "primary_reference", "primary_outline", "targets"):
+    for key in ("course", "title", "primary_outline", "targets"):
         val = meta.get(key)
         if val:
             lines.append(f"{key}: {val}")
@@ -268,10 +268,10 @@ def read_course(db_path, course_dir):
         conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
         conn.execute("DELETE FROM hierarchies WHERE course=?", (course,))
         conn.execute(
-            "INSERT INTO courses(course, title, primary_reference, primary_outline)"
-            " VALUES (?, ?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
-            " primary_reference=excluded.primary_reference, primary_outline=excluded.primary_outline",
-            (course, title, meta.get("primary_reference"), outline))
+            "INSERT INTO courses(course, title, primary_outline)"
+            " VALUES (?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
+            " primary_outline=excluded.primary_outline",
+            (course, title, outline))
 
         # Reference hierarchies (editable=0), parsed straight from markdown.
         n_refs = 0
@@ -370,8 +370,8 @@ def load_plan_text(db_path, course, text):
         conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
 
         conn.execute(
-            "UPDATE courses SET title=?, primary_reference=?, primary_outline=? WHERE course=?",
-            (title, meta.get("primary_reference"), outline, course))
+            "UPDATE courses SET title=?, primary_outline=? WHERE course=?",
+            (title, outline, course))
         # The outline hierarchy row normally already exists; ensure it does.
         conn.execute(
             "INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title, source)"
@@ -423,7 +423,7 @@ def render_course(conn, course):
     Raises KeyError if the course is absent. write_course writes these; is_dirty
     compares them to disk."""
     conn.row_factory = sqlite3.Row
-    crow = conn.execute("SELECT course, title, primary_reference, primary_outline"
+    crow = conn.execute("SELECT course, title, primary_outline"
                         " FROM courses WHERE course=?", (course,)).fetchone()
     if not crow:
         raise KeyError(course)
@@ -451,7 +451,6 @@ def render_course(conn, course):
         return f"- {text_of.get(uuid, '')}  (#{tokens.get(uuid, uuid[:TOKEN_FLOOR])})"
 
     meta = {"course": course, "title": crow["title"],
-            "primary_reference": crow["primary_reference"],
             "primary_outline": outline,
             "targets": ", ".join(r["reference"] for r in conn.execute(
                 "SELECT reference FROM hierarchy_targets WHERE outline=? ORDER BY reference",

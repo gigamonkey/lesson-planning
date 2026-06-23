@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS nodes (
 """
 
 COURSES_DDL = ("CREATE TABLE IF NOT EXISTS courses (course TEXT PRIMARY KEY,"
-               " title TEXT NOT NULL, primary_reference TEXT, primary_outline TEXT)")
+               " title TEXT NOT NULL, primary_outline TEXT)")
 HIERARCHIES_DDL = ("CREATE TABLE IF NOT EXISTS hierarchies (hierarchy TEXT PRIMARY KEY,"
                    " course TEXT NOT NULL, kind TEXT NOT NULL, editable INTEGER NOT NULL,"
                    " title TEXT NOT NULL, source TEXT)")

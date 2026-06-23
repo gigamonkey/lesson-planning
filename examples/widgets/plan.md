@@ -1,7 +1,6 @@
 ---
 course: widgets
 title: Intro to Widgets
-primary_reference: widgets-ced
 primary_outline: plan
 targets: widgets-ced
 ---

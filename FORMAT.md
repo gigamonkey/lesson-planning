@@ -91,7 +91,6 @@ they are never written. A legacy `# Unit N:` / `## N.M …` heading is still rea
 ---
 course: widgets
 title: Intro to Widgets
-primary_reference: widgets-ced
 primary_outline: plan
 targets: widgets-ced
 ---
@@ -117,8 +116,6 @@ Course-level facts that live in no single hierarchy:
 - `course:` — the course id (also the `/<course>` URL). **Required**; its
   presence identifies this file as the outline.
 - `title:` — the course's display title.
-- `primary_reference:` — the slug of the authoritative reference the plan is
-  measured against.
 - `primary_outline:` — the outline's own slug (normally this file's stem).
 - `targets:` — a comma-separated list of reference slugs the outline is measured
   against (the `hierarchy_targets` rows).

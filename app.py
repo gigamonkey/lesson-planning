@@ -237,22 +237,18 @@ def ensure_schema():
             # syllabus kind drops its redundant 'ib-' prefix (flavor carries it).
             conn.execute("UPDATE hierarchies SET kind='syllabus' WHERE kind='ib-syllabus'")
 
-            # A course's primary reference + official outline become explicit
-            # pointers (replacing the kind='ced'/'course-outline' tiebreaks). Add
-            # the columns and backfill from the old implicit selection.
+            # The course's official outline is an explicit pointer (replacing the
+            # kind='course-outline' tiebreak). Add the column and backfill it.
             ccols = [r[1] for r in conn.execute("PRAGMA table_info(courses)")]
-            if "primary_reference" not in ccols:
-                conn.execute("ALTER TABLE courses ADD COLUMN primary_reference TEXT")
-                conn.execute(
-                    "UPDATE courses SET primary_reference = (SELECT h.hierarchy FROM hierarchies h"
-                    " WHERE h.course=courses.course AND h.editable=0"
-                    " ORDER BY (h.kind='ced') DESC, h.hierarchy LIMIT 1)")
             if "primary_outline" not in ccols:
                 conn.execute("ALTER TABLE courses ADD COLUMN primary_outline TEXT")
                 conn.execute(
                     "UPDATE courses SET primary_outline = (SELECT h.hierarchy FROM hierarchies h"
                     " WHERE h.course=courses.course AND h.editable=1"
                     " ORDER BY (h.kind='course-outline') DESC, h.hierarchy LIMIT 1)")
+            # The "primary reference" notion was removed; drop the dead column.
+            if "primary_reference" in ccols:
+                conn.execute("ALTER TABLE courses DROP COLUMN primary_reference")
 
             # Per-node objective order: each coverage edge gets a `position` within
             # its (hierarchy, node_id) -- independent of the master pool order. On
@@ -284,18 +280,15 @@ def courses(conn):
         "SELECT course FROM courses ORDER BY course")]
 
 
-# A course is backed by hierarchies (the courses->hierarchies link). Its REFERENCE
-# (a read-only CED/syllabus) and its OUTLINE (the authored lesson plan) are the
-# course's explicit primary_reference / primary_outline pointers, falling back to
-# the first matching hierarchy if a pointer isn't set. Both reference "coverage"
-# and lesson "placement" are coverage edges into a hierarchy.
+# A course is backed by hierarchies (the courses->hierarchies link). Its OUTLINE
+# (the authored lesson plan) is the course's explicit primary_outline pointer,
+# falling back to its single editable hierarchy. A reference is resolved by kind
+# (ced first). Both reference "coverage" and lesson "placement" are coverage edges
+# into a hierarchy.
 
 def reference_hierarchy(conn, course):
-    """The slug of the course's primary reference hierarchy, or None."""
-    row = conn.execute("SELECT primary_reference FROM courses WHERE course=?",
-                       (course,)).fetchone()
-    if row and row[0]:
-        return row[0]
+    """The slug of a reference hierarchy for the course (ced-kind first), or None.
+    Used as the default target when a request doesn't name one (see active_ref)."""
     row = conn.execute(
         "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0 "
         "ORDER BY (kind='ced') DESC, hierarchy LIMIT 1", (course,)).fetchone()
@@ -346,7 +339,7 @@ def inject_nav():
     try:
         with db() as conn:
             cs = conn.execute(
-                "SELECT course, title, primary_outline, primary_reference FROM courses "
+                "SELECT course, title, primary_outline FROM courses "
                 "ORDER BY course").fetchall()
             by_course = {}
             for h in conn.execute(
@@ -361,11 +354,6 @@ def inject_nav():
                     (h["hierarchy"] for h in hs
                      if h["editable"] and h["kind"] == "course-outline"), None)
                 refs = [h for h in hs if h["hierarchy"] != outline]
-                # The primary matters only with >1 reference (else it's automatic);
-                # mark each so the sidebar can show/choose it just in that case.
-                primary = c["primary_reference"] or (refs[0]["hierarchy"] if refs else None)
-                for h in refs:
-                    h["is_primary"] = (h["hierarchy"] == primary)
                 # Does the on-disk corpus need a (re)export? Drives the save icon;
                 # has_corpus drives whether Refresh (pull from disk) is available.
                 course_dir = os.path.join(CORPUS_DIR, c["course"])
@@ -567,19 +555,6 @@ def course_new():
     return redirect(url_for("tree", course=course))
 
 
-@app.route("/<course>/primary", methods=["POST"])
-def set_primary_reference(course):
-    """Declare which reference is the course's primary (authoritative) one."""
-    ref = (request.form.get("reference") or "").strip()
-    with db() as conn:
-        ok = conn.execute("SELECT 1 FROM hierarchies WHERE hierarchy=? AND course=? "
-                          "AND editable=0", (ref, course)).fetchone()
-        if not ok:
-            abort(404)
-        conn.execute("UPDATE courses SET primary_reference=? WHERE course=?", (ref, course))
-    return redirect(request.referrer or url_for("tree", course=course))
-
-
 @app.route("/<course>/hierarchy/load", methods=["POST"])
 def hierarchy_load_course(course):
     """Load an uploaded hierarchy MARKDOWN file as a reference of THIS course, and
@@ -626,15 +601,12 @@ def hierarchy_load_course(course):
     load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], crow["title"],
                     rows, source=f.filename, title=title)
     # Measure the course outline against this new reference (the eager outline was
-    # created before any reference existed, so link it here); and make this the
-    # course's primary reference if it doesn't have one yet.
+    # created before any reference existed, so link it here).
     with db() as conn:
         O = outline_hierarchy(conn, course)
         if O:
             conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
                          " VALUES (?, ?)", (O, m["slug"]))
-        conn.execute("UPDATE courses SET primary_reference=? WHERE course=? "
-                     "AND primary_reference IS NULL", (m["slug"], course))
     # The loaded hierarchy shows up in the setup table, so only surface the
     # non-obvious case: coverage edges now pointing at ids the new version dropped.
     if orphaned:
@@ -667,9 +639,6 @@ def hierarchy_delete(course, hierarchy):
                      (hierarchy, hierarchy))
         conn.execute("DELETE FROM nodes WHERE hierarchy=?", (hierarchy,))
         conn.execute("DELETE FROM hierarchies WHERE hierarchy=?", (hierarchy,))
-        # Clear the course pointer if it named this hierarchy (reads then fall back).
-        conn.execute("UPDATE courses SET primary_reference=NULL "
-                     "WHERE course=? AND primary_reference=?", (course, hierarchy))
     flash(f"Deleted hierarchy {hierarchy!r} ({n} coverage edge(s) removed).")
     return redirect(url_for("tree", course=course))
 
@@ -1129,7 +1098,7 @@ def _back(course):
 
 def active_ref(conn, course):
     """The reference hierarchy this request targets (a `ref` arg/field), else the
-    course's primary reference -- so the tree view and its AJAX endpoints all act
+    course's default reference -- so the tree view and its AJAX endpoints all act
     on whichever hierarchy is being shown (e.g. csa-ced vs csa-book)."""
     return (request.values.get("ref") or "").strip() or reference_hierarchy(conn, course)
 
