@@ -10,10 +10,32 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import {
-  syntaxHighlighting, defaultHighlightStyle, indentOnInput, bracketMatching,
+  syntaxHighlighting, HighlightStyle, indentOnInput, bracketMatching,
 } from "@codemirror/language";
+import { tags as t } from "@lezer/highlight";
 import { vim } from "@replit/codemirror-vim";
 import { emacs } from "@replit/codemirror-emacs";
+
+// Token styling for the markdown buffer. This replaces CM's defaultHighlightStyle
+// (which underlines headings AND links) -- headings/links stay distinct without
+// underlines. Tweak here to restyle syntax; use `editorTheme` below for chrome.
+const highlightStyle = HighlightStyle.define([
+  { tag: t.heading, fontWeight: "600" },
+  { tag: t.strong, fontWeight: "700" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  { tag: t.strikethrough, textDecoration: "line-through" },
+  { tag: [t.link, t.url], color: "#2b6cb0" },
+  { tag: t.monospace, color: "#b7791f" },
+  { tag: [t.meta, t.processingInstruction], color: "#999" },
+  { tag: t.contentSeparator, color: "#999" },
+]);
+
+// Editor chrome (background, cursor, selection, font). Extend this to restyle the
+// editor itself rather than the syntax tokens.
+const editorTheme = EditorView.theme({
+  "&": { backgroundColor: "#fff" },
+  ".cm-content": { caretColor: "#222" },
+});
 
 // The keymap scheme (default / vim / emacs) lives in a compartment so the
 // selector can swap it live, with no editor rebuild.
@@ -42,7 +64,8 @@ export function mount({ parent, textarea, doc }) {
     indentOnInput(),
     bracketMatching(),
     highlightSelectionMatches(),
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    syntaxHighlighting(highlightStyle, { fallback: true }),
+    editorTheme,
     markdown(),
     EditorView.lineWrapping,
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
