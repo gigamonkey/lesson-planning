@@ -1251,18 +1251,18 @@ def outline_import(course):
 
 @app.route("/<course>/unit/new", methods=["POST"])
 def unit_new(course):
+    # Added via the "+" by the page title with no title yet (the new unit's title
+    # input is focused on reload for immediate editing); a title may still be sent.
     title = (request.form.get("title") or "").strip()
-    if title:
-        with db() as conn:
-            O = ensure_outline(conn, course)
-            nxt = conn.execute("SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
-                               "WHERE hierarchy=? AND level='unit'", (O,)).fetchone()[0]
-            conn.execute("INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf,"
-                         " ordinal, text) VALUES (?, ?, NULL, 'unit', 0, ?, ?)",
-                         (O, str(uuidlib.uuid4()), nxt, title))
-            conn.commit()
-        # The new unit section appears on reload; no flash.
-    return _back(course)
+    with db() as conn:
+        O = ensure_outline(conn, course)
+        nxt = conn.execute("SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
+                           "WHERE hierarchy=? AND level='unit'", (O,)).fetchone()[0]
+        conn.execute("INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf,"
+                     " ordinal, text) VALUES (?, ?, NULL, 'unit', 0, ?, ?)",
+                     (O, str(uuidlib.uuid4()), nxt, title))
+        conn.commit()
+    return redirect(url_for("hierarchy_view", course=course, hierarchy=O, focus_new_unit=1))
 
 
 @app.route("/<course>/unit/<unit_id>/rename", methods=["POST"])

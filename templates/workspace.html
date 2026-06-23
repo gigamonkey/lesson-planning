@@ -74,18 +74,22 @@
 </li>
 {% endmacro %}
 
+{% block titlebtn %}
+  {% if editable %}
+    <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addunit-form">
+      <button type="submit" class="addunit" title="Add a unit">+</button>
+    </form>
+  {% endif %}
+{% endblock %}
+
 {% block body %}
   {{ wstatbar(stats, id='wstats') }}
 
   {% if editable %}
-    <p>Build the course outline: create <b>units</b>, add <b>lessons</b>, and drag raw
-       objectives from the pool into a lesson — or use a lesson's <b>+</b> to type
-       several at once. Each lesson gets one learning objective.</p>
+    <p>Build the course outline: add <b>units</b> with the <b>+</b> by the title, add
+       <b>lessons</b>, and drag raw objectives from the pool into a lesson — or use a
+       lesson's <b>+</b> to type several at once. Each lesson gets one learning objective.</p>
     <div class="addrow">
-      <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addlesson">
-        <input type="text" name="title" placeholder="New unit title…" required>
-        <button type="submit" class="primary">Add unit</button>
-      </form>
       <a class="dlbtn" href="{{ url_for('outline_edit', course=course) }}"
          title="Edit the outline as Markdown (plan.md)">
         <i class="bi bi-pencil-square"></i>&nbsp;Edit as Markdown</a>
@@ -104,7 +108,7 @@
               <form method="post" class="edit autosave"
                     action="{{ url_for('unit_rename', course=course, unit_id=u.id) }}"
                     hx-post="{{ url_for('unit_rename', course=course, unit_id=u.id) }}" hx-swap="none">
-                <input type="text" name="title" value="{{ u.label }}">
+                <input type="text" name="title" value="{{ u.label }}" placeholder="Unit title…">
               </form>
               <form method="post" action="{{ url_for('lesson_new', course=course) }}">
                 <input type="hidden" name="unit" value="{{ u.id }}">
@@ -296,6 +300,16 @@
           }
         });
       });
+
+      // Just added a unit (the "+" by the title redirects with ?focus_new_unit):
+      // focus the new (last) unit's title so it's immediately editable.
+      if (new URLSearchParams(location.search).has('focus_new_unit')) {
+        const inputs = document.querySelectorAll(
+          '.units > .unit:not(.unassigned) .unithead .edit input');
+        const last = inputs[inputs.length - 1];
+        if (last) { last.focus(); last.select(); }
+        history.replaceState(null, '', location.pathname);  // drop the query flag
+      }
     }
 
     // After an htmx add (new raw item appended), refresh stats + re-filter. Skip

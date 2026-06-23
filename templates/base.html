@@ -22,6 +22,12 @@
     /* Fill the available width after the sidebar (flush-left, not centered). */
     main { flex: 1; min-width: 0; margin: 0; padding: 1.2rem 1.5rem; }
     .pagetitle { font-size: 1.3rem; font-weight: 700; margin: 0 0 .9rem; }
+    /* A small "+" by the page title (e.g. add a unit on the Course outline). */
+    .pagetitle form.addunit-form { display: inline; margin: 0; }
+    .pagetitle .addunit { font-size: 1rem; font-weight: 700; line-height: 1; vertical-align: middle;
+            margin-left: .5rem; padding: .05rem .4rem; border: 1px solid var(--line);
+            border-radius: 5px; color: #2b6cb0; background: #fff; cursor: pointer; }
+    .pagetitle .addunit:hover { background: #eef3f8; border-color: #bcd; }
 
     /* Left sidebar: courses -> their hierarchies (references then the outline). */
     .sidebar { width: 345px; flex: none; background: #fff; border-right: 1px solid var(--line);
@@ -525,7 +531,7 @@
       </div>
     </aside>
     <main>
-      {% if page_title %}<h1 class="pagetitle">{{ page_title }}</h1>{% endif %}
+      {% if page_title %}<h1 class="pagetitle">{{ page_title }}{% block titlebtn %}{% endblock %}</h1>{% endif %}
       {% with msgs = get_flashed_messages() %}
         {% if msgs %}<div class="flash">{% for m in msgs %}<div>{{ m }}</div>{% endfor %}</div>{% endif %}
       {% endwith %}

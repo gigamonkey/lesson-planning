@@ -38,7 +38,7 @@ LO_RE = re.compile(r"^\*\*Learning objective:\*\*\s*(.*)$")
 # A unit heading is "Unit: TITLE" -- the positional number is not written (it is
 # regenerated on load). A legacy "Unit N: TITLE" is still accepted, its number
 # discarded. Anything else is taken verbatim as the title.
-UNIT_RE = re.compile(r"^Unit(?:\s+\d+)?:\s*(.+)$")
+UNIT_RE = re.compile(r"^Unit(?:\s+\d+)?:\s*(.*)$")   # (.*): a unit may be untitled
 TOKEN_FLOOR = 4   # shortest token length, to limit diff churn / accidental clashes
 
 PLAN_FILE = "plan.md"
@@ -461,7 +461,7 @@ def render_course(conn, course):
     for L in lessons:
         lessons_by_unit.setdefault(L["parent_id"], []).append(L)
     for u in units:
-        out.append(f"# Unit: {u['text']}")
+        out.append(f"# Unit: {u['text']}".rstrip())   # rstrip: a unit may be untitled
         out.append("")
         # Unit-level "rough" placements: bullets directly under the unit heading,
         # before its lessons (parse_plan reads these back as placed on the unit).
