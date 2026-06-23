@@ -1159,7 +1159,7 @@ def outline_import(course):
                 (reference, course)).fetchone():
             abort(404, f"no reference {reference!r} for course {course!r}")
         O = ensure_outline(conn, course)
-        nu, nl, npl = plan_io.import_structure(conn, O, reference)
+        nu, nl, npl = plan_io.import_structure(conn, course, O, reference)
         conn.commit()
     flash(f"Built the outline from {reference}: {nu} unit(s), {nl} lesson(s), "
           f"{npl} objective placement(s).")

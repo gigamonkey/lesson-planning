@@ -489,7 +489,7 @@ def is_dirty(conn, course, course_dir):
     return False
 
 
-def import_structure(conn, outline, reference):
+def import_structure(conn, course, outline, reference):
     """Rebuild `outline`'s structure from the first two levels of `reference`.
 
     Each level-1 (root) node of the reference becomes a unit; each of its level-2
@@ -500,6 +500,13 @@ def import_structure(conn, outline, reference):
 
     The outline is single-placement per objective (see app.place), so an objective
     is placed in only the FIRST lesson (document order) whose subtree covers it.
+
+    The course pool is reordered to the reference's reading order: covered
+    objectives take the front, in the order their nodes appear in the reference,
+    so within each lesson (and in the pool) objectives read in document order
+    rather than by their prior, unrelated pool position. Objectives the reference
+    doesn't cover keep their relative order, after the covered ones.
+
     The outline's existing nodes, learning objectives, and placements are cleared
     first. Returns (n_units, n_lessons, n_placed).
     """
@@ -530,6 +537,7 @@ def import_structure(conn, outline, reference):
     conn.execute("DELETE FROM nodes WHERE hierarchy=?", (outline,))
 
     placed = set()   # global: each objective lands in exactly one lesson/unit
+    order = []       # uuids in reference reading order (for the pool reordering)
     ordinal = 0
     n_units = n_lessons = n_placed = 0
 
@@ -539,6 +547,7 @@ def import_structure(conn, outline, reference):
             if u in placed:
                 continue
             placed.add(u)
+            order.append(u)
             conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
                          " VALUES (?, ?, ?)", (outline, u, node_id))
             n_placed += 1
@@ -563,6 +572,18 @@ def import_structure(conn, outline, reference):
         # Objectives mapped straight onto the unit node (not under any lesson) go
         # rough on the unit.
         place(uid, cov.get(unit["node_id"], []))
+
+    # Reorder the course pool to the reference's reading order: covered objectives
+    # first (in document order), then everything else in its current order. render
+    # orders within-lesson bullets by pool position, so this is what makes them
+    # read in CED order.
+    existing = [u for (u,) in conn.execute(
+        "SELECT uuid FROM course_objectives WHERE course=? ORDER BY position, uuid",
+        (course,))]
+    rest = [u for u in existing if u not in placed]
+    for i, u in enumerate(order + rest):
+        conn.execute("UPDATE course_objectives SET position=? WHERE course=? AND uuid=?",
+                     (i, course, u))
 
     return n_units, n_lessons, n_placed
 
