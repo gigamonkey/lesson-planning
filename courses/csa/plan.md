@@ -10,14 +10,14 @@ targets: csa-book, csa-ced
 
 ## 1.1 What is programming? What is Java?
 
+- Compile and run HelloWorld.java  (#ed5c)
+- Add useful comments to code.  (#938b)
 - Properly format Java code. (By hand.)  (#70e1)
 - Name all the punctuation characters used in Java.  (#020c)
 - Describe what a text editor is.  (#16fb)
 - List the purpose or purposes of each punctuation character.  (#fcab)
-- Remove redundant comments from code  (#6581)
-- Add useful comments to code.  (#938b)
 - Use comments to temporarily disable chunks of code.  (#d5b6)
-- Compile and run HelloWorld.java  (#ed5c)
+- Remove redundant comments from code  (#6581)
 
 ## 1.2 Debugging and being stuck
 
