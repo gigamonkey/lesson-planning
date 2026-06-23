@@ -180,7 +180,11 @@ def read_course(db_path, course_dir):
         meta, units, lessons, los, bullets = parse_plan(f.read())
     course = meta["course"]
     title = meta.get("title") or course.upper()
-    outline = _slug_of(plan_path, meta)
+    # The outline slug comes from the front matter (course-scoped, e.g. "csa-plan"),
+    # NOT the plan's filename -- every plan is named plan.md, so the filename would
+    # give every course the same slug "plan" (a hierarchies PK collision) and rename
+    # the outline on each round-trip.
+    outline = meta.get("primary_outline") or _slug_of(plan_path, meta)
     targets = _split_list(meta.get("targets"))
 
     conn = sqlite3.connect(db_path)
@@ -356,9 +360,10 @@ def render_course(conn, course):
     for i, u in enumerate(units, 1):
         out.append(f"# Unit {i}: {u['text']}")
         out.append("")
-        for L in lessons_by_unit.get(u["node_id"], []):
-            num = L["node_id"]
-            out.append(f"## {num} {L['text']}".rstrip())
+        for j, L in enumerate(lessons_by_unit.get(u["node_id"], []), 1):
+            # Positional id ("1.1"), matching what parse_plan recomputes on read --
+            # the db node_id is an opaque uuid and must not leak into the markdown.
+            out.append(f"## {i}.{j} {L['text']}".rstrip())
             out.append("")
             if los.get(L["node_id"]):
                 out.append(f"**Learning objective:** {los[L['node_id']]}")
