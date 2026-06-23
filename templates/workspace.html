@@ -252,12 +252,23 @@
     // a textarea for adding/editing that node's objectives in bulk (one per line).
     // Save reconciles the node's set. The host is the table cell or the lessoncard.
     function bulkHost(el) { return el.closest('.rcontent, .lessoncard'); }
+    // Editing replaces the objective list with the textarea (rather than stacking
+    // below it), so the textarea is sized to hold the current objectives plus room
+    // for ~two more. Cancel/save restore the (refreshed) list.
+    function sizeBulk(ta) {
+      const lines = ta.value.split('\n').filter(function (s) { return s.trim(); }).length;
+      ta.rows = Math.max(4, lines + 2);
+    }
     document.querySelectorAll('.addobjbtn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        const form = bulkHost(btn).querySelector('form.bulkobj');
+        const host = bulkHost(btn);
+        const form = host.querySelector('form.bulkobj');
+        const zone = host.querySelector('ul.rawzone');
         form.hidden = !form.hidden;
+        if (zone) zone.hidden = !form.hidden;  // swap the list out for the editor
         if (!form.hidden) {
           const ta = form.querySelector('textarea');
+          sizeBulk(ta);
           ta.focus();
           ta.setSelectionRange(ta.value.length, ta.value.length);
         }
@@ -265,9 +276,11 @@
     });
     document.querySelectorAll('form.bulkobj').forEach(function (form) {
       const ta = form.querySelector('textarea');
+      const zone = bulkHost(form).querySelector('ul.rawzone');
       form.querySelector('.cancel').addEventListener('click', function () {
         ta.value = ta.defaultValue;  // discard edits, restore the last saved state
         form.hidden = true;
+        if (zone) zone.hidden = false;
       });
       form.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -275,7 +288,8 @@
           .then(function (r) { return r.text(); })
           .then(function (html) {
             // Replace the node's objective list; the <ul> (and its Sortable) stays.
-            bulkHost(form).querySelector('ul.rawzone').innerHTML = html;
+            zone.innerHTML = html;
+            zone.hidden = false;
             ta.defaultValue = ta.value;  // this is the new saved baseline
             form.hidden = true;
             refreshStats();
