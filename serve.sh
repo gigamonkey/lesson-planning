@@ -14,10 +14,12 @@ cd "$(dirname "$0")"
 # In a yolo container the project's .venv lives on the macOS bind mount, so a Linux
 # `uv run` recreates it every time -- and Flask's debug reloader then dies when
 # .venv/bin/python is swapped out under it. Use a container-local environment off
-# the mount instead, leaving the host's .venv untouched. (YOLO_SESSION=1 is
-# exported into every yolo container; respect an explicit override.)
+# the mount instead, leaving the host's .venv untouched. YOLO_SESSION is set in
+# every yolo container; its value ('cwd' or 'worktree') names the session kind, so
+# a worktree session gets its own env rather than sharing the cwd session's. An
+# explicit UV_PROJECT_ENVIRONMENT still wins.
 if [ -n "${YOLO_SESSION:-}" ]; then
-  export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-/tmp/lesson-planning-venv}"
+  export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-/tmp/lesson-planning-venv-${YOLO_SESSION}}"
 fi
 export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-5001}"
