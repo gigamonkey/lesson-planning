@@ -79,6 +79,9 @@
     <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addunit-form">
       <button type="submit" class="addunit" title="Add a unit">+</button>
     </form>
+    <a class="editmd" href="{{ url_for('outline_edit', course=course) }}"
+       title="Edit the outline as Markdown (plan.md)">
+      <i class="bi bi-pencil-square"></i>&nbsp;Edit as Markdown</a>
   {% endif %}
 {% endblock %}
 
@@ -89,11 +92,6 @@
     <p>Build the course outline: add <b>units</b> with the <b>+</b> by the title, add
        <b>lessons</b>, and drag raw objectives from the pool into a lesson — or use a
        lesson's <b>+</b> to type several at once. Each lesson gets one learning objective.</p>
-    <div class="addrow">
-      <a class="dlbtn" href="{{ url_for('outline_edit', course=course) }}"
-         title="Edit the outline as Markdown (plan.md)">
-        <i class="bi bi-pencil-square"></i>&nbsp;Edit as Markdown</a>
-    </div>
   {% else %}
     <p>Drag raw objectives from the pool onto the nodes they belong to (or write new
        ones in place). The outline itself is fixed — it comes from the source.</p>
