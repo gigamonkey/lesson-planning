@@ -1,0 +1,410 @@
+uuid	text
+002c974e-4182-4579-8c1c-2e06bbda0326	Write expressions to generate random numbers from a speci
+012121cb-e00e-4fcf-a0d7-ab0cdd675cc3	Describe ways a dataset can be biased
+0179a3c9-6fc3-4497-922c-3521a0b32233	Write a class based on an abstract description.
+020c626c-4580-43bf-997e-f991e28eb5fe	Name all the punctuation characters used in Java.
+05321feb-6f50-44c9-ada7-1e7b707851fe	"Describe ""repetition"""
+0594bf60-f89e-40d6-bf58-7cacfcf6e8d8	Give examples of O(N) loops and O(N²) loops
+08d83b53-5f46-468a-b387-78c9b26250ee	Describe the kinds of errors that can be detected without running the program.
+092dc9a0-d8c6-4bd2-aac6-99564eef2979	Debug code that incorrectly removes elements from an ArrayList
+0a1abe67-cf53-490a-905e-e3d07458a317	Write correct calls to a static method from inside the class.
+0a44f60c-8c8a-4aa3-878b-ccf230633a10	Write one-way selections with if
+0bf1e69d-84bd-4c2f-b1fa-3e20fcf26fe6	State what mystery recursive methods do.
+0bfe5c1c-41b3-4844-acb0-a51b7b231c58	Describe the limitations of doubles
+0d0b4211-04ff-4dbe-9566-c0a7db853579	Write void methods that have internal side effects
+0d9de022-3a91-477e-b001-3f7c25f4ebff	Write code that reads user input with Scanner
+0fad0ed0-ea63-48a2-a151-7152de71ef4a	Identify which overloaded constructor will be invoked by a call.
+10d1c520-57fe-4a4b-a9d9-64bee4acfd9a	Defining unboxing.
+11b3491b-6cf0-4419-8e4a-98f5d7f42ae1	Explain how preconditions constrain other code.
+11fa50af-a037-40e8-a5fa-2d8374b67eed	Write a class that declares a `public final static` member variable.
+1299d65a-01d1-4cac-a1ab-bc58de7c898d	State the proper modifiers for a variable holding a constant value
+133b2b8c-01c7-42d1-a7c0-ad069fb897c2	List three features of Java that provide data abstraction.
+1343971a-d7e9-4440-b367-1f69056369c0	Define postconditions.
+136709e5-61eb-4486-b720-ab806a36a94a	Describe the default flow of control in Java code.
+13dfb0cd-74e9-423e-ba65-8209b0f36471	"Define ""encapsulation"""
+1495d581-d331-4720-8642-cbed74311e8c	Demonstrate merge sort with cards
+14a9e7e2-bc59-487f-a3c0-b38870050cba	Write code to declare an ArrayList of type T
+14d0d4a5-2697-4e3d-be70-d7f1d4180998	State when a `while` loop will not run its body at all.
+15d579c5-5647-406a-a05c-676605dfbf0f	Write expressions using Math.random() to generate random numbers
+16671d6f-b679-4981-b5df-b99b4f323d38	Describe what kind of details a procedural abstraction hides.
+16f25f04-9202-44cc-8b61-659e1cb4f597	Write a canonical reverse for loop that runs N times
+16fb21d4-ae09-4122-b9d2-bedef167e079	Describe what a text editor is.
+19494040-d06e-4fb0-ba96-de4eb58fffc7	Describe ways you give up some privacy when using software
+1adfdf73-109d-4f79-a26f-803035d8f16c	Write a loop to do something with the digits of an int.
+1c167896-1ead-4dab-8816-d7ef8b4ee1cd	Identify which of several overloaded methods will be invoked by a call.
+1c9c9436-3b9c-4b18-9177-e2c4db4f562f	Write code using += with ints and Strings.
+1cb11bbb-d03c-4d93-bf43-80499e162124	Write arithmetic expressions that include variables
+1d9a8d8b-72df-47bc-9e6f-6c2afe7c9b56	Simplify mutually-exclusive consecutive ifs into chained else ifs
+1e48386f-8fa6-4302-8881-f8ebcc281550	Express a real-world procedure as an algorithm in English.
+1f43b090-9c40-4c53-91d8-5135741954f5	List the methods all classes inherit from java.lang.Object
+1f9ade44-23d6-42fb-bdf2-8f82d54c6aa5	Explain why classes often override equals
+20986aef-3a55-48a7-a451-16934698b316	Write correct calls to static & instance methods based on signatures.
+20ebb510-3781-4a72-a4e0-a099e47d5987	Write methods within a class that access `private` instance variables on multiple instances of the class.
+23c9ce34-caa8-4d40-9085-e0aaf04613b6	Write code to detect duplicate elements in an array
+243fafdb-3ad1-4371-85aa-c3332295eacc	Explain the difference between string literals and variables
+2695ee51-4136-46af-82fb-723bf7383d68	Describe the two main ways instance variables are initialized.
+26c78085-b383-4138-9e4b-67e50248bcc6	State the relationship between the size() of an ArrayList and its last index
+28d97886-e32f-4a69-8411-80a706f0fffa	State where you can use this as a variable
+299b7ae8-fb9f-4c31-8e60-ad1c751f263d	"Define ""immutable."""
+29fbc52e-8180-4da0-a39a-a282ff9e540c	Trace code that uses all three of sequencing, selection, and repetition.
+2bb6d7e1-db2e-443e-9c0a-8717802f0a41	Explain how a 2D array is just a 1D array in disguise
+2dcfeb0b-6693-4969-a426-bbaf294d0a23	Construct tables to represent a dataset
+2e829ca8-5ab8-46f1-a325-e89197cc051f	Check loops by checking their bounds.
+2eccd76f-1f2c-432f-8ed1-75d6336c79b2	Trace the evaluation of if, if/else, & if/else if/else statements
+2f7413b7-37fd-4d31-9cb8-2cc7b05ee9c7	State the two places you must use the names of wrapper types
+3071efa1-5290-4474-a4ee-a815c376f5b3	Write expressions using the relational operators <, >, <=, >=
+30e12cca-8724-40ff-8b18-7fbab0befebb	Explain how ints & doubles are an approximation
+312e3eb2-764a-4c1c-8cb0-f88beb821198	Distinguish regular for loops that can be written as enhanced for loops
+31ef2db3-cbca-4df4-a444-1e590a9f8765	Write code to close a Scanner.
+3284ce94-f10c-410f-8888-f2c8e6b983ba	Trace the execution of a nested loop.
+32e8671d-0213-4b34-bf07-ca067bc20745	Write expressions using +, -, *, and /
+336295c8-71c4-4af1-a0a8-fb54986d2b0d	Evaluate code involving pass by value and changes to local variables.
+34ef69de-7cad-45d5-bd4e-84c748e46693	Write code that uses Integer.parseInt
+3612691b-772e-4bf2-a0fd-85baff5fac09	Explain the rule of thumb for choosing between while & for loops
+369fbb3c-0ca3-4c90-aef4-3564819f6545	Write expressions using %
+36eda965-cdee-4d02-a430-44512f65384a	Identify a syntactically correct while loop
+389dd5f9-4a16-4b6b-9429-7d76071acb01	Write a loop over all fixed-size substrings of a String
+38aa08a4-8d95-468a-856f-51ee934fa8a3	Distinguish between modifying an array variable and an array element
+391584a4-ae42-4486-9b16-4078eb194bf4	Describe the role of a constructor
+39741a34-477f-41e3-8ad4-9606af3ffbbe	Explain how writing a class creates a data abstraction
+3b7570a3-6d8f-46fa-96f7-1abc9c0b7103	State the value of expressions involving truncating division.
+3d153afc-500e-4f55-a5e8-41192ce59218	Write code that uses all the standard loop algorithms with ArrayLists
+3ddedaa2-702d-498b-a7d3-40c3cc21c20f	Write an iterative binary search
+3f5e4728-eb75-419d-9e68-cf472621f31d	Distinguish between class (static) and instance variables
+3fc12e30-01fc-47ed-8c5c-edd88ee1b1b1	Fix common syntax errors in Java code
+40480fc9-8d18-49e0-bd04-05d3b9ba07dc	Explain the purpose of import in Java
+40d8b99e-4324-461e-8a02-23bc81078bdf	Write static methods that call other static methods.
+418bc867-a4d4-4085-94a8-e1ee281c5787	State the component type of a 2D array
+420b29c5-5660-4881-9f77-39d524cd82d8	Explain where instance variables are stored in memory
+4227080f-13f0-49ab-b999-8c37a9977e4f	Write code to construct an ArrayList with <>
+423fcaa6-1190-40e6-bce9-c0579f58c167	Write code to remove elements from an ArrayList
+4382d841-a64b-4e6d-9151-c60a66a48e77	Sketch diagram of how instances and classes relate in memory
+4382f55e-b47d-4e37-9d78-28ca0cd920aa	Trace the execution of a while loop
+44742501-76fd-4448-9160-91d8407a75a9	List the default values for array elements of different types of array.
+45258d79-fb8e-4b71-a0ef-015b214921b5	Write code to test if a number is even
+456cc048-2d48-4d2e-ba5c-95742d965431	Distinguish between declaring, initializing, assigning, and using a variable
+45a40929-7d8f-4d12-bd99-203d2b75a8ff	Write if statements that use Math.random() to execute code with probability
+46a49dd0-bdd9-4e69-9a60-83501468feae	State the condition for using binary search
+46a72226-53be-4ca0-817b-6e7a6fd327c7	Explain why a constructor might make a copy of one of its arguments.
+46eb89a5-5d50-4677-bfa5-6d8af5dab774	"Define ""dataset"""
+474d9abf-f816-44ae-ad17-d10fb3092da3	Write code using standard loop algorithms over rows & columns of 2D array
+48fd3a42-41f5-4828-9118-01f984ffefd7	Identify syntactically correct constructor signatures.
+49b7febf-e361-4a7e-92cb-f49dbf36c4e3	Write a counting loop
+49c81612-d043-47c9-85c0-d9a704c7e16b	Write two-way selections with if/else
+4bf8eee5-759e-47cb-94b7-b262b2cca522	Explain how to decide if a method should be public or private.
+4c1eacba-08ae-4814-9aee-b3a7d34e02b0	Describe some errors that cannot be detected until we run the program.
+4cbb0b49-7855-44df-a845-fd6445c0c59b	Explain where you can access a private member of a class
+4d330f38-1c8d-48f5-afe0-0c8148624610	Describe the mathematical effect of casting a `double` to an `int`.
+4d8d24af-0290-4852-8a1c-e16e4b9fa12f	Write code to declare a `public` class.
+4df0fbb2-e5a6-4831-a0f8-d3a7235a03a2	Explain how 2D arrays are stored in the heap
+4e5027b3-1078-4c00-8971-a6bc5eb6464b	Explain the difference between data in a file and in a program.
+4f3404f2-f7ce-4332-816f-2c11010a92d6	Write a maximizing/minimizing loop
+4f8f38de-8683-46a0-aa01-75bb6c554a18	Write bubble sort.
+4fa88e21-76ff-4d67-979c-c900c92ce09e	Compute how many times a for loop will run.
+5051e7b0-a644-45f2-a668-ff3eb4e264b2	Write expressions to round doubles to nearest int w/o Math.round
+51557056-5415-4b7a-83fe-6ac83fa9bc60	Explain how reference types are returned in terms of the call stack
+51aad284-82d8-421a-ba93-2f0f421adae3	Demonstrate bubble sort with cards
+52192675-1aca-4537-a33a-03a4a740349a	List the mechanisms in Java we've learned for creating abstractions
+53736f6b-d4c8-4575-baa7-95a028cca79a	Explain the difference between int and double math.
+564be60f-5f73-4e64-aef0-2531af15b795	Distinguish between the reference value & object data of an instance.
+56a05ea0-a1ec-4543-8135-63689a74baa8	Explain the difference between inclusive and exclusive bounds
+57193814-0079-4e24-8f39-f0cb679add44	Explain the structure of a while loop
+578541b7-0dde-438a-a05b-8ca7cd8f4dd1	State the type of expression using array access.
+57958167-13ae-4cb9-9e4f-c64f1f198adf	Explain the structure of a regular for loop
+58fd2cd5-a543-4aa5-bf1d-f2021cedaaff	Write code to extract a one-character string at an index
+5a6b89af-e674-4afb-ab31-2dda9d028d2d	Explain why its necessary to use equals with String objects.
+5aab9557-1f0d-417e-82ec-8ac8df8545da	State the number of rows & columns in a row-major 2D array
+5c489ffe-fd98-4fde-a16b-4d37b9e29859	Define recursion
+5cb2b629-9093-47cb-87f1-78de5c092b93	Write methods that modify a mutable argument
+5cdce992-a7f5-4f9b-acb1-776ca65ac207	Describe a method in terms of its inputs and outputs or side effects
+5d01e79a-4151-4866-a156-255091245013	Write code to access elements of arrays
+5d29e344-b576-4d86-8bbc-2f3a344a90e2	Trace code that contains return statements
+5e2e39ac-f3db-4172-9fdc-716397a56482	"Define an object's ""state"""
+5ece0dde-b09c-40bb-aa07-b2ce8464506c	Debug index out of bounds errors.
+5f915536-0b40-4dd8-9ee9-91900c1a3548	Write code to construct a `File` object.
+5fa96a4e-6c22-4d67-aff5-d507146b747c	Write code that passes this as an argument
+6128d62a-e849-4a09-ad07-3eab87e9e813	Determine whether a method can be static or not.
+6157f04d-0a0c-425d-a9d4-2b448dd97385	Write non-void methods that return values computed by arbitrary expressons.
+62f86dcb-ef96-447b-83db-f319a4a7114a	Identify the body of a while loop
+634caae1-89d4-40e8-adb1-7dadeb07b8a6	Explain why file operations may throw IOException
+63897ba3-b9e0-4d4a-b268-96804b8a99c9	Write code that uses String.split to extract data
+6581e308-fdbb-4231-9bcb-a7d3f9acc806	Remove redundant comments from code
+65966008-79e8-4594-9d42-66c1dd116c8f	"Describe ""selection"""
+65b1c6f0-2482-484d-bbf5-5b23632468e3	Describe a class in English in terms of its attributes & methods
+65b9d745-bc14-401b-9647-bb326f5a82e7	Explain why you should always use braces with if & else
+671763ce-5d45-4c2a-ab19-91a9a6270f2c	State the type of expressions involving method calls.
+671fbdd9-443a-47d3-b790-87aa9a880043	Create truth tables for boolean expressions of 2 & 3 variables
+67ee4588-9434-4eb2-b91d-07a27bbb5f1d	Evaluate code including assignment statements
+68106b9a-dfaf-4767-b01d-51a80595ed88	Write expressions using relational operators with `int`s and `double`s
+6887a13e-97b9-40eb-81ec-c0d4cf0fecd7	Write code that uses string + with non-String values.
+69ef838d-16f0-44d1-a93e-1f181255c6a7	"Define ""procedural abstraction"""
+6bb0123a-2f8a-43c2-8953-cccd40237850	Write code to process consecutive pairs of elements in an array
+6c0957b3-a4cd-4913-a1ae-9685e1be3164	List the default values for member variables & types: int, double, boolean, etc. and references
+6ca042d3-d7b8-4afe-a40e-615a740bdb08	Write code that uses indexOf with substring to extract parts
+6d02277b-48b9-4263-832d-45c8c7d2ad7c	Describe the purpose of inheritance (limited to Object)
+6d12382a-7278-46c0-812b-edd288993b71	Define the initializer, condition, and updater in a for loop
+6d700155-72d5-4e11-b550-a8b8a38bcc59	Write code to initialize a 2D array variable with given dimensions
+6e4e4f01-2e0e-48ae-9fdf-6564e8d0b952	Write a loop over all the characters (as Strings) in a String
+6fe212fa-62ff-43d3-aee9-d026b5e59a74	Distinguish between the element type & component type of 2D array
+70e1c9e1-6a1f-4743-abb3-f51f1e0d6913	Properly format Java code. (By hand.)
+7100e56c-fe0f-4e57-86cb-e0ee66072d92	Write code that uses a while loop
+71037e1b-ffa9-4936-9a49-b065e5e9eddf	Use casts to get mathematically appropriate answers.
+713f4a22-bc84-4bad-8997-fd74fb7c1d87	Explain why doubles are bad for money.
+719b1a34-eb83-4eb0-9a23-c7feb28168ed	Write code to process all pairs of elements in an array, ordered
+7269f017-bf15-4caf-be1c-18bbefeaf7c3	Define the meaning of == & != for primitive & reference values
+72e68860-5ea6-4e9d-b2ef-eaf5c6682da8	Write code to test if a number (incl negative) is odd
+733b725c-4d42-4f05-9695-e79161b2c224	Write code to process all elements of a 2D array w/ regular for loops
+735b058a-b8a2-4b96-8bba-60081d9a6a90	Write code to generate output with print and println
+7373f41e-ce0c-49a2-923c-526d5da52681	Trace the flow of code containing calls to constructors.
+7448f90f-24ca-4866-a07b-1fabc3cffa0e	"Explain the difference between ""pure"" and side-effecting methods."
+76a2f195-8d64-4c3f-96e2-ac930e0a6170	State the initial value of elements of an array constructed with new
+774032d1-7140-453d-a1c7-d18057aaef64	State what happens if you add or remove items to or from an `ArrayList` while iterating over it with an enhanced `for` loop.
+782d0358-3846-463b-9761-cc2334737cd2	Explain why non-void methods usually shouldn't have side effects
+788e98d6-5f91-4258-901d-994256e588b4	Translate multi-way else if chains to mutually exclusive ifs
+7a20ade3-25d9-4bf2-a02a-e503969faa37	Write code to initialize a 2D array with an array initializer
+7a497f9e-92ca-4682-8cf0-1bd6565e3cba	Explain why non-primitive types are passed by reference.
+7a4bb7b4-dab4-49a1-82d8-9265d61f8c51	Describe ways data sets can be incomplete or inaccurate
+7a94bcf1-3d5c-4715-8a7c-748cf49a9af6	Translate while loops to equivalent for loops and vice versa.
+7ad90f11-173f-4aa2-8661-9a4cb6ce908b	Write methods that modify a passed in array.
+7b9697c5-a876-4f45-96f4-5ca26f156571	Write selection sort.
+7bde64be-c301-4299-b510-5210172560e3	Write code that uses compareTo
+7c0ed43a-547d-492f-8f2e-2e5bc4d47b1d	Distinguish between parameters (variables) and arguments (values).
+7c3fbc8f-9e92-4eef-ac3a-7a1d985b5ae6	Explain why processing user input line-by-line makes sense.
+7d475d4e-874e-41cc-bb3d-ac89ccaf4e98	Write code to read data with File and Scanner
+7d55aea0-2c46-47de-99ad-1065bee74520	Write a loop over all substrings of a String
+7dc999e1-74c3-4fe5-9291-b9bb20eca36b	List the two kinds of attributes in classes.
+7e2a60c5-3599-488d-8726-d9321826f856	Explain the difference between the heap and the stack.
+7e2ce056-cc7a-452a-9396-7d310daf4d98	Write code that uses Double.parseDouble
+7e6fae92-f6d3-48ca-b250-1a2abf0ab491	Describe merge sort.
+7ea71ae2-20d7-474e-a06b-82aba0c4e8f9	State what happens if you invoke an instance method on null.
+7f510ba7-cadd-49da-94a5-226eb33be419	State the two contexts where an array initializer may appear
+7f8cd116-9db8-48c0-865c-ee91b9d8d52e	List the three kinds of control flow.
+803aa40b-47ee-41fa-b2d7-ab9089d5434d	Calculate the value of == & != expressions with references including null
+80aa4074-1de5-434a-92bf-12739f39145f	Discuss ways software can have unintended societal consequences
+8109d567-8471-492b-866e-e7aedcab97ac	Distinguish between local and member variables
+8282f8ed-49bc-4936-bced-1bf061a06e40	Distinguish between primitive values and wrapper types.
+8349e2f1-10d2-463e-88bd-0afc62bd049a	"Define ""sequencing"""
+8377675d-df43-4f6f-b647-c987cda92bc4	Write code that declares and uses static variables
+8591041b-3cb3-4558-93b7-1a531b55905b	Describe ways a data set can be useful for one question but misleading for another
+874c0d24-dfb6-4d59-b762-fc16477bbdb9	Write a String accumulator loop
+88793d3d-20b6-48e7-83f2-ec681e7eea8e	Write methods that take arguments that they used to compute their result or to have the desired side effects.
+88888a01-8ca2-4743-9ee3-83eaa25cef0c	Explain argument passing in terms of the call stack
+899abfa9-cf78-4be1-989a-46f649d8d6cb	Write regular for loops to traverse arrays
+8aba3490-639b-4515-b362-376477b6822b	Trace the order of evaluation of expressions & statements.
+8bb26936-c33c-496e-bdcb-8257470b7039	Explain the relation between sequential evaluation and assignment
+8c49974f-8de0-4afc-94ae-e509214c6b0b	Calculate the value of expressions using == & != with references
+8c66bef8-43b1-4aea-a7f4-e747adb11e4b	Calculate the value of boolean expressions using &&, ||, and !
+8d090e49-4519-4cf0-93b1-480cd225a91a	Apply De Morgan's laws to boolean expressions
+8e576490-d728-40d0-8bc2-f0260df2dd7a	Translate iterative code to recursion
+902ed0fb-3ea4-49b7-9360-5cd4e95200a3	Evaluate arithmetic expressions involving casts.
+925a5d29-c6c2-4d72-91f0-390ec44b2c0f	Write correct invocations of a constructor with new
+92c4ba1c-55f8-4806-bb29-9732813be256	Distinguish between when we have to use this. and when its optional
+9351853e-85ce-4887-b22c-4da478f83df7	Fix inadvertant infinite while loops
+938b92d5-ee0e-425a-ace4-64eeeaf6a5a9	Add useful comments to code.
+93abd1b8-cff0-4ca7-8bfa-d84b0cd014e1	Write insertion sort.
+93e07719-56ae-4ffc-bef0-5f5718e6b56d	Write code to process all elements of a 2D array w/ enhanced for loops
+93f26463-c8e2-4fa2-93ce-1f95d99bfbdf	Create methods by extracting code
+942b53e2-a191-4f77-9404-9f29942e3f0b	Describe the difference between arrays and ArrayLists
+94805b57-58b9-40cd-9723-fa1673eac9e3	Describe each of the `ArrayList` method on the Java Quick Reference.
+94fbea0a-df96-48c1-8305-176d90120069	Write code that uses strong literals.
+953f3365-b597-45c1-8f5e-b960bc75112e	Write code that builds up a String value with +=
+959a02e6-3b27-4ad6-9da2-098cc79e93af	Write code to declare and initialize an array with an array initializer
+96204ddb-58b3-4677-b7dd-0de363342699	Describe how postconditions constrain other code.
+9690e8d4-9d6a-4878-bfc4-574a55d36b87	Explain results of code that uses compound assignment operators
+96d357dc-8547-4816-8d02-d53b9a04d560	Identify methods that can be used in an expression based on return type
+993d25cf-b0b4-4447-aca8-0a542f1882fa	Write code that uses Scanner with System.in
+99d49db5-5459-487b-91e3-cc67dbb23aa4	State what happens if we divide an `int` value by zero.
+9a3e89cd-c171-4366-9d65-a0c53d4c725a	Explain why the order of operations can affect the value of double comp.
+9a77ec7d-e6a9-42b8-bc21-2b7eb75de92b	List the rules of boolean algebra
+9a820ae5-535b-4939-84c9-b3df2217533d	Compute how many times the inner body of a nested for loop runs.
+9aa75e5c-785a-43b3-8cba-e640d4c38b77	Describe how arrays are represented in the heap
+9b45326f-1f5f-447f-98e5-b5c3edaddcb6	Explain the main job of every constructor
+9bae5d1e-cb5b-43c7-afb5-d6baf62f9026	Explain why you might write a getter but no setter
+9bee76da-4c74-4157-8777-73c245ba2686	"Define ""attribute"""
+9c8565a2-f7e1-48e7-959b-2fe942c9c600	Explain how call by value works.
+9cab2c7f-2922-46bc-9926-b80c86cfc2e0	Write code to call static methods
+9ce0d824-047a-487c-a532-2cbb5de9ee5d	Describe a recursive algorithm that is hard to express iteratively
+9cef504a-87e1-459f-89e6-5a27cd735274	Explain why constant values are often defined as static variables
+9d199b14-28a1-4461-8bc5-b4ce67e1950c	State the relationship between the length of an array and its last valid index.
+9d518b81-c137-45d5-bcc9-e3ed8b8ecb2e	List the three primitive data types we will use in this course.
+9d6d1ab7-59c0-48bd-89fa-f61599ce9a43	Explain what it means if two objects represent the same mutable object
+9dd34095-a834-4241-bdc9-8d7b22339684	Write code to process cells and their neighbors in a 2D array
+9e744a15-6d3c-408a-a573-0801501df15c	Explain why we can (and should) use equals with all reference types.
+9e856ff2-3bc5-4af3-a872-cc4b6e16cec7	Demonstrate selection sort with cards
+9eb1ebb9-1eff-47d4-8184-09b686b93014	Describe a program (e.g. Google docs) abstractly in English
+9f708d9b-57ef-446d-8a2b-02e7bb00ae51	State when you must use a regular for loop with an ArrayList
+a28330b3-6b85-4f6b-b1ea-7421f74cf938	Write correct calls to instance methods on specific object
+a28480e9-d91b-4d0e-9e69-9239761dc798	Apply De Morgan's laws to expressions involving relational & equality operators
+a2df6e0f-f6e2-4dd7-996d-fa0f3c00d61a	Explain how recursive calls work in terms of the stack and local variables
+a2f029ef-80eb-4fa6-9e30-21583640270a	Write chained relational expressions with && as standard form
+a30bed67-3875-4cdf-b1ef-0ea6d1084b9d	State the value of array access expressions
+a33b0de2-e7fe-4184-883c-ff3f0d901d01	Identify missing semicolons and extraneous semicolons
+a36e9353-cf41-41e2-8156-86d728d0b8ce	Identify the condition of a while loop
+a3e6b87f-9b9b-40c7-8200-ab92051c8cc9	State the number of values in a 2D array
+a4233785-d24f-46f0-a281-a5912a0e0444	Write a loop to remove matching elements from ArrayList
+a52faa9d-171b-4ffb-914c-ed503be321eb	Explain the recipe for writing comparisons using compareTo
+a68e7001-03fa-4b58-b840-d300de8b7fcb	Write non-void methods that compute values.
+a71911ac-6a6b-4d57-87c1-f962ad7bf033	Explain the scope of variables
+a809273f-defe-485d-a047-f2f9641093a3	Write code to traverse multiple Strings, arrays, or ArrayLists in parallel
+a8dcfdf4-2d16-4338-952a-1133d1b345d8	State the purpose of constructor parameters.
+a9b7ab78-cc9a-44f4-8309-783b34e54873	Explain what it means for expressions to be equivalent
+aa85cfb3-ac83-489f-b718-b04877e65452	Write correct method signatures given a name, return type, and arg types
+aaa9c0e2-43a2-4da0-828e-778d0cf3e9de	State the name, return type, and argument types & names given a usage.
+aabe54e7-6dfc-4aba-9731-19391e0c0079	Distinguish between compile-time and run-time errors from an error message.
+aadeeb54-3cd1-4a6b-ab73-d5313c67ac50	State the valid indexer of an array
+ab09ee8c-29df-406c-a3d5-2f0bb5f2a8bb	State what happens if you try to use a negative index or one greater than or equal to the size of an `ArrayList` with `get` or `set`
+ab5e0639-5a47-4295-9c9b-bbfd81df8820	State the names and approximate values (and exact expression) of int max.
+ab95ea7e-75e2-46c5-8960-23ff0b0cbb03	Outline the difference between viewing a 2D array as a grid vs table
+ab994270-9072-4494-b956-85ec4d239a61	State the type of arithmetic expressions.
+ac1c2697-9967-47da-8ffe-d91a72869221	State why the `Math` class can be used in any code.
+ac4c2572-a5e4-4271-91e9-dd12b826412e	Identify the correct method signature for a given method call.
+ac4f8d0c-f1ad-4051-96b6-f474bcbf92b7	Write a canonical for loop that runs N times
+aca3d238-205a-4a69-92f4-51f4184f7b55	Identify sorting algorithm from code (bubble, insertion, selection, merge)
+acf6fcdf-fd97-48e4-9c26-59653ad95652	Write a find index loop
+adbc2a75-43f4-4aaa-998b-dce0186c0b0e	Write code that uses string concatenation with +
+adcdbf4a-89eb-4644-9ed0-624215b0109e	Write code that declares variables with array types
+ae2e83a4-57cd-41a0-a295-3c0f87fbc810	Describe how method decomposition creates layered abstractions
+b08a3884-8b07-4035-b164-13fba0b12dd7	Explain why static methods can't access instance variables
+b0a1c72e-91f9-4e00-974c-36657036c3f5	Simplify boolean expressions (2 and 3 variables)
+b0ca0d44-218a-4c9d-a275-d46783db4742	Describe the relationship between classes, libraries, & APIs
+b263f73a-87c5-40a4-8023-bf437d9d96ec	Write code to access individual elements of a 2D array
+b26e0f26-82d5-4acc-aee4-b043c433afff	Explain the role of booleans in selection & repetition
+b2966670-7f91-4ed5-bc87-738948815030	Write a loop to reverse a String
+b306f6dd-f43d-4078-9e4a-ede41bd6f085	Write comments documenting a method's pre- and post-conditions.
+b30b4726-11e6-486e-b042-01bcefdae245	Describe the purpose of literal values in code.
+b523aa57-415e-412a-b19f-36239c372fdd	Write code that uses `if`/`else` statements to create two way branches.
+b6e42f58-0fe1-4ed1-93d7-cb6c7e77b69a	Explain why the this. idiom is necessary.
+b8d83981-ab4d-4684-b42a-3a445a7fa2bb	Write correct calls to instance methods with implicit this.
+ba96b284-8f3e-4570-8802-bc690a016bce	Write code using all the standard looping patterns over an array
+ba9b6405-9828-40f5-a2ee-f8edb4a03d56	Explain why binary search is more efficient than linear search.
+bb26c660-f3c1-47ea-a438-56d754bf5441	Describe the difference between compile-time and run-time errors
+bb406397-21d0-445a-bdf0-5a4abe93b455	Write correct calls to a method given its signature
+bb4c26fe-281a-421f-aa73-fc76354a2114	Explain the difference between returning a string and printing
+bbcad76a-02c1-4f52-84dd-cb8b155c0c23	Explain the two (?) ways int math only approximates real math.
+bbe6007e-a4c9-4c26-a840-c410baad2d75	Identify shadowed variables
+bbe7cc03-7675-4ad7-9e84-aa9c45645d28	Write methods that modify an array held in an instance variable
+bd0ab275-edf3-4dfb-9ca2-97b259ee7a09	Write arithmetic expressions with Math.pow, Math.sqrt, and Math.abs
+be65fdd0-43e8-45d1-b1f4-eec4893ef008	Write a class with an overridden toString
+bef526f9-97d5-4374-9f95-8c80c237b9dd	Write a summing loop
+bf2140d4-7656-43ef-adca-23b07f559e9a	Describe how binary search works
+bf50625a-316d-49a8-b334-6cb611ce119e	Explain how ints & doubles are an abstraction
+bf9e3d59-9a3e-4238-af4f-034bfd4917e0	Explain what it means for each object to have its own copy of instance variables
+c019c453-8273-4c95-be3e-4d58f8b8f4e9	Identify correct & incorrect uses of constructor invocation based on expected type.
+c0870199-de97-448d-80ae-539b450b4f1c	State how to disambiguate a reference to a shadowed member variable
+c0902251-4e08-4b1b-887f-43393659ae9d	Write a reducing loop
+c20be1b6-5a72-42e3-a52e-d19fb3e9cbeb	"Define ""system reliability"""
+c2200661-11df-47c1-ae40-f233709ecdc3	Write expressions using arithmetic operators obeying precedence
+c229a8b8-a878-4258-bfb9-a92f52ae30a5	"Define ""traversing"" an array."
+c2d2e2c6-6629-4cc4-a67a-b5c40d416d0e	Explain the role parameters play in a procedural abstraction
+c2d7b9c8-20e4-4851-9c6b-ccfaa6aeec76	Write code that modifies mutable objects stored in an array.
+c37ea379-82f3-4187-b789-cb623c34a122	Write enhanced for loops to traverse a 1-d array
+c395f2a8-9cf6-4beb-82df-41f6be78ba41	Explain why else if is an (okay) violation of the always use braces rule
+c3eac1ba-7741-46b3-bf65-1e997df9a229	Explain return in terms of the call stack
+c3edbbac-dd79-4297-9fa0-fdc1d86e0b11	Write a recursive binary search
+c44ec26e-b4f2-4ceb-bca2-503267241b6d	State the value and type of mixed int/double expressions.
+c4d7feec-0065-4eca-a439-32e4d01ce98d	Write code that uses both 1-arg and 2-arg substring
+c5212f86-4cfe-4fc7-9a9a-b1a58f5b2310	"Define ""algorithmic bias"""
+c57f6798-0a7b-4e1c-90f9-d24adcd65817	Write code to produce various summary statistics of a data set
+c6385690-0d73-4c8c-99a7-b90f35e96ffb	Describe how arrays of reference types are stored in the heap.
+c6b84d1b-0762-48aa-ac65-ac4e0654d101	Write getters & setters (accessors & mutators)
+c6ba53e5-860d-495e-a1a0-d73ffa817156	Write an all/every loop
+c6efc156-84c6-4419-adf9-34c4466312bc	List conditions that you might use in a while loop
+c6f3e7e8-d8cb-46b4-afd1-ecbccb6c2b1b	Explain what a half-open intervals (is- closed)
+c7ebc916-9b70-4688-bea3-5b562bf41cce	Distinguish between primitive and reference types.
+c843d2a5-113c-42e8-abf2-1cc26244424e	Write overloaded constructors that use this()
+c93988dc-7ff5-44e5-a5df-6ae2cf834564	Write code to reverse the elements in an array
+c9791928-299a-4b38-8731-2d48175eec2e	Describe the kinds of values in, non-computer terms, represented by `int`, `double`, and `boolean`.
+c9826686-328a-4c47-b32d-e17132034230	Describe the relationship between class attributes, methods, and constructors
+c998e915-669c-4d85-a186-bc7e9c28d4fe	Explain how copyright applies to software
+c9ea635a-110a-49c0-9644-774795a366b2	Distinguish between syntax & type errors.
+ca386b5b-7a47-4436-8a9a-bb5fed049c58	Write for loops that modify array elements.
+ca6edbcc-3073-4c22-a3af-c337a752f2ad	Use constructor calls in contexts other than assignments.
+cab796ae-54fa-4e72-a580-3094c3887fdc	Write code to traverse an array.
+caea1f1a-93dd-4eb0-aaa5-bc1f26f25589	Demonstrate insertion sort with cards
+cb0a58e0-d134-4fd4-b012-9c9f09a91077	"Define ""abstraction"""
+cb9aac7f-f39e-4c2e-8e54-4ed8d7ecf84c	Translate code between compound operators and not (incl. ++ & --)
+cbba7eb7-b718-404d-8b41-f5daa1ea438a	Write code that uses enhanced for loops with ArrayLists
+cbf19072-c507-4d41-b497-dad0d8a2120f	Write code to access individual rows of a 2D array
+ccf868b7-a891-4d1f-9b72-b1baa696cc73	Identify the scope of local variables
+ccfc9a22-9975-4c98-9c7f-7e44ff749957	Trace the execution of code involving method calls.
+cfa1ab16-abf9-445e-9c3b-445ec5720d24	Explain why equals probably doesn't do what we want with arrays.
+d053b062-2114-4d6a-be03-03bc617fbbd0	Write void methods that have external side effects
+d09b3bdd-c25e-4b03-b84f-58978ca795a8	Explain why even within the same class we cannot invoke instance methods from a static method with some variable holding an instance of the class.
+d09c309c-0010-4eca-a981-8febe389caf1	Describe the three basic building blocks of algorithms
+d1819054-ecd6-4245-9f79-a3b420db8ff3	Explain 2-3 uses of the remainder operator
+d229b371-7bef-4d2f-9a7d-d45a6a1fab3c	State the import statement needed to use ArrayList
+d248bfa2-1699-4b54-86bb-b2cab6ce0c58	List the default values for uninitialized instance variables
+d2aeca50-d573-490f-8650-c31d197dbcef	Trace the execution of a for loop including the 3 header clauses
+d2c85272-cb3d-44cd-9cbf-0c7118fb0aa8	Write recursive methods over ints, Strings, arrays, and ArrayLists
+d33c5576-142a-4dce-b9a8-be82b9547a50	Explain how method calls affect the flow of control.
+d3c5c770-56b6-46f1-8179-ba04f812027e	Explain code that uses post-increment and decrement operators.
+d3d37147-b4d5-433f-a030-66e4f4593c4a	Write code that uses variables of type String
+d42c327b-63eb-4f50-9496-f4f492aa745c	Write an any/some loop
+d4cbd23c-652d-4acd-a7ae-387b31a0b7b9	Write code to rotate elements one position left or right
+d5b69206-9001-423e-a5b9-f52d95a7932d	Use comments to temporarily disable chunks of code.
+d5d4eaf9-1963-4fbb-a03b-a57f774b3e95	Describe the limits of ints, doubles, and booleans.
+d60ca895-44a6-46a6-92b1-d3ac66088ab9	Write merge sort
+d68a8ef4-5121-4f80-8a8c-fcdfeb2f5eeb	Write code to call instance methods
+d718aba6-c442-4a77-be40-4b78bdedb0fb	Identify the component type of 1- and 2-d array types
+d7660866-2beb-492e-8b30-394dec57ad9a	Trace code that uses nested `if` statements.
+d7b17b6d-3e5f-4aa3-8623-31923f9eb3aa	Explain how repetition changes control flow
+d8dba558-f3ea-4a32-a0a6-c5835ec40c7c	Write code to create an array with an array creation expression
+d8ef5bfe-1aac-487e-b668-ce0cc675f531	Distinguish between an index variable and a value.
+d9e7d50f-26ea-494e-b5f5-df68d4a560c3	Write correct overriding to String methods.
+dbe4a24c-3c91-4158-acd6-4883fdf6b094	Explain how selection changes control flow
+dc9b5a5b-7794-4204-85c8-1c7dac392fd1	Distinguish between = and == and !=
+dcad7127-4cd9-4188-bc76-fb1565c4ff94	Explain the difference between Object.equals & String.equals.
+ddb7262e-ac0a-4e1b-bfd3-2a4e9122fa69	Write code using standard loop algorithms over all elements of 2D array
+deae6886-54fd-42d6-8e83-a60a6ad85afa	Calculate the result of code with consecutive ifs vs else if
+e0210d61-da38-47bc-85a8-709cd57366a7	Write code that uses `if`/`else if`/`else` chains to create multiway branches.
+e025a9dc-10a4-4a8f-82b9-2dd3f9897a2a	Explain why instance variables should usually be private.
+e072a833-32a6-480b-9b08-0306dcff3aa4	Explain why Scanner.nextLine and other next methods interact badly
+e0a704d4-00ac-4146-935d-45418c052106	Translate between regular and enhanced for loops
+e175445c-72fb-4d00-b7fd-7154af16fe10	"Define a ""class invariant"""
+e386c282-320d-42cb-85c3-091a40e01b41	Write a `void` method.
+e55035d8-41af-4a08-9e60-6df19353a201	Distinguish between syntax, run-time, and logic errors.
+e6fa01e5-99b3-430a-ba2c-7bb3ab759f41	Explain integer overflow: both when & why it occurs.
+e80318fe-b5f1-4cfe-bbe0-f48ebdc60212	Define preconditions.
+e8d29d8f-1bb2-4cb9-af9f-d1227eea3daa	Explain passing references as arguments in terms of the call stack
+e906cc04-34ce-47cf-b95e-9d088bf3bf1f	Explain the relationship between + and toString
+e9f80d45-c7e9-49b6-9582-e5d458f66dec	Write static methods that access static member variables.
+ea8eac0a-8200-4e67-9bf6-5d572f88e791	Explain how procedural abstraction simplifies code.
+eafc7dc4-52ec-48fa-abaf-c6be04ba5e56	Explain why we should never use == & != with booleans
+eb1d85fb-6364-4431-9992-c8760cc3c2d2	Describe ways software or operation failures can compromise privacy
+eb6f2c42-225a-4329-8fd7-616436b19874	Calculate the String and int values returned by String method calls
+ebeeec2d-a7fe-4a22-abc9-9a9f9a904925	Translate code that uses autoboxing/unboxing to explicit boxing.
+ed5c52ed-e90e-4187-b2c0-b9c3c32c16eb	Compile and run HelloWorld.java
+eec94a13-b072-4718-a50b-2e037b87f85b	Write a finding loop
+eed0d672-c325-43b4-bee8-11765ed54302	Write a filtering loop with an ArrayList (copying)
+ef0b1e3b-5907-4e83-acd1-023782f88b3e	Describe how instance variables are used by instance methods.
+efabfb97-2ae6-490b-b611-52503a122a67	Explain the purpose of the null value
+efacbc6b-92ab-4b72-a2ae-62f159c5cd9d	State why we can use the String class anywhere.
+f04d0b75-6470-40d7-a5c2-99f6bf688fc9	Explain the consequences of passing mutable types by reference
+f057a634-a914-4c1c-92de-3b90c65784b0	Write string literals with escape characters
+f087a331-ec11-4b7c-a4fa-c0041554a439	Write code to process all pairs of elements in an array, unordered
+f08c561d-7f2a-4a33-a57c-e36cc86570b6	Explain the purpose of an open source license.
+f092c747-a948-4d6b-9880-07f3a7665811	Write multi-way selections with if/else if/else
+f0a9471a-f6d9-4abc-8c70-b0898ab65245	Identify correct & incorrect calls to a constructor based on arg types.
+f0f814d7-5566-40a6-a793-4c78e31b0225	Write constructors that use the this. idiom.
+f2a0af02-6ce8-4298-946f-b4190cd77b4c	State what constructor a class has that doesn't contain an explicit constructor
+f2fbf5d0-f164-4c8d-9cbd-3355be4e4845	Describe the differences between methods and constructors.
+f3449277-7275-4bda-8e58-eea5bcd5c84a	Distinguish between variables and values.
+f5ade4b8-e763-4300-abd1-3113fc3ceef6	Describe an algorithm that combines sequencing, selection, and repetition.
+f5f769b1-c0a9-4064-bed9-676968202b2c	Distinguish between the two ways of allocating an array with new
+f6387f15-724b-4a37-b59f-d03fd7cf667c	Write code to apply a linear search over a 2d array, row by row and then column by column.
+f6ad7343-dbce-4f90-a9a7-af560e28beb2	List some situations when Java will throw a runtime Exception
+f6cfcc43-c108-47e5-af2e-3c1e1f2c033c	Write code that uses the length property of an array
+f7838278-1021-4a60-bac0-04dca55101a4	Write a class with at least one `public` constructor.
+f975c236-65eb-4146-acf9-720fa30ebafd	Explain the purpose of closing a Scanner.
+f9f236f7-c6bf-4079-a579-14fa962f72d9	"State when double contagion (""zombification"") occurs."
+fa610165-de88-4157-95bc-9a5c58e7020f	Explain the difference between a primitive and a reference type in terms of the stack and the heap.
+fa78c533-f027-4d2d-9300-f498b81061a3	Write code that uses String length
+fad5a542-bf14-4bc1-8c70-a650b66ed2d9	Explain the difference between allocating & initializing an object.
+fbcddacd-3a38-4090-b035-cdac09ef9754	State when you might want an infinite loop
+fc0d7231-90a5-4083-ad02-4846e3521aa1	Identify infinite while loops
+fc34fcf4-587c-4764-83a6-ecadf0f2d348	Write correct calls to a static method from outside the class.
+fcaba247-6c05-446e-8359-d2195ea9e38c	List the purpose or purposes of each punctuation character.
+fd15949f-da5a-4244-9951-16165ff2dfd9	Explain the use of short circuiting boolean operators
+fe425cd1-f384-4410-8683-40346dabcaf7	Explain the difference between parseInt(s.nextLine()) & s.nextInt()
+fefc1d21-bb1f-4c81-a65b-dc228b23246a	"Match ""selection"" with decisions and ""repetition"" with looping"
+ff94b73a-a101-4815-9f0c-fe262f7dff72	Explain why code in an enhanced for loop can't modify the array
