@@ -23,6 +23,20 @@
                padding: .05rem .35rem; border-radius: 8px; background: #eef1f4; color: #555;
                border: 1px solid #e0e4e8; }
   .cal-badge.warn { background: #fdeeee; color: var(--gap); border-color: #f0cccc; }
+  /* Click-to-edit weeks pill (looks like a badge; editable on hover/focus). */
+  .cal-weeks { display: inline-flex; align-items: baseline; gap: .15rem; margin: 0;
+               font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+               padding: .05rem .35rem; border-radius: 8px; background: #eef1f4; color: #555;
+               border: 1px solid #e0e4e8; cursor: text; }
+  .cal-weeks:hover { border-color: #cfd6dd; }
+  .cal-weeks:focus-within { background: #fff; border-color: #bcd; }
+  .cal-weeks input { width: 2.3rem; font: inherit; font-size: .65rem; font-weight: 700;
+               text-align: right; text-transform: uppercase; color: #444; background: transparent;
+               border: none; padding: 0; -moz-appearance: textfield; appearance: textfield; }
+  .cal-weeks input::-webkit-outer-spin-button,
+  .cal-weeks input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .cal-weeks input:focus { outline: none; }
+  .cal-weeks-unit { color: #8a929b; }
 
   .cal-week { display: flex; align-items: stretch; gap: .5rem; margin: .3rem 0; }
   .cal-when { flex: 0 0 8rem; color: var(--muted); font-size: .78rem; line-height: 1.25;
@@ -89,8 +103,15 @@
         <div class="cal-unit-head">
           <span class="name">{{ u.title }}</span>
           {% if not u.unplanned %}
-            {% if u.weeks %}<span class="cal-badge">{{ u.weeks|int if u.weeks == u.weeks|int else u.weeks }} {{ 'week' if u.weeks == 1 else 'weeks' }}</span>
-            {% elif u.derived %}<span class="cal-badge">auto</span>{% endif %}
+            {# Click-to-edit weeks pill: a plain POST (not htmx) so saving reloads
+               the calendar with the new layout. Empty = auto (derive from lessons). #}
+            <form class="cal-weeks autosave" method="post"
+                  action="{{ url_for('node_duration_set', course=course, node_id=u.node_id) }}">
+              <input type="number" name="amount" min="0" step="0.5"
+                     value="{{ u.weeks|int if (u.weeks and u.weeks == u.weeks|int) else (u.weeks or '') }}"
+                     placeholder="auto" title="Weeks this unit spans (blank = auto)" aria-label="Weeks">
+              <span class="cal-weeks-unit">{{ 'week' if u.weeks == 1 else 'weeks' }}</span>
+            </form>
             {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
           {% endif %}
         </div>

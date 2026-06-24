@@ -220,8 +220,8 @@ def build_calendar(bs, data, units):
                              "school_days": len(w["days"]),
                              "cells": _week_cells(w, assign)})
         out_units.append({"break_section": False, "unplanned": unplanned,
-                          "title": unit["title"], "weeks": unit["weeks"],
-                          "derived": derived, "overflow": overflow,
+                          "node_id": unit.get("node_id"), "title": unit["title"],
+                          "weeks": unit["weeks"], "derived": derived, "overflow": overflow,
                           "free_days": len(sdays) - i, "rows": rows})
 
     for unit in units:

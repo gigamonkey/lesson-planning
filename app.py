@@ -1324,8 +1324,8 @@ def _outline_units(conn, course):
             ld = durs.get(L["node_id"])
             days = int(ld[0]) if (ld and ld[1] == "day") else 1
             lessons.append({"title": L["text"] or "Untitled lesson", "days": days})
-        units.append({"title": n["text"] or "Untitled unit", "weeks": weeks,
-                      "lessons": lessons})
+        units.append({"node_id": n["node_id"], "title": n["text"] or "Untitled unit",
+                      "weeks": weeks, "lessons": lessons})
     return units
 
 
