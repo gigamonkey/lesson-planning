@@ -89,10 +89,15 @@ def _weeks(bs, data, start, end):
         j = i
         while j + 1 < len(raw) and raw[j + 1]["is_break"]:
             j += 1
-        prev = raw[i - 1] if i > 0 else None              # always a teaching week here
-        nxt = raw[j + 1] if j + 1 < len(raw) else None
-        span_start = (prev["days"][-1] + timedelta(days=1)) if prev else raw[i]["monday"]
-        span_end = (nxt["days"][0] - timedelta(days=1)) if nxt else (raw[j]["monday"] + timedelta(days=6))
+        # The span runs school-day to school-day. previous_/next_school_day scan
+        # day-by-day, so from any non-school day inside the break they jump over the
+        # whole stretch (incl. weekends the `holidays` array never lists) to the
+        # bordering school days; the break is the days strictly between them.
+        inside = raw[i]["monday"]                         # a non-school day in the break
+        span_start = (bs.previous_school_day(inside) + timedelta(days=1)) if i > 0 \
+            else raw[i]["monday"]
+        span_end = (bs.next_school_day(inside) - timedelta(days=1)) if j + 1 < len(raw) \
+            else raw[j]["monday"] + timedelta(days=6)
         names = [break_names[span_start + timedelta(days=k)]
                  for k in range((span_end - span_start).days + 1)
                  if (span_start + timedelta(days=k)) in break_names]
