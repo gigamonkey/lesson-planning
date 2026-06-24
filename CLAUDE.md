@@ -85,7 +85,8 @@ The **Calendar** sidebar item (`/<course>/calendar`) lays the outline across the
 school year (units→weeks, lessons→days; see `calendar_view.py` and the duration
 tags in `FORMAT.md`). It reads bells calendar JSONs from `LESSON_CALENDAR_DIR`
 (default the sibling `../bells/bhs-calendars`); a course binds to one via the
-`calendar:`/`start:` keys in its `plan.md` front matter.
+`calendar:` key in its `plan.md` front matter (the year span comes from the
+calendar's `firstDay`..`lastDay`).
 
 ```bash
 # Rebuild the editor bundle after editing frontend/editor.js (needs Node/npm).

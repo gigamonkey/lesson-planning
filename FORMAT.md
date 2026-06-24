@@ -119,9 +119,7 @@ Course-level facts that live in no single hierarchy:
 - `primary_outline:` — the outline's own slug (normally this file's stem).
 - `calendar:` — (optional) the id of a bells calendar (a JSON file in the
   calendars directory, e.g. `bhs-2025-2026`) the calendar view lays the outline
-  onto.
-- `start:` — (optional) an ISO date the course starts on; defaults to the
-  calendar's first day.
+  onto. The school-year span comes from that calendar (`firstDay`..`lastDay`).
 - `targets:` — a comma-separated list of reference slugs the outline is measured
   against (the `hierarchy_targets` rows).
 

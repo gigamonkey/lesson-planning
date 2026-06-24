@@ -26,7 +26,7 @@ FORMAT_MAJOR = 1
 def export_course(conn, course):
     """Return a bundle dict for `course`. Raises KeyError if the course is absent."""
     conn.row_factory = sqlite3.Row
-    crow = conn.execute("SELECT course, title, primary_outline, calendar, start_date "
+    crow = conn.execute("SELECT course, title, primary_outline, calendar "
                         "FROM courses WHERE course=?", (course,)).fetchone()
     if not crow:
         raise KeyError(course)
@@ -70,7 +70,7 @@ def export_course(conn, course):
     return {"version": BUNDLE_VERSION,
             "course": {"course": crow["course"], "title": crow["title"],
                        "primary_outline": crow["primary_outline"],
-                       "calendar": crow["calendar"], "start_date": crow["start_date"]},
+                       "calendar": crow["calendar"]},
             "hierarchies": hierarchies, "objectives": objectives,
             "coverage": coverage, "hierarchy_targets": targets}
 
@@ -116,9 +116,8 @@ def import_course(conn, doc, course=None):
 
     # Restore the course's outline pointer + calendar binding now that its
     # hierarchies exist (slugs are carried verbatim, valid under a new id too).
-    conn.execute("UPDATE courses SET primary_outline=?, calendar=?, start_date=? WHERE course=?",
-                 (doc["course"].get("primary_outline"), doc["course"].get("calendar"),
-                  doc["course"].get("start_date"), cid))
+    conn.execute("UPDATE courses SET primary_outline=?, calendar=? WHERE course=?",
+                 (doc["course"].get("primary_outline"), doc["course"].get("calendar"), cid))
 
     uuid_map = {}
     for o in doc["objectives"]:

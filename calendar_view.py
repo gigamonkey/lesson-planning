@@ -115,16 +115,17 @@ def _consume(weeks, idx, unit):
     return taken, idx, derived
 
 
-def build_calendar(bs, data, units, start=None):
+def build_calendar(bs, data, units):
     """Lay `units` (ordered [{title, weeks, lessons:[{title, days}]}]) onto the
-    school year of (bs, data). Returns a view model:
+    school year of (bs, data) -- its full firstDay..lastDay span. Returns a view
+    model:
 
     {warnings: [str],
      units: [{title, weeks, derived, overflow:[{title,days,fit}], free_days,
               rows: [{kind:'week', number, range, school_days, cells:[{title,days,kind}]}
                    | {kind:'break', name, range}]}]}
     """
-    start = _d(start or data["firstDay"])
+    start = _d(data["firstDay"])
     end = _d(data["lastDay"])
     weeks = _weeks(bs, data, start, end)
     teaching_total = sum(1 for w in weeks if not w["is_break"])

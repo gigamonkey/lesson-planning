@@ -286,8 +286,10 @@ def ensure_schema():
             ccols2 = [r[1] for r in conn.execute("PRAGMA table_info(courses)")]
             if "calendar" not in ccols2:
                 conn.execute("ALTER TABLE courses ADD COLUMN calendar TEXT")
-            if "start_date" not in ccols2:
-                conn.execute("ALTER TABLE courses ADD COLUMN start_date TEXT")
+            # start_date was redundant with the calendar's firstDay (full-year
+            # courses); drop it if an earlier build added it.
+            if "start_date" in ccols2:
+                conn.execute("ALTER TABLE courses DROP COLUMN start_date")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)
@@ -1323,7 +1325,7 @@ def _outline_units(conn, course):
 def calendar(course):
     """A calendar view of how the course outline lays out across the school year."""
     with db() as conn:
-        crow = conn.execute("SELECT calendar, start_date FROM courses WHERE course=?",
+        crow = conn.execute("SELECT calendar FROM courses WHERE course=?",
                             (course,)).fetchone()
         if not crow:
             abort(404)
@@ -1337,7 +1339,7 @@ def calendar(course):
     except (OSError, ValueError) as e:
         return render_template("calendar.html", view=None,
                                error=f"Couldn't load calendar {crow['calendar']!r}: {e}", **common)
-    view = calendar_view.build_calendar(bs, data, units, start=crow["start_date"])
+    view = calendar_view.build_calendar(bs, data, units)
     return render_template("calendar.html", view=view, error=None, **common)
 
 

@@ -81,7 +81,7 @@ def _split_list(value):
 
 def _emit_front_matter(meta):
     lines = ["---"]
-    for key in ("course", "title", "primary_outline", "calendar", "start", "targets"):
+    for key in ("course", "title", "primary_outline", "calendar", "targets"):
         val = meta.get(key)
         if val:
             lines.append(f"{key}: {val}")
@@ -285,11 +285,10 @@ def read_course(db_path, course_dir):
         conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
         conn.execute("DELETE FROM hierarchies WHERE course=?", (course,))
         conn.execute(
-            "INSERT INTO courses(course, title, primary_outline, calendar, start_date)"
-            " VALUES (?, ?, ?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
-            " primary_outline=excluded.primary_outline, calendar=excluded.calendar,"
-            " start_date=excluded.start_date",
-            (course, title, outline, meta.get("calendar"), meta.get("start")))
+            "INSERT INTO courses(course, title, primary_outline, calendar)"
+            " VALUES (?, ?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
+            " primary_outline=excluded.primary_outline, calendar=excluded.calendar",
+            (course, title, outline, meta.get("calendar")))
 
         # Reference hierarchies (editable=0), parsed straight from markdown.
         n_refs = 0
@@ -390,8 +389,8 @@ def load_plan_text(db_path, course, text):
         conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
 
         conn.execute(
-            "UPDATE courses SET title=?, primary_outline=?, calendar=?, start_date=? WHERE course=?",
-            (title, outline, meta.get("calendar"), meta.get("start"), course))
+            "UPDATE courses SET title=?, primary_outline=?, calendar=? WHERE course=?",
+            (title, outline, meta.get("calendar"), course))
         # The outline hierarchy row normally already exists; ensure it does.
         conn.execute(
             "INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title, source)"
@@ -443,7 +442,7 @@ def render_course(conn, course):
     Raises KeyError if the course is absent. write_course writes these; is_dirty
     compares them to disk."""
     conn.row_factory = sqlite3.Row
-    crow = conn.execute("SELECT course, title, primary_outline, calendar, start_date"
+    crow = conn.execute("SELECT course, title, primary_outline, calendar"
                         " FROM courses WHERE course=?", (course,)).fetchone()
     if not crow:
         raise KeyError(course)
@@ -475,7 +474,7 @@ def render_course(conn, course):
 
     meta = {"course": course, "title": crow["title"],
             "primary_outline": outline,
-            "calendar": crow["calendar"], "start": crow["start_date"],
+            "calendar": crow["calendar"],
             "targets": ", ".join(r["reference"] for r in conn.execute(
                 "SELECT reference FROM hierarchy_targets WHERE outline=? ORDER BY reference",
                 (outline,)))}

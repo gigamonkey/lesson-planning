@@ -21,10 +21,9 @@ CREATE TABLE IF NOT EXISTS courses (
   -- not inferred from kind. (FK enforcement is off app-wide; declared for docs.)
   primary_outline   TEXT REFERENCES hierarchies(hierarchy),
   -- Calendar binding for the calendar view: a bells calendar id (a JSON file in
-  -- LESSON_CALENDAR_DIR, e.g. 'bhs-2025-2026') and an optional ISO start date
-  -- (defaults to that calendar's firstDay).
-  calendar    TEXT,
-  start_date  TEXT
+  -- LESSON_CALENDAR_DIR, e.g. 'bhs-2025-2026'). The school year's span comes from
+  -- that calendar (firstDay..lastDay); courses run the full year for now.
+  calendar    TEXT
 );
 
 -- Registry of every hierarchy (a tree of nodes): the CED/IB/book references and
