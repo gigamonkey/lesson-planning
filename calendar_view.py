@@ -50,60 +50,59 @@ def _fmt_range(a, b):
 
 
 def _weeks(bs, data, start, end):
-    """The year as an ordered list of items: teaching weeks and break spans.
+    """The year as an ordered list of items: teaching weeks and break boxes.
 
     A teaching week is a Monday-anchored calendar week with >=1 school day:
-    {is_break: False, monday, days: [school dates], number}. A run of consecutive
-    calendar weeks with NO school days is collapsed into ONE break that spans the
-    whole gap -- from the day after the last school day before it to the day before
-    the first school day after it, so adjacent weekends (which the calendar's
-    `holidays` never lists, since they're never school days) are included:
-    {is_break: True, start, end, name}. Teaching weeks are numbered 1..n."""
+    {is_break: False, monday, days: [school dates], number}. A break box is any gap
+    between consecutive school days that has a non-school WEEKDAY and crosses a
+    weekend -- i.e. a real holiday/break, not a plain weekend and not a lone
+    mid-week day off (which stays a greyed cell in its week). This boxes named long
+    weekends (e.g. Presidents' Day) as well as week-plus breaks; the weekday(s) off
+    still show greyed in their teaching weeks. {is_break: True, name, days} where
+    `days` is the break's length in days; named from breakNames, else "Break"."""
     break_names = {_d(k): v for k, v in (data.get("breakNames") or {}).items()}
-    raw, cur_key = [], None
+
+    school_days = []
     d = start
     while d <= end:
-        key = d.isocalendar()[:2]
-        if key != cur_key:
-            raw.append({"monday": d - timedelta(days=d.weekday()), "days": []})
-            cur_key = key
         if bs.is_school_day(d):
-            raw[-1]["days"].append(d)
+            school_days.append(d)
         d += timedelta(days=1)
-    for w in raw:
-        w["is_break"] = not w["days"]
 
-    # Number teaching weeks, then collapse runs of empty weeks into break spans.
-    n = 0
-    for w in raw:
-        if not w["is_break"]:
-            n += 1
-            w["number"] = n
-    out, i = [], 0
-    while i < len(raw):
-        w = raw[i]
-        if not w["is_break"]:
-            out.append(w)
-            i += 1
-            continue
-        j = i
-        while j + 1 < len(raw) and raw[j + 1]["is_break"]:
-            j += 1
-        # The span runs school-day to school-day. previous_/next_school_day scan
-        # day-by-day, so from any non-school day inside the break they jump over the
-        # whole stretch (incl. weekends the `holidays` array never lists) to the
-        # bordering school days; the break is the days strictly between them.
-        inside = raw[i]["monday"]                         # a non-school day in the break
-        span_start = (bs.previous_school_day(inside) + timedelta(days=1)) if i > 0 \
-            else raw[i]["monday"]
-        span_end = (bs.next_school_day(inside) - timedelta(days=1)) if j + 1 < len(raw) \
-            else raw[j]["monday"] + timedelta(days=6)
-        names = [break_names[span_start + timedelta(days=k)]
-                 for k in range((span_end - span_start).days + 1)
-                 if (span_start + timedelta(days=k)) in break_names]
-        out.append({"is_break": True, "start": span_start, "end": span_end,
-                    "name": names[0] if names else "Break", "weeks": j - i + 1})
-        i = j + 1
+    # Group school days into Monday-anchored teaching weeks, numbered 1..n.
+    weeks_by_key, order = {}, []
+    for sd in school_days:
+        key = sd.isocalendar()[:2]
+        if key not in weeks_by_key:
+            weeks_by_key[key] = {"is_break": False, "monday": sd - timedelta(days=sd.weekday()),
+                                 "days": []}
+            order.append(weeks_by_key[key])
+        weeks_by_key[key]["days"].append(sd)
+    for n, w in enumerate(order, 1):
+        w["number"] = n
+
+    # Breaks: a weekend-crossing gap that is NAMED (a breakNames entry, e.g. a long
+    # weekend like Presidents' Day) or long enough to be a week+ break (>=5 weekdays
+    # off, so a multi-week break is shown even if unnamed). A plain weekend or a
+    # lone unnamed day off is NOT boxed -- it just shows greyed in its week.
+    breaks = []
+    for a, b in zip(school_days, school_days[1:]):
+        gap = [a + timedelta(days=k) for k in range(1, (b - a).days)]
+        crosses_weekend = any(g.weekday() >= 5 for g in gap)
+        weekdays_off = sum(1 for g in gap if g.weekday() < 5)
+        named = [break_names[g] for g in gap if g in break_names]
+        if crosses_weekend and (named or weekdays_off >= 5):
+            breaks.append({"is_break": True, "start": gap[0],
+                           "name": named[0] if named else "Break", "days": len(gap)})
+
+    # Merge chronologically: each break sits before the teaching week that follows it.
+    out, bi = [], 0
+    for w in order:
+        while bi < len(breaks) and breaks[bi]["start"] < w["days"][0]:
+            out.append(breaks[bi])
+            bi += 1
+        out.append(w)
+    out.extend(breaks[bi:])
     return out
 
 
@@ -162,8 +161,7 @@ def _consume(weeks, idx, unit):
 
 
 def _break_row(w):
-    return {"kind": "break", "name": w["name"], "range": _fmt_range(w["start"], w["end"]),
-            "weeks": w["weeks"]}
+    return {"kind": "break", "name": w["name"], "days": w["days"]}
 
 
 def build_calendar(bs, data, units):
@@ -174,7 +172,7 @@ def build_calendar(bs, data, units):
     {warnings: [str],
      units: [{title, weeks, derived, unplanned, overflow:[{title,days,fit}], free_days,
               rows: [{kind:'week', number, range, school_days, cells:[...]}
-                   | {kind:'break', name, range, weeks}]}      # a unit; mid-unit
+                   | {kind:'break', name, days}]}              # a unit; mid-unit
                                                                # breaks stay in rows
             | {break_section: True, rows: [{kind:'break', ...}]}]}  # breaks BETWEEN
                                                                    # units, own section

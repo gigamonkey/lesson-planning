@@ -82,7 +82,7 @@ def main():
     assert kinds[:3] == ["unit", "break", "unit"], kinds
     sec = between["units"][1]
     assert sec["rows"][0]["kind"] == "break" and sec["rows"][0]["name"] == "Fall Break", sec
-    assert sec["rows"][0]["weeks"] == 1, sec
+    assert sec["rows"][0]["days"] == 9, sec   # Sep 6-14 inclusive
     # The leftover teaching week at the end is filled with an Unplanned chunk.
     assert kinds[-1] == "unplanned" and between["units"][-1]["title"] == "Unplanned", kinds
 
@@ -91,7 +91,7 @@ def main():
     assert any(r["kind"] == "break" for r in inside["units"][0]["rows"]), \
         "a break mid-unit should stay inline in the unit's rows"
 
-    # A two-week break reports weeks == 2 (drives the proportional box height).
+    # A two-week break is one box reporting its length in days (Sep 6-21 = 16).
     data3 = dict(DATA, lastDay="2025-09-26",
                  holidays=["2025-09-08", "2025-09-09", "2025-09-10", "2025-09-11", "2025-09-12",
                            "2025-09-15", "2025-09-16", "2025-09-17", "2025-09-18", "2025-09-19"])
@@ -99,7 +99,25 @@ def main():
     v3 = cv.build_calendar(bs3, data3, [{"title": "A", "weeks": 1, "lessons": []},
                                         {"title": "B", "weeks": 1, "lessons": []}])
     brk = next(u for u in v3["units"] if u.get("break_section"))
-    assert brk["rows"][0]["weeks"] == 2, brk
+    assert brk["rows"][0]["days"] == 16, brk
+
+    # A named long weekend (Fri+Mon off) is boxed AND its days stay greyed in the
+    # weeks; a lone mid-week day off is NOT boxed (just greyed).
+    data4 = dict(DATA, lastDay="2025-09-19",
+                 holidays=["2025-09-05", "2025-09-08"],   # Fri + Mon = a long weekend
+                 breakNames={"2025-09-08": "Long weekend"})
+    bs4 = bells.BellSchedule([data4], {"role": "student"})
+    v4 = cv.build_calendar(bs4, data4, [{"title": "A", "weeks": 3, "lessons": []}])
+    rows = v4["units"][0]["rows"]
+    brk4 = [r for r in rows if r["kind"] == "break"]
+    assert len(brk4) == 1 and brk4[0]["name"] == "Long weekend", rows
+    assert brk4[0]["days"] == 4, brk4   # Sep 5 (Fri) .. Sep 8 (Mon)
+
+    data5 = dict(DATA, lastDay="2025-09-19", holidays=["2025-09-10"])  # lone Wednesday
+    bs5 = bells.BellSchedule([data5], {"role": "student"})
+    v5 = cv.build_calendar(bs5, data5, [{"title": "A", "weeks": 3, "lessons": []}])
+    assert not any(r["kind"] == "break" for r in v5["units"][0]["rows"]), \
+        "a lone mid-week day off should be a greyed cell, not a break box"
 
     print("ok - all calendar_view checks passed")
 

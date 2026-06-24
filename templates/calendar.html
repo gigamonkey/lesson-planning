@@ -43,12 +43,11 @@
   .cal-dayhdr { text-align: center; font-size: .66rem; font-weight: 600; color: var(--muted);
                 text-transform: uppercase; letter-spacing: .04em; }
 
-  /* A break is one box whose height is proportional to the weeks off (--wk): a
-     two-week break is two day-rows tall (4.45rem cell + .3rem inter-row gap). */
+  /* A break is one box, all the same height and a bit shorter than a day-row,
+     labeled with its length in days. */
   .cal-break { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; padding: .3rem .6rem;
-               background: #faf7ef; border: 1px dashed #e6dcc4; border-radius: 5px;
-               color: #8a7a52; font-size: .82rem;
-               min-height: calc(4.45rem * var(--wk, 1) + .3rem * (var(--wk, 1) - 1)); }
+               min-height: 3.1rem; background: #faf7ef; border: 1px dashed #e6dcc4;
+               border-radius: 5px; color: #8a7a52; font-size: .82rem; }
   .cal-break .when { color: #b0a47e; }
   /* Unplanned tail chunks: greyed header, the text "Unplanned". */
   .cal-unplanned .cal-unit-head { color: #b0b0b0; border-bottom-color: #ececec; }
@@ -82,7 +81,7 @@
       {% if u.break_section %}
       <section class="cal-unit cal-break-section">
         {% for row in u.rows %}
-          <div class="cal-break" style="--wk: {{ row.weeks }}"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
+          <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.days }} days</span></div>
         {% endfor %}
       </section>
       {% else %}
@@ -103,7 +102,7 @@
         </div>
         {% for row in u.rows %}
           {% if row.kind == 'break' %}
-            <div class="cal-break" style="--wk: {{ row.weeks }}"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
+            <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.days }} days</span></div>
           {% else %}
             <div class="cal-week">
               <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }}</div>
