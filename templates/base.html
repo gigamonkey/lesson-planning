@@ -631,6 +631,17 @@
       if (form) form.requestSubmit();
     });
 
+    // Enter in an inline autosave field commits by blurring (which the focusout
+    // handler saves) rather than doing a native form submit -- a native submit
+    // would navigate to the (htmx-fragment) response, reloading without styles.
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey && e.target.matches &&
+          e.target.matches('form.autosave input[type=text], form.autosave input[type=number], form.autosave textarea')) {
+        e.preventDefault();
+        e.target.blur();
+      }
+    });
+
     // Keep the per-course save icons' dirty state live: after any htmx mutation
     // (non-GET), and after the fetch-based drag saves (which call window.saveRefresh),
     // fire `save-refresh` so each course's save control re-fetches itself.
