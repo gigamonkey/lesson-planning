@@ -74,16 +74,26 @@ def _weeks(bs, data, start, end):
     return weeks
 
 
-def _rle_cells(days, assign):
-    """Run-length-encode a week's school days into lesson/free cells."""
+def _week_cells(week, assign):
+    """The week's five weekday (Mon-Fri) columns as cells, run-length-encoded so a
+    multi-day lesson spans its columns. Each weekday is a school day (a lesson or
+    free) or 'off' (weekend/holiday/outside the term) -- the off cells keep every
+    week's days aligned to their day-of-week column. `days` is the column span."""
+    schooldays = set(week["days"])
+    slots = []
+    for i in range(5):  # Monday .. Friday
+        d = week["monday"] + timedelta(days=i)
+        if d in schooldays:
+            title = assign.get(d)
+            slots.append(("lesson", title) if title else ("free", None))
+        else:
+            slots.append(("off", None))
     cells = []
-    for d in days:
-        title = assign.get(d)
-        kind = "lesson" if title else "free"
+    for kind, title in slots:
         if cells and cells[-1]["kind"] == kind and cells[-1]["title"] == title:
             cells[-1]["days"] += 1
         else:
-            cells.append({"title": title, "days": 1, "kind": kind})
+            cells.append({"kind": kind, "title": title, "days": 1})
     return cells
 
 
@@ -157,7 +167,7 @@ def build_calendar(bs, data, units):
                 rows.append({"kind": "week", "number": w["number"],
                              "range": _fmt_range(w["days"][0], w["days"][-1]),
                              "school_days": len(w["days"]),
-                             "cells": _rle_cells(w["days"], assign)})
+                             "cells": _week_cells(w, assign)})
         out_units.append({"title": unit["title"], "weeks": unit["weeks"],
                           "derived": derived, "overflow": overflow,
                           "free_days": free_days, "rows": rows})

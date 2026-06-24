@@ -23,11 +23,19 @@
   .cal-when { flex: 0 0 9.5rem; color: var(--muted); font-size: .78rem; line-height: 1.25;
               align-self: center; }
   .cal-when b { color: #555; font-weight: 600; }
-  .cal-days { display: flex; flex: 1; gap: .3rem; min-width: 0; }
+  /* Five equal Mon-Fri columns; a lesson cell spans its day count, so a 2-day
+     lesson is twice as wide as a 1-day one and every day lines up by weekday. */
+  .cal-days { display: grid; grid-template-columns: repeat(5, 1fr); gap: .3rem;
+              flex: 1; min-width: 0; }
   .cal-cell { border-radius: 4px; padding: .3rem .5rem; font-size: .82rem; min-width: 0;
               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-cell.lesson { background: #eafaf0; border: 1px solid #cdebd9; color: #2f6f4e; }
   .cal-cell.free { background: #f4f4f4; border: 1px dashed #e0e0e0; color: #aaa; }
+  .cal-cell.off { background: #e9e9e9; border: 1px solid #e0e0e0; }
+  /* Weekday header row, aligned to the same five columns. */
+  .cal-head { margin-bottom: .1rem; }
+  .cal-dayhdr { text-align: center; font-size: .66rem; font-weight: 600; color: var(--muted);
+                text-transform: uppercase; letter-spacing: .04em; }
 
   .cal-break { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; padding: .3rem .6rem;
                background: #faf7ef; border: 1px dashed #e6dcc4; border-radius: 5px;
@@ -68,6 +76,12 @@
           {% elif u.derived %}<span class="cal-badge">auto</span>{% endif %}
           {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
         </div>
+        <div class="cal-week cal-head">
+          <div class="cal-when"></div>
+          <div class="cal-days">
+            {% for dh in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] %}<div class="cal-dayhdr">{{ dh }}</div>{% endfor %}
+          </div>
+        </div>
         {% for row in u.rows %}
           {% if row.kind == 'break' %}
             <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
@@ -76,8 +90,8 @@
               <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }} · {{ row.school_days }}d</div>
               <div class="cal-days">
                 {% for c in row.cells %}
-                  <div class="cal-cell {{ c.kind }}" style="flex: {{ c.days }}"
-                       title="{{ c.title or 'unscheduled' }} ({{ c.days }} day{{ '' if c.days == 1 else 's' }})">
+                  <div class="cal-cell {{ c.kind }}" style="grid-column: span {{ c.days }}"
+                       title="{% if c.kind == 'off' %}No school{% else %}{{ c.title or 'unscheduled' }} ({{ c.days }} day{{ '' if c.days == 1 else 's' }}){% endif %}">
                     {{ c.title if c.kind == 'lesson' else '' }}</div>
                 {% endfor %}
               </div>
