@@ -71,18 +71,35 @@ def main():
                  breakNames={"2025-09-08": "Fall Break"})
     bs2 = bells.BellSchedule([data2], {"role": "student"})
 
+    def kind(u):
+        return ("break" if u.get("break_section")
+                else "unplanned" if u.get("unplanned") else "unit")
+
     between = cv.build_calendar(bs2, data2, [
         {"title": "A", "weeks": 1, "lessons": []},
         {"title": "B", "weeks": 1, "lessons": []}])
-    kinds = ["break" if u.get("break_section") else "unit" for u in between["units"]]
-    assert kinds == ["unit", "break", "unit"], kinds
+    kinds = [kind(u) for u in between["units"]]
+    assert kinds[:3] == ["unit", "break", "unit"], kinds
     sec = between["units"][1]
     assert sec["rows"][0]["kind"] == "break" and sec["rows"][0]["name"] == "Fall Break", sec
+    assert sec["rows"][0]["weeks"] == 1, sec
+    # The leftover teaching week at the end is filled with an Unplanned chunk.
+    assert kinds[-1] == "unplanned" and between["units"][-1]["title"] == "Unplanned", kinds
 
     inside = cv.build_calendar(bs2, data2, [{"title": "A", "weeks": 2, "lessons": []}])
-    assert [u.get("break_section", False) for u in inside["units"]] == [False], inside
+    assert not inside["units"][0]["break_section"] and not inside["units"][0]["unplanned"]
     assert any(r["kind"] == "break" for r in inside["units"][0]["rows"]), \
         "a break mid-unit should stay inline in the unit's rows"
+
+    # A two-week break reports weeks == 2 (drives the proportional box height).
+    data3 = dict(DATA, lastDay="2025-09-26",
+                 holidays=["2025-09-08", "2025-09-09", "2025-09-10", "2025-09-11", "2025-09-12",
+                           "2025-09-15", "2025-09-16", "2025-09-17", "2025-09-18", "2025-09-19"])
+    bs3 = bells.BellSchedule([data3], {"role": "student"})
+    v3 = cv.build_calendar(bs3, data3, [{"title": "A", "weeks": 1, "lessons": []},
+                                        {"title": "B", "weeks": 1, "lessons": []}])
+    brk = next(u for u in v3["units"] if u.get("break_section"))
+    assert brk["rows"][0]["weeks"] == 2, brk
 
     print("ok - all calendar_view checks passed")
 

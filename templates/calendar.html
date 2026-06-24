@@ -43,10 +43,15 @@
   .cal-dayhdr { text-align: center; font-size: .66rem; font-weight: 600; color: var(--muted);
                 text-transform: uppercase; letter-spacing: .04em; }
 
+  /* A break is one box whose height is proportional to the weeks off (--wk): a
+     two-week break is two day-rows tall (4.45rem cell + .3rem inter-row gap). */
   .cal-break { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; padding: .3rem .6rem;
                background: #faf7ef; border: 1px dashed #e6dcc4; border-radius: 5px;
-               color: #8a7a52; font-size: .82rem; }
+               color: #8a7a52; font-size: .82rem;
+               min-height: calc(4.45rem * var(--wk, 1) + .3rem * (var(--wk, 1) - 1)); }
   .cal-break .when { color: #b0a47e; }
+  /* Unplanned tail chunks: greyed header, the text "Unplanned". */
+  .cal-unplanned .cal-unit-head { color: #b0b0b0; border-bottom-color: #ececec; }
 </style>
 {% endblock %}
 
@@ -77,16 +82,18 @@
       {% if u.break_section %}
       <section class="cal-unit cal-break-section">
         {% for row in u.rows %}
-          <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
+          <div class="cal-break" style="--wk: {{ row.weeks }}"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
         {% endfor %}
       </section>
       {% else %}
-      <section class="cal-unit">
+      <section class="cal-unit {{ 'cal-unplanned' if u.unplanned }}">
         <div class="cal-unit-head">
           <span class="name">{{ u.title }}</span>
-          {% if u.weeks %}<span class="cal-badge">{{ u.weeks|int if u.weeks == u.weeks|int else u.weeks }} {{ 'week' if u.weeks == 1 else 'weeks' }}</span>
-          {% elif u.derived %}<span class="cal-badge">auto</span>{% endif %}
-          {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
+          {% if not u.unplanned %}
+            {% if u.weeks %}<span class="cal-badge">{{ u.weeks|int if u.weeks == u.weeks|int else u.weeks }} {{ 'week' if u.weeks == 1 else 'weeks' }}</span>
+            {% elif u.derived %}<span class="cal-badge">auto</span>{% endif %}
+            {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
+          {% endif %}
         </div>
         <div class="cal-week cal-head">
           <div class="cal-when"></div>
@@ -96,7 +103,7 @@
         </div>
         {% for row in u.rows %}
           {% if row.kind == 'break' %}
-            <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
+            <div class="cal-break" style="--wk: {{ row.weeks }}"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
           {% else %}
             <div class="cal-week">
               <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }}</div>

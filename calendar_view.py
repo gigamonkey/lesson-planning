@@ -102,7 +102,7 @@ def _weeks(bs, data, start, end):
                  for k in range((span_end - span_start).days + 1)
                  if (span_start + timedelta(days=k)) in break_names]
         out.append({"is_break": True, "start": span_start, "end": span_end,
-                    "name": names[0] if names else "Break"})
+                    "name": names[0] if names else "Break", "weeks": j - i + 1})
         i = j + 1
     return out
 
@@ -162,7 +162,8 @@ def _consume(weeks, idx, unit):
 
 
 def _break_row(w):
-    return {"kind": "break", "name": w["name"], "range": _fmt_range(w["start"], w["end"])}
+    return {"kind": "break", "name": w["name"], "range": _fmt_range(w["start"], w["end"]),
+            "weeks": w["weeks"]}
 
 
 def build_calendar(bs, data, units):
@@ -171,33 +172,36 @@ def build_calendar(bs, data, units):
     model whose `units` list interleaves real units with standalone break sections:
 
     {warnings: [str],
-     units: [{title, weeks, derived, overflow:[{title,days,fit}], free_days,
+     units: [{title, weeks, derived, unplanned, overflow:[{title,days,fit}], free_days,
               rows: [{kind:'week', number, range, school_days, cells:[...]}
-                   | {kind:'break', name, range}]}            # a unit; mid-unit
-                                                              # breaks stay in rows
+                   | {kind:'break', name, range, weeks}]}      # a unit; mid-unit
+                                                               # breaks stay in rows
             | {break_section: True, rows: [{kind:'break', ...}]}]}  # breaks BETWEEN
                                                                    # units, own section
+
+    After the real units, any teaching weeks left before the end of the year are
+    emitted as 2-week `unplanned: True` pseudo-units, so the calendar runs to June.
     """
     start = _d(data["firstDay"])
     end = _d(data["lastDay"])
     weeks = _weeks(bs, data, start, end)
     teaching_total = sum(1 for w in weeks if not w["is_break"])
 
-    out_units, idx, weeks_used = [], 0, 0
-    for unit in units:
-        # Breaks before this unit (i.e. between units) become their own section;
-        # breaks that fall once the unit is underway stay inline (see _consume).
+    out_units = []
+    idx = [0]   # boxed so the nested helpers can advance it
+
+    def emit_leading_breaks():
+        # Breaks before the next unit (i.e. between units) get their own section;
+        # breaks once a unit is underway stay inline in it (see _consume).
         lead = []
-        while idx < len(weeks) and weeks[idx]["is_break"]:
-            lead.append(weeks[idx])
-            idx += 1
+        while idx[0] < len(weeks) and weeks[idx[0]]["is_break"]:
+            lead.append(weeks[idx[0]])
+            idx[0] += 1
         if lead:
             out_units.append({"break_section": True, "rows": [_break_row(w) for w in lead]})
 
-        taken, idx, derived = _consume(weeks, idx, unit)
-        weeks_used += sum(1 for w in taken if not w["is_break"])
-
-        # Lay this unit's lessons into its school days, in order.
+    def emit_unit(unit, unplanned=False):
+        taken, idx[0], derived = _consume(weeks, idx[0], unit)
         sdays = [d for w in taken if not w["is_break"] for d in w["days"]]
         assign, overflow, i = {}, [], 0
         for L in unit["lessons"]:
@@ -208,8 +212,6 @@ def build_calendar(bs, data, units):
             i += fit
             if fit < need:
                 overflow.append({"title": L["title"], "days": need, "fit": fit})
-        free_days = len(sdays) - i
-
         rows = []
         for w in taken:
             if w["is_break"]:
@@ -219,20 +221,28 @@ def build_calendar(bs, data, units):
                              "range": _fmt_range(w["days"][0], w["days"][-1]),
                              "school_days": len(w["days"]),
                              "cells": _week_cells(w, assign)})
-        out_units.append({"break_section": False, "title": unit["title"],
-                          "weeks": unit["weeks"], "derived": derived, "overflow": overflow,
-                          "free_days": free_days, "rows": rows})
+        out_units.append({"break_section": False, "unplanned": unplanned,
+                          "title": unit["title"], "weeks": unit["weeks"],
+                          "derived": derived, "overflow": overflow,
+                          "free_days": len(sdays) - i, "rows": rows})
+
+    for unit in units:
+        emit_leading_breaks()
+        emit_unit(unit)
+
+    # Run the calendar out to the end of the year: fill the remaining teaching
+    # weeks with 2-week "Unplanned" chunks (with their interspersed breaks).
+    while True:
+        emit_leading_breaks()
+        if idx[0] >= len(weeks):
+            break
+        emit_unit({"title": "Unplanned", "weeks": 2, "lessons": []}, unplanned=True)
 
     warnings = []
-    if idx < len(weeks):
-        leftover = sum(1 for w in weeks[idx:] if not w["is_break"])
-        if leftover:
-            warnings.append(f"{leftover} teaching week(s) at the end of the year are "
-                            "unscheduled (no unit covers them).")
     requested = sum(u["weeks"] for u in units if u["weeks"])
-    if weeks_used > teaching_total or requested > teaching_total:
+    if requested > teaching_total:
         warnings.append(f"Units ask for more weeks than the year has "
-                        f"({max(requested, weeks_used)} vs {teaching_total} teaching weeks).")
+                        f"({requested} vs {teaching_total} teaching weeks).")
     for u in out_units:
         if u.get("overflow"):   # break sections have no overflow
             n = sum(o["days"] - o["fit"] for o in u["overflow"])
