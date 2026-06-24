@@ -1,0 +1,68 @@
+{# The dynamic part of the calendar (warnings + units). Rendered into #cal-content
+   on the full page and returned on its own when a unit's weeks are edited, so the
+   edit swaps in place (htmx) instead of reloading and jumping to the top. #}
+{% if view.warnings %}
+  <div class="cal-warn"><ul>{% for w in view.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+{% if not view.units %}
+  <div class="cal-empty">This outline has no units yet. Add units (and their week
+    counts) on the <a href="{{ url_for('plan', course=course) }}">Course outline</a> page.</div>
+{% endif %}
+
+{% for u in view.units %}
+  {% if u.break_section %}
+  <section class="cal-unit cal-break-section">
+    {% for row in u.rows %}
+      <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.days }} days</span></div>
+    {% endfor %}
+  </section>
+  {% else %}
+  <section class="cal-unit {{ 'cal-unplanned' if u.unplanned }}">
+    <div class="cal-unit-head">
+      <span class="name">{{ u.title }}</span>
+      {% if not u.unplanned %}
+        {# Click-to-edit weeks pill. htmx posts the save and swaps just #cal-content
+           with the re-laid-out calendar, keeping the scroll position. #}
+        <form class="cal-weeks autosave" method="post"
+              action="{{ url_for('node_duration_set', course=course, node_id=u.node_id) }}"
+              hx-post="{{ url_for('node_duration_set', course=course, node_id=u.node_id) }}"
+              hx-target="#cal-content" hx-swap="innerHTML">
+          <input type="hidden" name="view" value="calendar">
+          <label><input type="number" name="amount" min="0" step="0.5"
+                 value="{{ u.weeks|int if (u.weeks and u.weeks == u.weeks|int) else (u.weeks or '') }}"
+                 placeholder="auto" title="Weeks this unit spans (blank = auto)" aria-label="Weeks"
+                 ><span class="cal-weeks-unit">{{ 'week' if u.weeks == 1 else 'weeks' }}</span></label>
+        </form>
+        {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
+      {% endif %}
+    </div>
+    <div class="cal-week cal-head">
+      <div class="cal-when"></div>
+      <div class="cal-days">
+        {% for dh in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] %}<div class="cal-dayhdr">{{ dh }}</div>{% endfor %}
+      </div>
+    </div>
+    {% for row in u.rows %}
+      {% if row.kind == 'break' %}
+        <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.days }} days</span></div>
+      {% else %}
+        <div class="cal-week">
+          <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }}</div>
+          <div class="cal-days">
+            {% for c in row.cells %}
+              <div class="cal-cell {{ c.kind }}" style="grid-column: span {{ c.days }}"
+                   title="{% if c.kind == 'off' %}No school{% else %}{{ c.title or 'unscheduled' }} ({{ c.days }} day{{ '' if c.days == 1 else 's' }}){% endif %}">
+                {{ c.title if c.kind == 'lesson' else '' }}</div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+    {% if u.overflow %}
+      <div class="cal-warn">Doesn't fit:
+        {% for o in u.overflow %}{{ o.title }} ({{ o.fit }}/{{ o.days }} days){% if not loop.last %}; {% endif %}{% endfor %}</div>
+    {% endif %}
+  </section>
+  {% endif %}
+{% endfor %}

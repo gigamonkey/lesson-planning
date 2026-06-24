@@ -1329,26 +1329,32 @@ def _outline_units(conn, course):
     return units
 
 
+def _calendar_ctx(conn, course):
+    """Template context for the calendar view: {calendar_id, view, error}. view is
+    the laid-out calendar (calendar_view.build_calendar) or None when no calendar is
+    bound / it can't load."""
+    crow = conn.execute("SELECT calendar FROM courses WHERE course=?", (course,)).fetchone()
+    cal_id = crow["calendar"] if crow else None
+    if not cal_id:
+        return {"calendar_id": None, "view": None, "error": None}
+    try:
+        bs, data = calendar_view.load_calendar(cal_id, CALENDAR_DIR)
+    except (OSError, ValueError) as e:
+        return {"calendar_id": cal_id, "view": None,
+                "error": f"Couldn't load calendar {cal_id!r}: {e}"}
+    view = calendar_view.build_calendar(bs, data, _outline_units(conn, course))
+    return {"calendar_id": cal_id, "view": view, "error": None}
+
+
 @app.route("/<course>/calendar")
 def calendar(course):
     """A calendar view of how the course outline lays out across the school year."""
     with db() as conn:
-        crow = conn.execute("SELECT calendar FROM courses WHERE course=?",
-                            (course,)).fetchone()
-        if not crow:
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
-        units = _outline_units(conn, course)
-    common = dict(course=course, calendar_id=crow["calendar"],
-                  page_title=f"{course.upper()} calendar")
-    if not crow["calendar"]:
-        return render_template("calendar.html", view=None, error=None, **common)
-    try:
-        bs, data = calendar_view.load_calendar(crow["calendar"], CALENDAR_DIR)
-    except (OSError, ValueError) as e:
-        return render_template("calendar.html", view=None,
-                               error=f"Couldn't load calendar {crow['calendar']!r}: {e}", **common)
-    view = calendar_view.build_calendar(bs, data, units)
-    return render_template("calendar.html", view=view, error=None, **common)
+        ctx = _calendar_ctx(conn, course)
+    return render_template("calendar.html", course=course,
+                           page_title=f"{course.upper()} calendar", **ctx)
 
 
 @app.route("/<course>/outline/import", methods=["POST"])
@@ -1543,6 +1549,11 @@ def node_duration_set(course, node_id):
                          " DO UPDATE SET amount=excluded.amount, unit=excluded.unit",
                          (O, node_id, amount, unit))
         conn.commit()
+        # From the calendar's weeks pill: return the re-laid-out calendar content
+        # so htmx swaps it in place (no full reload, scroll preserved).
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   **_calendar_ctx(conn, course))
     if request.headers.get("HX-Request"):
         return ("", 204)
     return _back(course)
