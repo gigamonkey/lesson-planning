@@ -93,6 +93,28 @@ def main():
             raise AssertionError("course mismatch was not rejected")
         assert _render(db) == before, "rejected load still mutated the db"
 
+        # 7. Unit/lesson durations round-trip through the editor loader and reach
+        #    node_duration. (A redundant "(1 day)" lesson tag is the default, so it
+        #    is dropped -- not asserted here.)
+        base = _render(db)
+        lines2, added = base.splitlines(), 0
+        for i, l in enumerate(lines2):
+            if l.startswith("# Unit:"):
+                lines2[i] = l + " (2 weeks)"
+                added += 1
+                break
+        for i, l in enumerate(lines2):
+            if l.startswith("## ") and not l[3:].lower().startswith("pool"):
+                lines2[i] = l + " (3 days)"
+                added += 1
+                break
+        src2 = "\n".join(lines2) + "\n"
+        plan_io.load_plan_text(db, "widgets", src2)
+        assert _render(db) == src2, "durations did not round-trip through the editor loader"
+        assert _count(db, "SELECT count(*) FROM node_duration") == added, \
+            "duration rows not stored as expected"
+        assert added >= 1, "test setup: no unit/lesson heading found to tag"
+
     print("ok - all plan_io / load_plan_text checks passed")
 
 

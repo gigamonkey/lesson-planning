@@ -14,7 +14,8 @@ format and `plans/markdown-as-storage.md` for the design.
 
 ## Tech Stack
 
-- Python 3.13, Flask (the only third-party runtime dependency)
+- Python 3.13; third-party runtime deps: Flask, and `bells` (the school-calendar
+  library — a local editable path source now, PyPI later; see `[tool.uv.sources]`)
 - SQLite as a cache; a git-tracked **corpus** of markdown + TSVs is the committed
   state
 - Package manager: `uv` (run scripts with `uv run <script>.py`)
@@ -49,7 +50,8 @@ format and `plans/markdown-as-storage.md` for the design.
 | `import_objectives.py` | Imports raw objectives into a course's pool, interning by text (idempotent). Plain-text (pool only) or TSV (`objective`/`text`, optional `node_id`/`ek` coverage edge, optional `uuid`). `--replace` re-seeds. |
 | `seed.py`              | Corpus loader: load each course directory in a corpus (`plan_io.read_course`). `seed` skips courses already present (create-if-absent; run on startup); `load_corpus`/`--all` reloads all. CLI: `uv run seed.py <corpus> [db]`. |
 | `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load every course in the corpus. `--corpus <dir>` (default `courses`). |
-| `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the markdown corpus. |
+| `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + durations + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the markdown corpus. |
+| `calendar_view.py`     | Pure layout engine for the calendar view: given a `bells.BellSchedule` + a course's outline (units→weeks, lessons→days), lays units across the year's *teaching weeks* (loose; breaks skipped) and lessons into school days, returning a view model. No Flask/SQL. `load_calendar(id, dir)` loads a bells JSON. |
 
 ## Running
 
@@ -78,6 +80,12 @@ outline) opening a CodeMirror 6 editor (`/<course>/outline/edit`) on the
 round-trippable `plan.md`. Saving posts to `/<course>/outline/source`, which runs
 `plan_io.load_plan_text` then `plan_io.write_course` — so a save updates the db
 **and** writes `plan.md` + the TSVs to disk, leaving the course clean.
+
+The **Calendar** sidebar item (`/<course>/calendar`) lays the outline across the
+school year (units→weeks, lessons→days; see `calendar_view.py` and the duration
+tags in `FORMAT.md`). It reads bells calendar JSONs from `LESSON_CALENDAR_DIR`
+(default the sibling `../bells/bhs-calendars`); a course binds to one via the
+`calendar:`/`start:` keys in its `plan.md` front matter.
 
 ```bash
 # Rebuild the editor bundle after editing frontend/editor.js (needs Node/npm).

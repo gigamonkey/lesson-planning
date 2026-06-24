@@ -19,14 +19,14 @@ import argparse
 import json
 import sqlite3
 
-BUNDLE_VERSION = "1.1.0"   # 1.1.0 added coverage.position (per-node objective order)
+BUNDLE_VERSION = "1.2.0"   # 1.1.0: coverage.position; 1.2.0: node_duration + course calendar
 FORMAT_MAJOR = 1
 
 
 def export_course(conn, course):
     """Return a bundle dict for `course`. Raises KeyError if the course is absent."""
     conn.row_factory = sqlite3.Row
-    crow = conn.execute("SELECT course, title, primary_outline "
+    crow = conn.execute("SELECT course, title, primary_outline, calendar, start_date "
                         "FROM courses WHERE course=?", (course,)).fetchone()
     if not crow:
         raise KeyError(course)
@@ -42,9 +42,13 @@ def export_course(conn, course):
         attrs = [dict(r) for r in conn.execute(
             "SELECT node_id, name, value FROM node_attr "
             "WHERE hierarchy=? ORDER BY node_id, name", (h["hierarchy"],))]
+        durations = [dict(r) for r in conn.execute(
+            "SELECT node_id, amount, unit FROM node_duration "
+            "WHERE hierarchy=? ORDER BY node_id", (h["hierarchy"],))]
         hierarchies.append({"hierarchy": h["hierarchy"], "kind": h["kind"],
                             "editable": h["editable"], "title": h["title"],
-                            "source": h["source"], "nodes": nodes, "node_attr": attrs})
+                            "source": h["source"], "nodes": nodes, "node_attr": attrs,
+                            "node_duration": durations})
 
     objectives = [dict(r) for r in conn.execute(
         "SELECT o.uuid, o.text, o.status, co.position FROM objectives o "
@@ -65,7 +69,8 @@ def export_course(conn, course):
 
     return {"version": BUNDLE_VERSION,
             "course": {"course": crow["course"], "title": crow["title"],
-                       "primary_outline": crow["primary_outline"]},
+                       "primary_outline": crow["primary_outline"],
+                       "calendar": crow["calendar"], "start_date": crow["start_date"]},
             "hierarchies": hierarchies, "objectives": objectives,
             "coverage": coverage, "hierarchy_targets": targets}
 
@@ -104,11 +109,16 @@ def import_course(conn, doc, course=None):
         conn.executemany(
             "INSERT INTO node_attr(hierarchy, node_id, name, value) VALUES (?, ?, ?, ?)",
             [(h["hierarchy"], a["node_id"], a["name"], a["value"]) for a in h.get("node_attr", [])])
+        conn.executemany(
+            "INSERT INTO node_duration(hierarchy, node_id, amount, unit) VALUES (?, ?, ?, ?)",
+            [(h["hierarchy"], d["node_id"], d["amount"], d["unit"])
+             for d in h.get("node_duration", [])])
 
-    # Restore the course's outline pointer now that its hierarchies exist (the slug
-    # is carried verbatim, so it's valid even when importing under a new id).
-    conn.execute("UPDATE courses SET primary_outline=? WHERE course=?",
-                 (doc["course"].get("primary_outline"), cid))
+    # Restore the course's outline pointer + calendar binding now that its
+    # hierarchies exist (slugs are carried verbatim, valid under a new id too).
+    conn.execute("UPDATE courses SET primary_outline=?, calendar=?, start_date=? WHERE course=?",
+                 (doc["course"].get("primary_outline"), doc["course"].get("calendar"),
+                  doc["course"].get("start_date"), cid))
 
     uuid_map = {}
     for o in doc["objectives"]:

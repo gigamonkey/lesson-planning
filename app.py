@@ -32,6 +32,7 @@ from markupsafe import Markup
 # CLI and the app stay in lockstep.
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO_ROOT)
+import calendar_view  # noqa: E402
 import course_bundle  # noqa: E402
 import hierarchy  # noqa: E402
 import seed as seed_module  # noqa: E402
@@ -49,6 +50,12 @@ CORPUS_DIR = os.environ.get(
     "LESSON_CORPUS_DIR", os.path.join(os.path.dirname(__file__), "courses")
 )
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
+# Where the calendar view reads bells calendar JSONs (e.g. 'bhs-2025-2026.json').
+# Defaults to the sibling bells checkout's bhs-calendars (matches the editable
+# `bells` path dependency); override with LESSON_CALENDAR_DIR.
+CALENDAR_DIR = os.environ.get(
+    "LESSON_CALENDAR_DIR", os.path.normpath(os.path.join(REPO_ROOT, "..", "bells", "bhs-calendars"))
+)
 
 app = Flask(__name__)
 app.secret_key = "lesson-planning-dev"  # local single-user app; not security-sensitive
@@ -270,6 +277,17 @@ def ensure_schema():
                     for pos, (_m, u) in enumerate(lst):
                         conn.execute("UPDATE coverage SET position=? WHERE hierarchy=? "
                                      "AND node_id=? AND uuid=?", (pos, h, n, u))
+
+            # Per-node durations (calendar view) + a course's calendar binding.
+            # Additive; create-if-absent.
+            conn.execute("CREATE TABLE IF NOT EXISTS node_duration (hierarchy TEXT NOT NULL,"
+                         " node_id TEXT NOT NULL, amount REAL NOT NULL, unit TEXT NOT NULL,"
+                         " PRIMARY KEY (hierarchy, node_id))")
+            ccols2 = [r[1] for r in conn.execute("PRAGMA table_info(courses)")]
+            if "calendar" not in ccols2:
+                conn.execute("ALTER TABLE courses ADD COLUMN calendar TEXT")
+            if "start_date" not in ccols2:
+                conn.execute("ALTER TABLE courses ADD COLUMN start_date TEXT")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)
@@ -1268,6 +1286,59 @@ def plan(course):
         O = outline_hierarchy(conn, course) or ensure_outline(conn, course)
         conn.commit()
     return redirect(url_for("hierarchy_view", course=course, hierarchy=O))
+
+
+def _outline_units(conn, course):
+    """The course outline as ordered units for the calendar: each
+    {title, weeks (float|None), lessons: [{title, days (int)}]}. Lessons not under
+    a unit are omitted (the calendar lays out units)."""
+    O = outline_hierarchy(conn, course)
+    if not O:
+        return []
+    durs = {nid: (amt, unit) for nid, amt, unit in conn.execute(
+        "SELECT node_id, amount, unit FROM node_duration WHERE hierarchy=?", (O,))}
+    nodes = conn.execute("SELECT node_id, parent_id, level, text FROM nodes "
+                         "WHERE hierarchy=? ORDER BY ordinal", (O,)).fetchall()
+    lessons_by_unit = {}
+    for n in nodes:
+        if n["level"] == "lesson":
+            lessons_by_unit.setdefault(n["parent_id"], []).append(n)
+    units = []
+    for n in nodes:
+        if n["level"] != "unit":
+            continue
+        d = durs.get(n["node_id"])
+        weeks = d[0] if (d and d[1] == "week") else None
+        lessons = []
+        for L in lessons_by_unit.get(n["node_id"], []):
+            ld = durs.get(L["node_id"])
+            days = int(ld[0]) if (ld and ld[1] == "day") else 1
+            lessons.append({"title": L["text"] or "Untitled lesson", "days": days})
+        units.append({"title": n["text"] or "Untitled unit", "weeks": weeks,
+                      "lessons": lessons})
+    return units
+
+
+@app.route("/<course>/calendar")
+def calendar(course):
+    """A calendar view of how the course outline lays out across the school year."""
+    with db() as conn:
+        crow = conn.execute("SELECT calendar, start_date FROM courses WHERE course=?",
+                            (course,)).fetchone()
+        if not crow:
+            abort(404)
+        units = _outline_units(conn, course)
+    common = dict(course=course, calendar_id=crow["calendar"],
+                  page_title=f"{course.upper()} calendar")
+    if not crow["calendar"]:
+        return render_template("calendar.html", view=None, error=None, **common)
+    try:
+        bs, data = calendar_view.load_calendar(crow["calendar"], CALENDAR_DIR)
+    except (OSError, ValueError) as e:
+        return render_template("calendar.html", view=None,
+                               error=f"Couldn't load calendar {crow['calendar']!r}: {e}", **common)
+    view = calendar_view.build_calendar(bs, data, units, start=crow["start_date"])
+    return render_template("calendar.html", view=view, error=None, **common)
 
 
 @app.route("/<course>/outline/import", methods=["POST"])

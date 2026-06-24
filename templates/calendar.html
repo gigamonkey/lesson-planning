@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+  .cal-intro { color: var(--muted); font-size: .9rem; margin: 0 0 1rem; max-width: var(--content-max); }
+  .cal-warn { background: #fffaf0; border: 1px solid #f0dcc0; color: #8a5a14;
+              border-radius: 6px; padding: .5rem .8rem; margin: 0 0 1rem; font-size: .88rem; }
+  .cal-warn ul { margin: .2rem 0 0; padding-left: 1.1rem; }
+  .cal-empty { color: var(--muted); background: #fff; border: 1px solid var(--line);
+               border-radius: 6px; padding: 1rem 1.2rem; max-width: var(--content-max); }
+  .cal-empty code { background: #f0f0f0; padding: 0 .25rem; border-radius: 3px; }
+
+  .cal-unit { margin-bottom: 1.4rem; }
+  .cal-unit-head { display: flex; align-items: baseline; gap: .5rem;
+                   border-bottom: 2px solid var(--line); padding-bottom: .2rem; margin-bottom: .35rem; }
+  .cal-unit-head .name { font-weight: 700; font-size: 1.05rem; }
+  .cal-badge { font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+               padding: .05rem .35rem; border-radius: 8px; background: #eef1f4; color: #555;
+               border: 1px solid #e0e4e8; }
+  .cal-badge.warn { background: #fdeeee; color: var(--gap); border-color: #f0cccc; }
+
+  .cal-week { display: flex; align-items: stretch; gap: .5rem; margin: .25rem 0; }
+  .cal-when { flex: 0 0 9.5rem; color: var(--muted); font-size: .78rem; line-height: 1.25;
+              align-self: center; }
+  .cal-when b { color: #555; font-weight: 600; }
+  .cal-days { display: flex; flex: 1; gap: .3rem; min-width: 0; }
+  .cal-cell { border-radius: 4px; padding: .3rem .5rem; font-size: .82rem; min-width: 0;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-cell.lesson { background: #eafaf0; border: 1px solid #cdebd9; color: #2f6f4e; }
+  .cal-cell.free { background: #f4f4f4; border: 1px dashed #e0e0e0; color: #aaa; }
+
+  .cal-break { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; padding: .3rem .6rem;
+               background: #faf7ef; border: 1px dashed #e6dcc4; border-radius: 5px;
+               color: #8a7a52; font-size: .82rem; }
+  .cal-break .when { color: #b0a47e; }
+</style>
+{% endblock %}
+
+{% block body %}
+  {% if error %}
+    <div class="cal-warn">{{ error }}</div>
+  {% endif %}
+
+  {% if not calendar_id %}
+    <div class="cal-empty">
+      <p>No calendar is bound to this course yet. Add a <code>calendar:</code> key to the
+         outline's <code>plan.md</code> front matter (e.g. <code>calendar: bhs-2025-2026</code>,
+         a JSON file in the calendars directory) and, optionally, a <code>start:</code> date.</p>
+    </div>
+  {% elif view %}
+    <p class="cal-intro">{{ view.calendar_name }} · {{ view.teaching_weeks }} teaching weeks.
+       Units fall across the weeks of the year (breaks skipped); lessons fill the school days.</p>
+
+    {% if view.warnings %}
+      <div class="cal-warn"><ul>{% for w in view.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
+    {% endif %}
+
+    {% if not view.units %}
+      <div class="cal-empty">This outline has no units yet. Add units (and their week
+        counts) on the <a href="{{ url_for('plan', course=course) }}">Course outline</a> page.</div>
+    {% endif %}
+
+    {% for u in view.units %}
+      <section class="cal-unit">
+        <div class="cal-unit-head">
+          <span class="name">{{ u.title }}</span>
+          {% if u.weeks %}<span class="cal-badge">{{ u.weeks|int if u.weeks == u.weeks|int else u.weeks }} {{ 'week' if u.weeks == 1 else 'weeks' }}</span>
+          {% elif u.derived %}<span class="cal-badge">auto</span>{% endif %}
+          {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
+        </div>
+        {% for row in u.rows %}
+          {% if row.kind == 'break' %}
+            <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
+          {% else %}
+            <div class="cal-week">
+              <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }} · {{ row.school_days }}d</div>
+              <div class="cal-days">
+                {% for c in row.cells %}
+                  <div class="cal-cell {{ c.kind }}" style="flex: {{ c.days }}"
+                       title="{{ c.title or 'unscheduled' }} ({{ c.days }} day{{ '' if c.days == 1 else 's' }})">
+                    {{ c.title if c.kind == 'lesson' else '' }}</div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% if u.overflow %}
+          <div class="cal-warn">Doesn't fit:
+            {% for o in u.overflow %}{{ o.title }} ({{ o.fit }}/{{ o.days }} days){% if not loop.last %}; {% endif %}{% endfor %}</div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  {% endif %}
+{% endblock %}

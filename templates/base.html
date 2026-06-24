@@ -524,6 +524,9 @@
                 </label>
               </form>
             </li>
+            <li class="objitem {{ 'active' if request.endpoint == 'calendar' and c.course == nav_course else '' }}">
+              <a href="{{ url_for('calendar', course=c.course) }}">Calendar</a>
+            </li>
             {% for h in c.hierarchies %}
               <li class="hieritem {{ 'active' if h.hierarchy == active_hierarchy else '' }}">
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"

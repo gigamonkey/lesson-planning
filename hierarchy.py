@@ -33,6 +33,38 @@ CHAPTER = re.compile(r"^Chapter (\d+): (.+)$")
 # A course-flavor raw objective: a top-level (column-0) markdown bullet.
 OBJECTIVE_BULLET = re.compile(r"^[-*] +(.+)$")
 
+# A trailing duration tag on a node's heading, e.g. "… (2 weeks)", "… (3 days)",
+# "… (18 hours)". Strict and only the LAST parenthesized group, so an incidental
+# "(HL only)" in a title is never mistaken for it. Amount may be a decimal.
+DURATION_RE = re.compile(r"\s*\((\d+(?:\.\d+)?)\s+(weeks?|days?|hours?)\)\s*$")
+_DURATION_UNIT = {"week": "week", "weeks": "week", "day": "day", "days": "day",
+                  "hour": "hour", "hours": "hour"}
+
+
+def split_duration(head):
+    """Split a trailing duration tag off a heading line.
+
+    Returns (clean_head, duration) where duration is {"amount": float, "unit":
+    "week"|"day"|"hour"} or None. The unit is normalized to singular; pluralization
+    happens on output (format_duration)."""
+    m = DURATION_RE.search(head or "")
+    if not m:
+        return head, None
+    return head[:m.start()].rstrip(), {
+        "amount": float(m.group(1)), "unit": _DURATION_UNIT[m.group(2)]}
+
+
+def format_duration(duration):
+    """Inverse of split_duration: " (N unit[s])" for a duration dict, or "" for
+    None. An integral amount prints without a decimal point ("2 weeks", not
+    "2.0 weeks")."""
+    if not duration:
+        return ""
+    amount = duration["amount"]
+    amount = int(amount) if float(amount).is_integer() else amount
+    unit = duration["unit"] + ("" if amount == 1 else "s")
+    return f" ({amount} {unit})"
+
 LEVEL_TAGS = {
     "csp": {
         1: "big-idea",
@@ -72,7 +104,8 @@ FLAVOR_KIND = {
 # Semantic versioning: bump major for any breaking change to an existing field or
 # guarantee; minor for backward-compatible additions (e.g. a new field).
 # 1.1.0 added the (nullable) "title" field and the "kind" field.
-FORMAT_VERSION = "1.1.0"
+# 1.2.0 added the (nullable) per-node "duration" field.
+FORMAT_VERSION = "1.2.0"
 
 
 def parse_front_matter(md):
@@ -248,7 +281,10 @@ def to_nodes(md, title=None):
         ordinal  - 1-based position among siblings (nodes sharing a parent),
                    in document order
         is_leaf  - True if no node has this node as its parent
-        text     - the node's text (see section_text)
+        text     - the node's text (see section_text), with any trailing duration
+                   tag stripped off
+        duration - the heading's duration tag as {"amount": float, "unit":
+                   "week"|"day"|"hour"}, or None
 
     parent/ordinal/is_leaf are derived from the markdown's heading nesting, so a
     consumer can load this with zero flavor knowledge and zero markdown parsing.
@@ -273,6 +309,9 @@ def to_nodes(md, title=None):
         if parent is not None:
             parents.add(parent)
         ordinals[parent] = ordinals.get(parent, 0) + 1
+        # A trailing duration tag rides the heading; strip it off the head before
+        # building the node text so the stored title is clean.
+        sec["head"], duration = split_duration(sec["head"])
         nodes.append({
             "id": sec["id"],
             "level": level,
@@ -281,6 +320,7 @@ def to_nodes(md, title=None):
             "ordinal": ordinals[parent],
             "is_leaf": True,  # corrected below once all parents are known
             "text": section_text(sec),
+            "duration": duration,
         })
         stack.append((level, sec["id"]))
     for node in nodes:
@@ -322,7 +362,8 @@ def _level1_heading(flavor, n, node_id, head):
 def to_markdown(rows, title=None, kind=None):
     """Serialize already-parsed nodes back to hierarchy markdown that `to_nodes`
     re-parses to the same nodes. `rows` are mappings with keys node_id, level (the
-    TAG string, e.g. 'unit'), and text, in document (pre-order) order. Emits
+    TAG string, e.g. 'unit'), and text, in document (pre-order) order; an optional
+    `duration` key ({"amount", "unit"}) re-emits the heading's duration tag. Emits
     optional `title`/`kind` front matter. Heading-based flavors only -- raises
     ValueError for tags it can't represent (e.g. the bulleted 'course' flavor)."""
     flavor = _flavor_for_tags({r["level"] for r in rows})
@@ -344,8 +385,9 @@ def to_markdown(rows, title=None, kind=None):
             out.append("")   # readability blank before each node (trimmed on reparse)
         if lvl == 1:
             n1 += 1
-            out.append(_level1_heading(flavor, n1, r["node_id"], head))
+            heading = _level1_heading(flavor, n1, r["node_id"], head)
         else:
-            out.append(f"{'#' * lvl} {r['node_id']} {head}".rstrip())
+            heading = f"{'#' * lvl} {r['node_id']} {head}".rstrip()
+        out.append(heading + format_duration(r.get("duration")))
         out.extend(body)
     return "\n".join(out).rstrip() + "\n"

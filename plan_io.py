@@ -81,7 +81,7 @@ def _split_list(value):
 
 def _emit_front_matter(meta):
     lines = ["---"]
-    for key in ("course", "title", "primary_outline", "targets"):
+    for key in ("course", "title", "primary_outline", "calendar", "start", "targets"):
         val = meta.get(key)
         if val:
             lines.append(f"{key}: {val}")
@@ -95,11 +95,14 @@ def _emit_front_matter(meta):
 def parse_plan(text):
     """Parse a plan.md into (meta, units, lessons, los, bullets).
 
-    units   : [(node_id, title)]                positional ids "1", "2", ...
-    lessons : [(node_id, parent_unit_id, title)] positional ids "1.1", "1.2", ...
+    units   : [(node_id, title, duration)]       positional ids "1", "2", ...
+    lessons : [(node_id, parent_unit_id, title, duration)] ids "1.1", "1.2", ...
     los     : {lesson_id: learning_objective_text}
     bullets : [(text, token|None, placement_lesson_id|None)] in document order
               (placement None == pooled / not placed in a lesson)
+
+    A unit/lesson `duration` is {"amount", "unit"} from a trailing heading tag
+    ("(2 weeks)" / "(3 days)"), or None.
     """
     meta, body = hierarchy.parse_front_matter(text)
     units, lessons, los, bullets = [], [], {}, []
@@ -116,22 +119,26 @@ def parse_plan(text):
             if depth == 1:
                 um = UNIT_RE.match(rest)
                 title = um.group(1) if um else rest
+                title, duration = hierarchy.split_duration(title)
                 unit_n += 1
                 lesson_n = 0
                 cur_unit = str(unit_n)
                 cur_lesson, in_pool = None, False
-                units.append((cur_unit, title))
+                units.append((cur_unit, title, duration))
             elif depth == 2:
                 if rest.lower().startswith("pool"):
                     cur_lesson, in_pool = None, True
                     continue
                 # The lesson heading is the title alone; its positional id ("1.1")
                 # is regenerated below, not parsed from the markdown.
-                title = rest.strip()
+                title, duration = hierarchy.split_duration(rest.strip())
+                # 1 day is the implicit default; don't store/round-trip it.
+                if duration == {"amount": 1.0, "unit": "day"}:
+                    duration = None
                 lesson_n += 1
                 cur_lesson = f"{cur_unit}.{lesson_n}" if cur_unit else str(lesson_n)
                 in_pool = False
-                lessons.append((cur_lesson, cur_unit, title))
+                lessons.append((cur_lesson, cur_unit, title, duration))
             continue
         lo = LO_RE.match(line)
         if lo and cur_lesson:
@@ -162,27 +169,37 @@ def _slug_of(path, meta):
     return meta.get("slug") or os.path.splitext(os.path.basename(path))[0]
 
 
+def _set_duration(conn, hierarchy, node_id, duration):
+    if duration:
+        conn.execute("INSERT INTO node_duration(hierarchy, node_id, amount, unit)"
+                     " VALUES (?, ?, ?, ?)",
+                     (hierarchy, node_id, duration["amount"], duration["unit"]))
+
+
 def _rebuild_outline_nodes(conn, outline, units, lessons, los):
-    """Insert the outline's unit + lesson nodes (positional ids "1", "1.1", ...) and
-    each lesson's learning-objective attr. The caller has already cleared the
-    outline's existing nodes/node_attr. Shared by read_course and load_plan_text."""
+    """Insert the outline's unit + lesson nodes (positional ids "1", "1.1", ...),
+    each lesson's learning-objective attr, and any unit/lesson durations. The caller
+    has already cleared the outline's nodes/node_attr/node_duration. Shared by
+    read_course and load_plan_text."""
     ordinal = 0
-    unit_has_lesson = {u: False for u, _ in units}
-    for _, parent, _ in lessons:
+    unit_has_lesson = {u: False for u, _, _ in units}
+    for _, parent, _, _ in lessons:
         if parent in unit_has_lesson:
             unit_has_lesson[parent] = True
-    for uid, utitle in units:
+    for uid, utitle, duration in units:
         conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
                      (outline, uid, None, "unit", 0 if unit_has_lesson[uid] else 1,
                       ordinal, utitle))
+        _set_duration(conn, outline, uid, duration)
         ordinal += 1
-    for lid, parent, ltitle in lessons:
+    for lid, parent, ltitle, duration in lessons:
         conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
                      (outline, lid, parent, "lesson", 1, ordinal, ltitle))
         ordinal += 1
         if los.get(lid):
             conn.execute("INSERT INTO node_attr(hierarchy, node_id, name, value)"
                          " VALUES (?, ?, 'learning_objective', ?)", (outline, lid, los[lid]))
+        _set_duration(conn, outline, lid, duration)
 
 
 def _resolve_bullets(conn, course, outline, bullets, known_uuids):
@@ -262,16 +279,17 @@ def read_course(db_path, course_dir):
         hs = [h for (h,) in conn.execute(
             "SELECT hierarchy FROM hierarchies WHERE course=?", (course,))] + [outline]
         ph = ",".join("?" * len(hs))
-        for tbl in ("coverage", "node_attr", "nodes"):
+        for tbl in ("coverage", "node_attr", "node_duration", "nodes"):
             conn.execute(f"DELETE FROM {tbl} WHERE hierarchy IN ({ph})", hs)
         conn.execute(f"DELETE FROM hierarchy_targets WHERE outline IN ({ph})", hs)
         conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
         conn.execute("DELETE FROM hierarchies WHERE course=?", (course,))
         conn.execute(
-            "INSERT INTO courses(course, title, primary_outline)"
-            " VALUES (?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
-            " primary_outline=excluded.primary_outline",
-            (course, title, outline))
+            "INSERT INTO courses(course, title, primary_outline, calendar, start_date)"
+            " VALUES (?, ?, ?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
+            " primary_outline=excluded.primary_outline, calendar=excluded.calendar,"
+            " start_date=excluded.start_date",
+            (course, title, outline, meta.get("calendar"), meta.get("start")))
 
         # Reference hierarchies (editable=0), parsed straight from markdown.
         n_refs = 0
@@ -280,9 +298,10 @@ def read_course(db_path, course_dir):
                 doc = load_nodes.parse(f.read())
             slug = doc.get("slug") or os.path.splitext(os.path.basename(path))[0]
             rows = load_nodes.build_rows(slug, doc["nodes"])
+            durations = load_nodes.build_durations(slug, doc["nodes"])
             load_nodes.load_into(conn, slug, course, doc.get("kind") or "reference",
                                  title, rows, source=os.path.basename(path),
-                                 title=doc.get("title"))
+                                 title=doc.get("title"), durations=durations)
             n_refs += 1
 
         # Outline hierarchy (editable=1): units + lessons as positional nodes.
@@ -365,13 +384,14 @@ def load_plan_text(db_path, course, text):
         # coverage edges are not represented in plan.md, so they stay as they are.
         conn.execute("DELETE FROM coverage WHERE hierarchy=?", (outline,))
         conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (outline,))
+        conn.execute("DELETE FROM node_duration WHERE hierarchy=?", (outline,))
         conn.execute("DELETE FROM nodes WHERE hierarchy=?", (outline,))
         conn.execute("DELETE FROM hierarchy_targets WHERE outline=?", (outline,))
         conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
 
         conn.execute(
-            "UPDATE courses SET title=?, primary_outline=? WHERE course=?",
-            (title, outline, course))
+            "UPDATE courses SET title=?, primary_outline=?, calendar=?, start_date=? WHERE course=?",
+            (title, outline, meta.get("calendar"), meta.get("start"), course))
         # The outline hierarchy row normally already exists; ensure it does.
         conn.execute(
             "INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title, source)"
@@ -423,7 +443,7 @@ def render_course(conn, course):
     Raises KeyError if the course is absent. write_course writes these; is_dirty
     compares them to disk."""
     conn.row_factory = sqlite3.Row
-    crow = conn.execute("SELECT course, title, primary_outline"
+    crow = conn.execute("SELECT course, title, primary_outline, calendar, start_date"
                         " FROM courses WHERE course=?", (course,)).fetchone()
     if not crow:
         raise KeyError(course)
@@ -433,6 +453,9 @@ def render_course(conn, course):
                         " ORDER BY ordinal", (outline,)).fetchall()
     lessons = conn.execute("SELECT node_id, parent_id, text FROM nodes WHERE hierarchy=?"
                          " AND level='lesson' ORDER BY ordinal", (outline,)).fetchall()
+    dur_of = {r["node_id"]: {"amount": r["amount"], "unit": r["unit"]}
+              for r in conn.execute("SELECT node_id, amount, unit FROM node_duration"
+                                    " WHERE hierarchy=?", (outline,))}
     los = {r["node_id"]: r["value"] for r in conn.execute(
         "SELECT node_id, value FROM node_attr WHERE hierarchy=? AND name='learning_objective'",
         (outline,))}
@@ -452,6 +475,7 @@ def render_course(conn, course):
 
     meta = {"course": course, "title": crow["title"],
             "primary_outline": outline,
+            "calendar": crow["calendar"], "start": crow["start_date"],
             "targets": ", ".join(r["reference"] for r in conn.execute(
                 "SELECT reference FROM hierarchy_targets WHERE outline=? ORDER BY reference",
                 (outline,)))}
@@ -461,7 +485,8 @@ def render_course(conn, course):
     for L in lessons:
         lessons_by_unit.setdefault(L["parent_id"], []).append(L)
     for u in units:
-        out.append(f"# Unit: {u['text']}".rstrip())   # rstrip: a unit may be untitled
+        # rstrip first (a unit may be untitled), then append any "(N weeks)" tag.
+        out.append(f"# Unit: {u['text']}".rstrip() + hierarchy.format_duration(dur_of.get(u["node_id"])))
         out.append("")
         # Unit-level "rough" placements: bullets directly under the unit heading,
         # before its lessons (parse_plan reads these back as placed on the unit).
@@ -473,7 +498,7 @@ def render_course(conn, course):
         for L in lessons_by_unit.get(u["node_id"], []):
             # Title only -- the positional id ("1.1") is regenerated by parse_plan
             # on read, so it (like the opaque db node_id) never leaks into markdown.
-            out.append(f"## {L['text']}".rstrip())
+            out.append(f"## {L['text']}".rstrip() + hierarchy.format_duration(dur_of.get(L["node_id"])))
             out.append("")
             if los.get(L["node_id"]):
                 out.append(f"**Learning objective:** {los[L['node_id']]}")
@@ -529,7 +554,10 @@ def _reference_files(conn, course):
     files = {}
     for h in conn.execute("SELECT hierarchy, kind, title FROM hierarchies "
                           "WHERE course=? AND editable=0", (course,)).fetchall():
-        rows = [dict(r) for r in conn.execute(
+        dur = {r["node_id"]: {"amount": r["amount"], "unit": r["unit"]}
+               for r in conn.execute("SELECT node_id, amount, unit FROM node_duration"
+                                     " WHERE hierarchy=?", (h["hierarchy"],))}
+        rows = [dict(r, duration=dur.get(r["node_id"])) for r in conn.execute(
             "SELECT node_id, level, text FROM nodes WHERE hierarchy=? ORDER BY ordinal, node_id",
             (h["hierarchy"],))]
         if not rows:

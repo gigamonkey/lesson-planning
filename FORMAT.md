@@ -117,6 +117,11 @@ Course-level facts that live in no single hierarchy:
   presence identifies this file as the outline.
 - `title:` — the course's display title.
 - `primary_outline:` — the outline's own slug (normally this file's stem).
+- `calendar:` — (optional) the id of a bells calendar (a JSON file in the
+  calendars directory, e.g. `bhs-2025-2026`) the calendar view lays the outline
+  onto.
+- `start:` — (optional) an ISO date the course starts on; defaults to the
+  calendar's first day.
 - `targets:` — a comma-separated list of reference slugs the outline is measured
   against (the `hierarchy_targets` rows).
 
@@ -144,6 +149,24 @@ positional ids (`1`, `1.1`, `1.2`, …) regenerated from heading order on each l
 — the markdown carries titles only. Placement and the learning objective are
 structural (they sit under their headings), so they survive an export → reload
 round-trip even as positional ids are renumbered.
+
+### 4. Durations
+
+Any node's heading may end with a **duration tag**: `(N weeks)`, `(N days)`, or
+`(N hours)` (`N` an integer or decimal). It is stripped off the stored title and
+kept in `node_duration`, then re-emitted on save.
+
+- In the **outline**, units carry weeks and lessons carry days
+  (`# Unit: Selection (2 weeks)`, `## Hello, world (3 days)`); these drive the
+  calendar view. A lesson with no tag is one day (`(1 day)` is the default and is
+  never written).
+- In a **reference**, the tag rides the node heading too — the IB syllabi already
+  use it (`## A1 Computer fundamentals (18 hours)`). Reference durations are stored
+  for reporting, not laid on the calendar.
+
+Only the **last** parenthesized group on the line is the tag, and only when it
+matches `(<number> weeks|days|hours)` — an incidental `(HL only)` in a title is
+left alone.
 
 ## Objective identity — abbreviated uuid tokens
 

@@ -49,6 +49,9 @@ COURSES_DDL = ("CREATE TABLE IF NOT EXISTS courses (course TEXT PRIMARY KEY,"
 HIERARCHIES_DDL = ("CREATE TABLE IF NOT EXISTS hierarchies (hierarchy TEXT PRIMARY KEY,"
                    " course TEXT NOT NULL, kind TEXT NOT NULL, editable INTEGER NOT NULL,"
                    " title TEXT NOT NULL, source TEXT)")
+NODE_DURATION_DDL = ("CREATE TABLE IF NOT EXISTS node_duration (hierarchy TEXT NOT NULL,"
+                     " node_id TEXT NOT NULL, amount REAL NOT NULL, unit TEXT NOT NULL,"
+                     " PRIMARY KEY (hierarchy, node_id))")
 
 # Major version of the hierarchy-document format this loader understands (the dict
 # hierarchy.to_nodes emits). Semver; only the major is checked. See FORMAT.md.
@@ -137,20 +140,34 @@ def build_rows(hierarchy, nodes):
     ]
 
 
-def load_into(conn, slug, course, kind, course_title, rows, source=None, title=None):
+def build_durations(hierarchy, nodes):
+    """`node_duration` rows for the nodes that carry a duration tag:
+    (hierarchy, node_id, amount, unit)."""
+    return [
+        (hierarchy, n["id"], n["duration"]["amount"], n["duration"]["unit"])
+        for n in nodes if n.get("duration")
+    ]
+
+
+def load_into(conn, slug, course, kind, course_title, rows, source=None, title=None,
+              durations=None):
     """Replace one reference hierarchy's nodes + register it, on a caller's conn.
 
-    Does not commit (the caller owns the transaction). See `load` for the
-    self-contained, db_path-taking wrapper.
+    `durations` are node_duration rows (hierarchy, node_id, amount, unit); the
+    hierarchy's durations are cleared and replaced (None == none). Does not commit
+    (the caller owns the transaction). See `load` for the self-contained wrapper.
     """
     conn.execute(COURSES_DDL)
     conn.execute(HIERARCHIES_DDL)
     conn.execute(DDL)
+    conn.execute(NODE_DURATION_DDL)
     conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)"
                  " ON CONFLICT(course) DO NOTHING",
                  (course, course_title))
     conn.execute("DELETE FROM nodes WHERE hierarchy = ?", (slug,))
     conn.executemany("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
+    conn.execute("DELETE FROM node_duration WHERE hierarchy = ?", (slug,))
+    conn.executemany("INSERT INTO node_duration VALUES (?, ?, ?, ?)", durations or [])
     title = title or hierarchy_title(course, kind)
     conn.execute(
         "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
@@ -160,17 +177,19 @@ def load_into(conn, slug, course, kind, course_title, rows, source=None, title=N
         (slug, course, kind, title, source))
 
 
-def load(db_path, slug, course, kind, course_title, rows, source=None, title=None):
+def load(db_path, slug, course, kind, course_title, rows, source=None, title=None,
+         durations=None):
     """Replace one reference hierarchy's nodes and register its course/hierarchy.
 
     `rows` carry `slug` as their hierarchy column. The course is created if new but
     its title is NOT changed by loading a hierarchy (a course is named when it's
     created). The hierarchy is registered as a reference (editable=0) of the given
     kind; its display title is `title` if given, else derived from course+kind.
+    `durations` are node_duration rows for this hierarchy (replaced wholesale).
     """
     conn = sqlite3.connect(db_path)
     try:
-        load_into(conn, slug, course, kind, course_title, rows, source, title)
+        load_into(conn, slug, course, kind, course_title, rows, source, title, durations)
         conn.commit()
     finally:
         conn.close()
@@ -193,8 +212,9 @@ def main():
     m = meta_for(flavor, args.course, args.kind or doc.get("kind"),
                  args.hierarchy, args.course_title)
     rows = build_rows(m["slug"], doc["nodes"])
+    durations = build_durations(m["slug"], doc["nodes"])
     load(args.database, m["slug"], m["course"], m["kind"], m["course_title"],
-         rows, source=args.input, title=doc.get("title"))
+         rows, source=args.input, title=doc.get("title"), durations=durations)
 
     leaves = sum(1 for r in rows if r[4])
     print(

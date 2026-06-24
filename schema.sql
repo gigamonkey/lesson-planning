@@ -19,7 +19,12 @@ CREATE TABLE IF NOT EXISTS courses (
   title  TEXT NOT NULL,              -- 'AP Computer Science A'
   -- The course's official outline (the editable lesson-plan hierarchy). Explicit,
   -- not inferred from kind. (FK enforcement is off app-wide; declared for docs.)
-  primary_outline   TEXT REFERENCES hierarchies(hierarchy)
+  primary_outline   TEXT REFERENCES hierarchies(hierarchy),
+  -- Calendar binding for the calendar view: a bells calendar id (a JSON file in
+  -- LESSON_CALENDAR_DIR, e.g. 'bhs-2025-2026') and an optional ISO start date
+  -- (defaults to that calendar's firstDay).
+  calendar    TEXT,
+  start_date  TEXT
 );
 
 -- Registry of every hierarchy (a tree of nodes): the CED/IB/book references and
@@ -89,6 +94,20 @@ CREATE TABLE IF NOT EXISTS node_attr (
   name      TEXT NOT NULL,
   value     TEXT NOT NULL,
   PRIMARY KEY (hierarchy, node_id, name),
+  FOREIGN KEY (hierarchy, node_id) REFERENCES nodes(hierarchy, node_id)
+);
+
+-- How long a node is meant to take. Authored in markdown as a trailing heading
+-- tag, e.g. '# Unit: Selection (2 weeks)', '## Hello, world (3 days)', or (on a
+-- reference) '## A1 Computer fundamentals (18 hours)'. The calendar view lays the
+-- OUTLINE out using unit weeks + lesson days; reference durations (hours) are
+-- stored for reporting but don't drive the calendar. One duration per node.
+CREATE TABLE IF NOT EXISTS node_duration (
+  hierarchy TEXT NOT NULL,
+  node_id   TEXT NOT NULL,
+  amount    REAL NOT NULL,            -- 2, 0.5, 18
+  unit      TEXT NOT NULL,            -- 'week' | 'day' | 'hour' (stored singular)
+  PRIMARY KEY (hierarchy, node_id),
   FOREIGN KEY (hierarchy, node_id) REFERENCES nodes(hierarchy, node_id)
 );
 
