@@ -21,7 +21,9 @@
   <section class="cal-unit {{ 'cal-unplanned' if u.unplanned }}">
     <div class="cal-unit-head">
       <span class="name">{{ u.title }}</span>
-      {% if not u.unplanned %}
+      {% if u.unplanned %}
+        <span class="cal-badge">{{ u.weeks }} {{ 'week' if u.weeks == 1 else 'weeks' }}</span>
+      {% else %}
         {# Click-to-edit weeks pill. htmx posts the save and swaps just #cal-content
            with the re-laid-out calendar, keeping the scroll position. #}
         <form class="cal-weeks autosave" method="post"

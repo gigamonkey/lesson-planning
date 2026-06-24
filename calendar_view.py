@@ -177,8 +177,9 @@ def build_calendar(bs, data, units):
             | {break_section: True, rows: [{kind:'break', ...}]}]}  # breaks BETWEEN
                                                                    # units, own section
 
-    After the real units, any teaching weeks left before the end of the year are
-    emitted as 2-week `unplanned: True` pseudo-units, so the calendar runs to June.
+    After the real units, all teaching weeks left before the end of the year are
+    emitted as ONE `unplanned: True` pseudo-unit (its `weeks` is the leftover
+    count), so the calendar runs to June.
     """
     start = _d(data["firstDay"])
     end = _d(data["lastDay"])
@@ -228,13 +229,13 @@ def build_calendar(bs, data, units):
         emit_leading_breaks()
         emit_unit(unit)
 
-    # Run the calendar out to the end of the year: fill the remaining teaching
-    # weeks with 2-week "Unplanned" chunks (with their interspersed breaks).
-    while True:
-        emit_leading_breaks()
-        if idx[0] >= len(weeks):
-            break
-        emit_unit({"title": "Unplanned", "weeks": 2, "lessons": []}, unplanned=True)
+    # Run the calendar out to the end of the year: all remaining teaching weeks go
+    # in ONE "Unplanned" section (its header shows the week count).
+    emit_leading_breaks()
+    remaining = sum(1 for w in weeks[idx[0]:] if not w["is_break"])
+    if remaining:
+        emit_unit({"title": "Unplanned", "weeks": remaining, "lessons": []}, unplanned=True)
+    emit_leading_breaks()   # any trailing breaks
 
     warnings = []
     requested = sum(u["weeks"] for u in units if u["weeks"])
