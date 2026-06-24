@@ -826,6 +826,13 @@ def hierarchy_view(course, hierarchy):
             "SELECT node_id, value FROM node_attr "
             "WHERE hierarchy=? AND name='learning_objective'", (hierarchy,))} \
             if h["editable"] else {}
+        # node_id -> amount (the duration's number; the unit is implied by the
+        # node's level -- weeks on units, days on lessons). Drives the inline
+        # duration fields on the editable outline.
+        durations = {r["node_id"]: (int(r["amount"]) if float(r["amount"]).is_integer()
+                                    else r["amount"])
+                     for r in conn.execute("SELECT node_id, amount FROM node_duration"
+                                           " WHERE hierarchy=?", (hierarchy,))}
     # The outline's stored title is the generic "Course outline"; qualify it with
     # the course (like the objectives page) so the page title isn't ambiguous.
     # Reference titles already include the course (e.g. "WIDGETS CED").
@@ -834,6 +841,7 @@ def hierarchy_view(course, hierarchy):
         "workspace.html", course=course, ref=hierarchy,
         page_title=title,
         kind=h["kind"], editable=bool(h["editable"]), los=los, pool=pool,
+        durations=durations,
         tree=build_tree(nodes, by_node, set()),
         stats=workspace_stats(nodes, by_node, pool))
 
@@ -1506,6 +1514,38 @@ def lesson_arrange(course):
                          "AND node_id=? AND level='lesson'", (unit_id, pos, O, lid))
         conn.commit()
     return ("", 204)
+
+
+@app.route("/<course>/node/<node_id>/duration", methods=["POST"])
+def node_duration_set(course, node_id):
+    """Set (or clear) an outline node's duration from the inline field. The unit is
+    implied by the node's level: weeks on a unit, days on a lesson. An empty/zero
+    amount clears it; for a lesson, 1 day is the default and also clears the row
+    (so plan.md stays quiet)."""
+    raw = (request.form.get("amount") or "").strip()
+    with db() as conn:
+        O = outline_hierarchy(conn, course)
+        row = conn.execute("SELECT level FROM nodes WHERE hierarchy=? AND node_id=?",
+                           (O, node_id)).fetchone()
+        if not row:
+            abort(404)
+        unit = "week" if row["level"] == "unit" else "day"
+        try:
+            amount = float(raw) if raw else None
+        except ValueError:
+            amount = None
+        if amount is None or amount <= 0 or (unit == "day" and amount == 1):
+            conn.execute("DELETE FROM node_duration WHERE hierarchy=? AND node_id=?",
+                         (O, node_id))
+        else:
+            conn.execute("INSERT INTO node_duration(hierarchy, node_id, amount, unit)"
+                         " VALUES (?, ?, ?, ?) ON CONFLICT(hierarchy, node_id)"
+                         " DO UPDATE SET amount=excluded.amount, unit=excluded.unit",
+                         (O, node_id, amount, unit))
+        conn.commit()
+    if request.headers.get("HX-Request"):
+        return ("", 204)
+    return _back(course)
 
 
 ensure_schema()
