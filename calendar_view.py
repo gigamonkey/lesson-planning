@@ -50,36 +50,56 @@ def _fmt_range(a, b):
 
 
 def _weeks(bs, data, start, end):
-    """The year as an ordered list of calendar weeks (Monday-anchored), each:
-    {monday, days: [school dates], is_break, name, number}. A week with no school
-    days is a break (named from the calendar's breakNames when possible); teaching
-    weeks are numbered 1..n."""
+    """The year as an ordered list of items: teaching weeks and break spans.
+
+    A teaching week is a Monday-anchored calendar week with >=1 school day:
+    {is_break: False, monday, days: [school dates], number}. A run of consecutive
+    calendar weeks with NO school days is collapsed into ONE break that spans the
+    whole gap -- from the day after the last school day before it to the day before
+    the first school day after it, so adjacent weekends (which the calendar's
+    `holidays` never lists, since they're never school days) are included:
+    {is_break: True, start, end, name}. Teaching weeks are numbered 1..n."""
     break_names = {_d(k): v for k, v in (data.get("breakNames") or {}).items()}
-    weeks, cur, cur_key = [], None, None
+    raw, cur_key = [], None
     d = start
     while d <= end:
         key = d.isocalendar()[:2]
         if key != cur_key:
-            cur = {"monday": d - timedelta(days=d.weekday()), "days": []}
-            weeks.append(cur)
+            raw.append({"monday": d - timedelta(days=d.weekday()), "days": []})
             cur_key = key
         if bs.is_school_day(d):
-            cur["days"].append(d)
+            raw[-1]["days"].append(d)
         d += timedelta(days=1)
-
-    n = 0
-    for w in weeks:
+    for w in raw:
         w["is_break"] = not w["days"]
-        if w["is_break"]:
-            w["number"] = None
-            names = [break_names[w["monday"] + timedelta(days=i)]
-                     for i in range(7) if (w["monday"] + timedelta(days=i)) in break_names]
-            w["name"] = names[0] if names else "Break"
-        else:
+
+    # Number teaching weeks, then collapse runs of empty weeks into break spans.
+    n = 0
+    for w in raw:
+        if not w["is_break"]:
             n += 1
             w["number"] = n
-            w["name"] = None
-    return weeks
+    out, i = [], 0
+    while i < len(raw):
+        w = raw[i]
+        if not w["is_break"]:
+            out.append(w)
+            i += 1
+            continue
+        j = i
+        while j + 1 < len(raw) and raw[j + 1]["is_break"]:
+            j += 1
+        prev = raw[i - 1] if i > 0 else None              # always a teaching week here
+        nxt = raw[j + 1] if j + 1 < len(raw) else None
+        span_start = (prev["days"][-1] + timedelta(days=1)) if prev else raw[i]["monday"]
+        span_end = (nxt["days"][0] - timedelta(days=1)) if nxt else (raw[j]["monday"] + timedelta(days=6))
+        names = [break_names[span_start + timedelta(days=k)]
+                 for k in range((span_end - span_start).days + 1)
+                 if (span_start + timedelta(days=k)) in break_names]
+        out.append({"is_break": True, "start": span_start, "end": span_end,
+                    "name": names[0] if names else "Break"})
+        i = j + 1
+    return out
 
 
 def _week_cells(week, assign):
@@ -129,7 +149,7 @@ def _consume(weeks, idx, unit):
         while idx < len(weeks) and (have == 0 or have < need):
             w = weeks[idx]; idx += 1
             taken.append(w)
-            have += len(w["days"])
+            have += 0 if w["is_break"] else len(w["days"])
         # Trim trailing pure-break weeks we may have grabbed.
         while taken and taken[-1]["is_break"]:
             taken.pop(); idx -= 1
@@ -137,8 +157,7 @@ def _consume(weeks, idx, unit):
 
 
 def _break_row(w):
-    return {"kind": "break", "name": w["name"],
-            "range": _fmt_range(w["monday"], w["monday"] + timedelta(days=4))}
+    return {"kind": "break", "name": w["name"], "range": _fmt_range(w["start"], w["end"])}
 
 
 def build_calendar(bs, data, units):
@@ -174,7 +193,7 @@ def build_calendar(bs, data, units):
         weeks_used += sum(1 for w in taken if not w["is_break"])
 
         # Lay this unit's lessons into its school days, in order.
-        sdays = [d for w in taken for d in w["days"]]
+        sdays = [d for w in taken if not w["is_break"] for d in w["days"]]
         assign, overflow, i = {}, [], 0
         for L in unit["lessons"]:
             need = max(1, int(L["days"]))

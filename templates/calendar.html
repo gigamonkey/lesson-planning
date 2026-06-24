@@ -99,7 +99,7 @@
             <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
           {% else %}
             <div class="cal-week">
-              <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }} · {{ row.school_days }}d</div>
+              <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }}</div>
               <div class="cal-days">
                 {% for c in row.cells %}
                   <div class="cal-cell {{ c.kind }}" style="grid-column: span {{ c.days }}"
