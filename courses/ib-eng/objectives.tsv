@@ -1,3 +1,10 @@
 uuid	text
+2ea0fd3d-450c-4ed7-bd35-dbd5a0aa04c2	Describe the notional instruction register (IR)
+3178dfde-f005-48e4-b74b-df281da998b1	Explain the three busses that connect the CPU and RAM.
+66d58271-4cf2-4603-9f65-70d692620ea4	Describe the notional memory address register (MAR)
+7283a3e6-9dfd-4d11-a3ca-32b647b9cc78	Describe the purpose program counter (PC).
+82f870fd-0b5a-4625-b69b-3fc062e0561b	Describe the notional memory data register (MDR)
+9ea83a4c-9c41-4392-9c6e-9b13850f7e0d	Explain why modern CPUs don't have an accumulator (AC)
 9f31caed-dae3-4523-b48c-d89f51ef232e	Describe the purpose of the Arithmetic Logic Unit (ALU).
 eeb70d8b-c8b4-47eb-b9cc-9ff68f37f6a4	Describe the purpose of the Control Unit (CU) on the CPU.
+f6a20898-0990-43c9-a929-a80a758648a1	List some ops that affect the program counter.
