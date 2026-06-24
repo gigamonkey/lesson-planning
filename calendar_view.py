@@ -75,10 +75,11 @@ def _weeks(bs, data, start, end):
 
 
 def _week_cells(week, assign):
-    """The week's five weekday (Mon-Fri) columns as cells, run-length-encoded so a
-    multi-day lesson spans its columns. Each weekday is a school day (a lesson or
-    free) or 'off' (weekend/holiday/outside the term) -- the off cells keep every
-    week's days aligned to their day-of-week column. `days` is the column span."""
+    """The week's five weekday (Mon-Fri) columns as cells. A multi-day lesson on
+    consecutive days is one block spanning those columns; free and 'off' days are
+    one box per day (so unfilled days read individually). 'off' is a weekend/
+    holiday/outside-the-term day, kept so every week aligns to its day-of-week
+    column. `days` is the column span."""
     schooldays = set(week["days"])
     slots = []
     for i in range(5):  # Monday .. Friday
@@ -90,7 +91,9 @@ def _week_cells(week, assign):
             slots.append(("off", None))
     cells = []
     for kind, title in slots:
-        if cells and cells[-1]["kind"] == kind and cells[-1]["title"] == title:
+        # Only contiguous days of the SAME lesson merge into one block.
+        if kind == "lesson" and cells and cells[-1]["kind"] == "lesson" \
+                and cells[-1]["title"] == title:
             cells[-1]["days"] += 1
         else:
             cells.append({"kind": kind, "title": title, "days": 1})

@@ -43,10 +43,12 @@ def main():
     # The holiday week still counts as one week, with four school days ("loose").
     assert weekrows[1]["school_days"] == 4, weekrows[1]
 
-    # L1 (3 days) lands on the first three school days; the rest of week 1 is free.
+    # L1 (3 days) is one block spanning three columns; the two remaining days of
+    # week 1 are one free box each (unfilled days render per day).
     first = weekrows[0]["cells"]
     assert first[0] == {"title": "L1", "days": 3, "kind": "lesson"}, first
-    assert first[1]["kind"] == "free" and first[1]["days"] == 2, first
+    assert [c["kind"] for c in first] == ["lesson", "free", "free"], first
+    assert all(c["days"] == 1 for c in first[1:]), first
 
     # U2 has no week count -> derived, consuming one teaching week for its 1 lesson.
     u2 = view["units"][1]

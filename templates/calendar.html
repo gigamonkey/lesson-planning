@@ -10,7 +10,9 @@
                border-radius: 6px; padding: 1rem 1.2rem; max-width: var(--content-max); }
   .cal-empty code { background: #f0f0f0; padding: 0 .25rem; border-radius: 3px; }
 
-  .cal-unit { margin-bottom: 1.4rem; }
+  /* fit-content so the unit (header rule, break bars) is only as wide as the
+     fixed-width week grid, not the whole page. */
+  .cal-unit { margin-bottom: 1.4rem; width: fit-content; max-width: 100%; }
   .cal-unit-head { display: flex; align-items: baseline; gap: .5rem;
                    border-bottom: 2px solid var(--line); padding-bottom: .2rem; margin-bottom: .35rem; }
   .cal-unit-head .name { font-weight: 700; font-size: 1.05rem; }
@@ -19,18 +21,18 @@
                border: 1px solid #e0e4e8; }
   .cal-badge.warn { background: #fdeeee; color: var(--gap); border-color: #f0cccc; }
 
-  .cal-week { display: flex; align-items: stretch; gap: .5rem; margin: .25rem 0; }
-  .cal-when { flex: 0 0 9.5rem; color: var(--muted); font-size: .78rem; line-height: 1.25;
+  .cal-week { display: flex; align-items: stretch; gap: .5rem; margin: .3rem 0; }
+  .cal-when { flex: 0 0 8rem; color: var(--muted); font-size: .78rem; line-height: 1.25;
               align-self: center; }
   .cal-when b { color: #555; font-weight: 600; }
-  /* Five equal Mon-Fri columns; a lesson cell spans its day count, so a 2-day
-     lesson is twice as wide as a 1-day one and every day lines up by weekday. */
-  .cal-days { display: grid; grid-template-columns: repeat(5, 1fr); gap: .3rem;
-              flex: 1; min-width: 0; }
-  .cal-cell { border-radius: 4px; padding: .3rem .5rem; font-size: .82rem; min-width: 0;
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Five FIXED-width Mon-Fri columns (each ~square with .cal-cell's min-height);
+     a lesson spans its day count, so a 2-day lesson is twice as wide, and every
+     day lines up by weekday. Fixed width keeps the whole calendar narrow. */
+  .cal-days { display: grid; grid-template-columns: repeat(5, 5rem); gap: .3rem; flex: none; }
+  .cal-cell { border-radius: 4px; padding: .3rem .4rem; font-size: .76rem; line-height: 1.2;
+              min-height: 5rem; min-width: 0; overflow: hidden; }
   .cal-cell.lesson { background: #eafaf0; border: 1px solid #cdebd9; color: #2f6f4e; }
-  .cal-cell.free { background: #f4f4f4; border: 1px dashed #e0e0e0; color: #aaa; }
+  .cal-cell.free { background: #f7f7f7; border: 1px dashed #e0e0e0; }
   .cal-cell.off { background: #e9e9e9; border: 1px solid #e0e0e0; }
   /* Weekday header row, aligned to the same five columns. */
   .cal-head { margin-bottom: .1rem; }
