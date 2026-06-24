@@ -91,6 +91,10 @@
     .miniadd { color: #bbb; cursor: pointer; font-size: .8rem; line-height: 1; padding: 0;
                border: none; background: none; flex: none; }
     .miniadd:hover { color: #2b6cb0; }
+    /* A miniadd rendered as a link (e.g. the calendar icon): don't let the generic
+       sidebar-link rule stretch it, and show an active state. */
+    .sidebar ul.hiers a.miniadd { flex: none; text-decoration: none; }
+    .miniadd.on { color: #2b6cb0; }
     /* Import-outline dialog (pick a reference to build the outline from). */
     .oimport-dialog { border: 1px solid var(--line); border-radius: 8px; padding: 1.1rem 1.3rem;
             max-width: 30rem; box-shadow: 0 8px 30px rgba(0,0,0,.18); }
@@ -513,6 +517,10 @@
                   </form>
                 </dialog>
               {% endif %}
+              <a class="miniadd {{ 'on' if request.endpoint == 'calendar' and c.course == nav_course else '' }}"
+                 href="{{ url_for('calendar', course=c.course) }}"
+                 title="Calendar — how the outline fits the school year">
+                <i class="bi bi-calendar3"></i></a>
             </li>
             <li class="objitem {{ 'active' if request.endpoint == 'objectives' and c.course == nav_course else '' }}">
               <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
@@ -523,9 +531,6 @@
                   <input type="file" name="file" accept=".tsv,.txt,.csv" hidden onchange="this.form.submit()">
                 </label>
               </form>
-            </li>
-            <li class="objitem {{ 'active' if request.endpoint == 'calendar' and c.course == nav_course else '' }}">
-              <a href="{{ url_for('calendar', course=c.course) }}">Calendar</a>
             </li>
             {% for h in c.hierarchies %}
               <li class="hieritem {{ 'active' if h.hierarchy == active_hierarchy else '' }}">
