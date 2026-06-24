@@ -32,6 +32,14 @@ def _d(s):
     return date.fromisoformat(s) if isinstance(s, str) else s
 
 
+def _fmt_year(year):
+    """'2026-2027' -> '2026-27'; passes through anything unexpected."""
+    parts = (year or "").split("-")
+    if len(parts) == 2 and len(parts[1]) >= 2:
+        return f"{parts[0]}-{parts[1][-2:]}"
+    return year or ""
+
+
 def _fmt_range(a, b):
     """A compact human date range, e.g. 'Aug 18-22' or 'Aug 25-Sep 2'."""
     if a == b:
@@ -191,4 +199,5 @@ def build_calendar(bs, data, units):
             warnings.append(f"Unit “{u['title']}” overflows by {n} lesson-day(s).")
 
     return {"warnings": warnings, "units": out_units,
-            "teaching_weeks": teaching_total, "calendar_name": data.get("name", "")}
+            "teaching_weeks": teaching_total, "calendar_name": data.get("name", ""),
+            "year": _fmt_year(data.get("year"))}

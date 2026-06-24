@@ -59,8 +59,7 @@
          a JSON file in the calendars directory). The school year comes from that calendar.</p>
     </div>
   {% elif view %}
-    <p class="cal-intro">{{ view.calendar_name }} · {{ view.teaching_weeks }} teaching weeks.
-       Units fall across the weeks of the year (breaks skipped); lessons fill the school days.</p>
+    <p class="cal-intro">{{ view.calendar_name }} - {{ view.year }} · {{ view.teaching_weeks }} teaching weeks.</p>
 
     {% if view.warnings %}
       <div class="cal-warn"><ul>{% for w in view.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
