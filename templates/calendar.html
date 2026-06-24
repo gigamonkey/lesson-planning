@@ -24,15 +24,19 @@
                border: 1px solid #e0e4e8; }
   .cal-badge.warn { background: #fdeeee; color: var(--gap); border-color: #f0cccc; }
   /* Click-to-edit weeks pill (looks like a badge; editable on hover/focus). */
-  .cal-weeks { display: inline-flex; align-items: baseline; gap: .15rem; margin: 0;
+  .cal-weeks { display: inline-flex; margin: 0;
                font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
-               padding: .05rem .35rem; border-radius: 8px; background: #eef1f4; color: #555;
-               border: 1px solid #e0e4e8; cursor: text; }
+               padding: .05rem .4rem; border-radius: 8px; background: #eef1f4; color: #555;
+               border: 1px solid #e0e4e8; }
   .cal-weeks:hover { border-color: #cfd6dd; }
   .cal-weeks:focus-within { background: #fff; border-color: #bcd; }
-  .cal-weeks input { width: 2.3rem; font: inherit; font-size: .65rem; font-weight: 700;
-               text-align: right; text-transform: uppercase; color: #444; background: transparent;
-               border: none; padding: 0; -moz-appearance: textfield; appearance: textfield; }
+  /* The label is the click target: clicking anywhere in the pill focuses the input. */
+  .cal-weeks label { display: inline-flex; align-items: baseline; gap: .25rem; cursor: text; }
+  /* field-sizing makes the input hug its value/placeholder -- no leading whitespace. */
+  .cal-weeks input { font: inherit; font-size: .65rem; font-weight: 700; text-transform: uppercase;
+               color: #444; background: transparent; border: none; padding: 0;
+               field-sizing: content; min-width: 1.1rem; box-sizing: content-box;
+               -moz-appearance: textfield; appearance: textfield; }
   .cal-weeks input::-webkit-outer-spin-button,
   .cal-weeks input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .cal-weeks input:focus { outline: none; }
@@ -107,10 +111,10 @@
                the calendar with the new layout. Empty = auto (derive from lessons). #}
             <form class="cal-weeks autosave" method="post"
                   action="{{ url_for('node_duration_set', course=course, node_id=u.node_id) }}">
-              <input type="number" name="amount" min="0" step="0.5"
+              <label><input type="number" name="amount" min="0" step="0.5"
                      value="{{ u.weeks|int if (u.weeks and u.weeks == u.weeks|int) else (u.weeks or '') }}"
-                     placeholder="auto" title="Weeks this unit spans (blank = auto)" aria-label="Weeks">
-              <span class="cal-weeks-unit">{{ 'week' if u.weeks == 1 else 'weeks' }}</span>
+                     placeholder="auto" title="Weeks this unit spans (blank = auto)" aria-label="Weeks"
+                     ><span class="cal-weeks-unit">{{ 'week' if u.weeks == 1 else 'weeks' }}</span></label>
             </form>
             {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
           {% endif %}
