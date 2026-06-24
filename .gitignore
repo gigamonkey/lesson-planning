@@ -1,8 +1,9 @@
 *.db
+*.zip
 *~
 .DS_Store
-__pycache__/
-.venv/
 .claude/settings.local.json
+.venv/
+__pycache__/
 db-backups/
 node_modules/
