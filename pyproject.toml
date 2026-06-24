@@ -4,5 +4,9 @@ version = "0.1.0"
 description = "A course-agnostic lesson-planning tool: ingest a curriculum hierarchy, place objectives, and render a traceable lesson plan."
 requires-python = ">=3.13"
 dependencies = [
+    "bells",
     "flask",
 ]
+
+[tool.uv.sources]
+bells = { path = "../bells/libs/python", editable = true }

@@ -3,6 +3,15 @@ revision = 3
 requires-python = ">=3.13"
 
 [[package]]
+name = "bells"
+version = "0.5.0"
+source = { editable = "../bells/libs/python" }
+
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'test'" }]
+provides-extras = ["test"]
+
+[[package]]
 name = "blinker"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -75,11 +84,15 @@ name = "lesson-planning"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "bells" },
     { name = "flask" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "flask" }]
+requires-dist = [
+    { name = "bells", editable = "../bells/libs/python" },
+    { name = "flask" },
+]
 
 [[package]]
 name = "markupsafe"
