@@ -136,15 +136,23 @@ def _consume(weeks, idx, unit):
     return taken, idx, derived
 
 
+def _break_row(w):
+    return {"kind": "break", "name": w["name"],
+            "range": _fmt_range(w["monday"], w["monday"] + timedelta(days=4))}
+
+
 def build_calendar(bs, data, units):
     """Lay `units` (ordered [{title, weeks, lessons:[{title, days}]}]) onto the
     school year of (bs, data) -- its full firstDay..lastDay span. Returns a view
-    model:
+    model whose `units` list interleaves real units with standalone break sections:
 
     {warnings: [str],
      units: [{title, weeks, derived, overflow:[{title,days,fit}], free_days,
-              rows: [{kind:'week', number, range, school_days, cells:[{title,days,kind}]}
-                   | {kind:'break', name, range}]}]}
+              rows: [{kind:'week', number, range, school_days, cells:[...]}
+                   | {kind:'break', name, range}]}            # a unit; mid-unit
+                                                              # breaks stay in rows
+            | {break_section: True, rows: [{kind:'break', ...}]}]}  # breaks BETWEEN
+                                                                   # units, own section
     """
     start = _d(data["firstDay"])
     end = _d(data["lastDay"])
@@ -153,6 +161,15 @@ def build_calendar(bs, data, units):
 
     out_units, idx, weeks_used = [], 0, 0
     for unit in units:
+        # Breaks before this unit (i.e. between units) become their own section;
+        # breaks that fall once the unit is underway stay inline (see _consume).
+        lead = []
+        while idx < len(weeks) and weeks[idx]["is_break"]:
+            lead.append(weeks[idx])
+            idx += 1
+        if lead:
+            out_units.append({"break_section": True, "rows": [_break_row(w) for w in lead]})
+
         taken, idx, derived = _consume(weeks, idx, unit)
         weeks_used += sum(1 for w in taken if not w["is_break"])
 
@@ -172,15 +189,14 @@ def build_calendar(bs, data, units):
         rows = []
         for w in taken:
             if w["is_break"]:
-                rows.append({"kind": "break", "name": w["name"],
-                             "range": _fmt_range(w["monday"], w["monday"] + timedelta(days=4))})
+                rows.append(_break_row(w))
             else:
                 rows.append({"kind": "week", "number": w["number"],
                              "range": _fmt_range(w["days"][0], w["days"][-1]),
                              "school_days": len(w["days"]),
                              "cells": _week_cells(w, assign)})
-        out_units.append({"title": unit["title"], "weeks": unit["weeks"],
-                          "derived": derived, "overflow": overflow,
+        out_units.append({"break_section": False, "title": unit["title"],
+                          "weeks": unit["weeks"], "derived": derived, "overflow": overflow,
                           "free_days": free_days, "rows": rows})
 
     warnings = []
@@ -194,7 +210,7 @@ def build_calendar(bs, data, units):
         warnings.append(f"Units ask for more weeks than the year has "
                         f"({max(requested, weeks_used)} vs {teaching_total} teaching weeks).")
     for u in out_units:
-        if u["overflow"]:
+        if u.get("overflow"):   # break sections have no overflow
             n = sum(o["days"] - o["fit"] for o in u["overflow"])
             warnings.append(f"Unit “{u['title']}” overflows by {n} lesson-day(s).")
 

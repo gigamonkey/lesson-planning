@@ -10,9 +10,12 @@
                border-radius: 6px; padding: 1rem 1.2rem; max-width: var(--content-max); }
   .cal-empty code { background: #f0f0f0; padding: 0 .25rem; border-radius: 3px; }
 
-  /* fit-content so the unit (header rule, break bars) is only as wide as the
-     fixed-width week grid, not the whole page. */
-  .cal-unit { margin-bottom: 1.4rem; width: fit-content; max-width: 100%; }
+  /* A fixed width matching one week row (cal-when + gap + the 5-column day grid),
+     so every section -- units and standalone break sections -- lines up and the
+     header rule / break bars span the same width, not the whole page. */
+  .cal-unit { margin-bottom: 1.4rem; max-width: 100%;
+              width: calc(8rem + .5rem + (6.25rem * 5) + (.3rem * 4)); }
+  .cal-break-section { margin-bottom: 1.4rem; }
   .cal-unit-head { display: flex; align-items: baseline; gap: .5rem;
                    border-bottom: 2px solid var(--line); padding-bottom: .2rem; margin-bottom: .35rem; }
   .cal-unit-head .name { font-weight: 700; font-size: 1.05rem; }
@@ -71,6 +74,13 @@
     {% endif %}
 
     {% for u in view.units %}
+      {% if u.break_section %}
+      <section class="cal-unit cal-break-section">
+        {% for row in u.rows %}
+          <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.range }}</span></div>
+        {% endfor %}
+      </section>
+      {% else %}
       <section class="cal-unit">
         <div class="cal-unit-head">
           <span class="name">{{ u.title }}</span>
@@ -105,6 +115,7 @@
             {% for o in u.overflow %}{{ o.title }} ({{ o.fit }}/{{ o.days }} days){% if not loop.last %}; {% endif %}{% endfor %}</div>
         {% endif %}
       </section>
+      {% endif %}
     {% endfor %}
   {% endif %}
 {% endblock %}

@@ -64,6 +64,26 @@ def main():
         {"title": "Big", "weeks": 1, "lessons": [{"title": "X", "days": 9}]}])
     assert over["units"][0]["overflow"], "a 9-day lesson in a 5-day week should overflow"
 
+    # A full-week break (all of Sep 8-12 off) between two 1-week units becomes its
+    # own section; mid-unit it stays inline.
+    data2 = dict(DATA, lastDay="2025-09-26",
+                 holidays=["2025-09-08", "2025-09-09", "2025-09-10", "2025-09-11", "2025-09-12"],
+                 breakNames={"2025-09-08": "Fall Break"})
+    bs2 = bells.BellSchedule([data2], {"role": "student"})
+
+    between = cv.build_calendar(bs2, data2, [
+        {"title": "A", "weeks": 1, "lessons": []},
+        {"title": "B", "weeks": 1, "lessons": []}])
+    kinds = ["break" if u.get("break_section") else "unit" for u in between["units"]]
+    assert kinds == ["unit", "break", "unit"], kinds
+    sec = between["units"][1]
+    assert sec["rows"][0]["kind"] == "break" and sec["rows"][0]["name"] == "Fall Break", sec
+
+    inside = cv.build_calendar(bs2, data2, [{"title": "A", "weeks": 2, "lessons": []}])
+    assert [u.get("break_section", False) for u in inside["units"]] == [False], inside
+    assert any(r["kind"] == "break" for r in inside["units"][0]["rows"]), \
+        "a break mid-unit should stay inline in the unit's rows"
+
     print("ok - all calendar_view checks passed")
 
 
