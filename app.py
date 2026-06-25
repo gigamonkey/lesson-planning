@@ -517,6 +517,19 @@ def hierarchy_delete(course, hierarchy):
     return redirect(url_for("tree", course=course))
 
 
+@app.route("/<course>/references/reorder", methods=["POST"])
+def references_reorder(course):
+    """Persist a drag-reordered sidebar reference list: `ids` is the new order of
+    reference slugs; write each one's hierarchy_targets.position."""
+    with db() as conn:
+        O = outline_hierarchy(conn, course)
+        for pos, slug in enumerate(_id_list("ids")):
+            conn.execute("UPDATE hierarchy_targets SET position=? "
+                         "WHERE course=? AND outline=? AND reference=?", (pos, course, O, slug))
+        conn.commit()
+    return ("", 204)
+
+
 @app.route("/<course>/rename", methods=["POST"])
 def course_rename(course):
     """Rename a course's display title (the id/slug is fixed). Used by the inline

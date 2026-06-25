@@ -9,6 +9,7 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <style>
     :root {
       --gap: #c0392b; --objective: #b7791f; --planned: #2f855a;
@@ -87,6 +88,12 @@
     .coursehead .gear:disabled, .coursehead .gear:disabled:hover { color: #d8d8d8; cursor: default; }
     /* Per-hierarchy row controls: an upload (+) and a hover trash. */
     .sidebar ul.hiers li.hieritem { gap: .25rem; }
+    /* Drag handle to reorder references; revealed on row hover, like the trash. */
+    .draghandle { color: #ccc; cursor: grab; font-size: .8rem; line-height: 1; flex: none;
+                  visibility: hidden; margin-left: -.15rem; }
+    .sidebar ul.hiers li.hieritem:hover .draghandle { visibility: visible; }
+    .draghandle:active { cursor: grabbing; }
+    .sortable-ghost { opacity: .4; }
     .objadd { margin: 0; display: inline-flex; flex: none; }
     .miniadd { color: #bbb; cursor: pointer; font-size: .8rem; line-height: 1; padding: 0;
                border: none; background: none; flex: none; }
@@ -497,7 +504,7 @@
             <input class="ctitle-input" type="text" name="title" value="{{ c.title }}"
                    autocomplete="off" aria-label="Course title" placeholder="course title…">
           </form>
-          <ul class="hiers">
+          <ul class="hiers" data-course="{{ c.course }}">
             <li class="outlineitem {{ 'active' if c.course == nav_course and c.outline and c.outline == active_hierarchy else '' }}">
               <a href="{{ url_for('plan', course=c.course) }}">Course outline</a>
               {% if c.hierarchies %}
@@ -544,7 +551,9 @@
               </form>
             </li>
             {% for h in c.hierarchies %}
-              <li class="hieritem {{ 'active' if c.course == nav_course and h.hierarchy == active_hierarchy else '' }}">
+              <li class="hieritem {{ 'active' if c.course == nav_course and h.hierarchy == active_hierarchy else '' }}"
+                  data-hierarchy="{{ h.hierarchy }}">
+                <span class="draghandle" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
                    title="{{ h.label }}">{{ h.label }}</a>
                 <span class="pill pill-{{ h.hierarchy }}">{{ h.hierarchy }}</span>
@@ -590,6 +599,30 @@
       if (btn && form) btn.addEventListener('click', function () {
         form.hidden = !form.hidden;
         if (!form.hidden) document.getElementById('newcourse-id').focus();
+      });
+    })();
+
+    // Drag a course's references (by the grip handle) to reorder them; persist the
+    // new order to hierarchy_targets.position. References stay in their own zone
+    // (onMove rejects landing on the non-reference items above them).
+    (function () {
+      if (!window.Sortable) return;
+      document.querySelectorAll('.sidebar ul.hiers[data-course]').forEach(function (ul) {
+        const course = ul.dataset.course;
+        new Sortable(ul, {
+          draggable: 'li.hieritem', handle: '.draghandle',
+          animation: 120, ghostClass: 'sortable-ghost', forceFallback: true,
+          onMove: function (evt) {
+            return !evt.related || evt.related.classList.contains('hieritem');
+          },
+          onEnd: function () {
+            const ids = Array.from(ul.querySelectorAll('li.hieritem'))
+              .map(li => li.dataset.hierarchy).join(',');
+            const body = new URLSearchParams(); body.set('ids', ids);
+            fetch('/' + course + '/references/reorder', { method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body });
+          }
+        });
       });
     })();
 
