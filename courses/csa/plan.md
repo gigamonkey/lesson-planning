@@ -1,12 +1,12 @@
 ---
 course: csa
 title: AP Computer Science A
-primary_reference: csa-ced
 primary_outline: csa-plan
+calendar: bhs-2026-2027
 targets: csa-book, csa-ced
 ---
 
-# Unit: Introduction
+# Unit: Introduction (1 week)
 
 ## What is programming? What is Java?
 
@@ -31,13 +31,9 @@ targets: csa-book, csa-ced
 - Distinguish between syntax, run-time, and logic errors.  (#e550)
 - List some situations when Java will throw a runtime Exception  (#f6ad)
 
-## Transitioning from AP CSP to AP CSA
-
-## Java Development Environments
-
 ## Growth mindset and pair programming
 
-# Unit: Values, variables, and expressions
+# Unit: Values, variables, and expressions (2 weeks)
 
 ## Values and variables
 
@@ -99,7 +95,7 @@ targets: csa-book, csa-ced
 - Explain integer overflow: both when & why it occurs.  (#e6fa)
 - State when double contagion ("zombification") occurs.  (#f9f2)
 
-# Unit: Methods
+# Unit: Methods (2 weeks)
 
 ## Writing methods
 
@@ -135,7 +131,7 @@ targets: csa-book, csa-ced
 - State why the `Math` class can be used in any code.  (#ac1c)
 - Write arithmetic expressions with Math.pow, Math.sqrt, and Math.abs  (#bd0a)
 
-# Unit: Booleans and conditionals
+# Unit: Booleans and conditionals (2 weeks)
 
 ## Building blocks of algorithms
 
@@ -194,7 +190,7 @@ targets: csa-book, csa-ced
 - Distinguish between = and == and !=  (#dc9b)
 - Explain why we should never use == & != with booleans  (#eafc)
 
-# Unit: Loops
+# Unit: Loops (2 weeks)
 
 ## While loops
 
@@ -237,7 +233,7 @@ targets: csa-book, csa-ced
 - Compute how many times a for loop will run.  (#4fa8)
 - Compute how many times the inner body of a nested for loop runs.  (#9a82)
 
-# Unit: Arrays
+# Unit: Arrays (4 weeks)
 
 ## Creating and using arrays
 
@@ -310,7 +306,7 @@ targets: csa-book, csa-ced
 - Write code to process cells and their neighbors in a 2D array  (#9dd3)
 - Write code using standard loop algorithms over all elements of 2D array  (#ddb7)
 
-# Unit: Strings
+# Unit: Strings (2 weeks)
 
 ## Manipulating strings
 
@@ -332,7 +328,9 @@ targets: csa-book, csa-ced
 - Write a String accumulator loop  (#874c)
 - Write a loop to reverse a String  (#b296)
 
-# Unit: Classes
+# Unit: Review (3 weeks)
+
+# Unit: Classes (2 weeks)
 
 ## Anatomy of a class
 
@@ -396,7 +394,7 @@ targets: csa-book, csa-ced
 - Write correct overriding to String methods.  (#d9e7)
 - Explain the relationship between + and toString  (#e906)
 
-# Unit: Objects
+# Unit: Objects (2 weeks)
 
 ## Connecting objects
 
@@ -451,7 +449,7 @@ targets: csa-book, csa-ced
 
 ## More turtles
 
-# Unit: ArrayLists
+# Unit: ArrayLists (2 weeks)
 
 ## `ArrayList` and its methods
 
@@ -487,7 +485,7 @@ targets: csa-book, csa-ced
 
 ## Summary and exercises
 
-# Unit: Data from files
+# Unit: Data from files (2 weeks)
 
 ## Files
 
@@ -510,7 +508,7 @@ targets: csa-book, csa-ced
 - Write code to produce various summary statistics of a data set  (#c57f)
 - Explain the difference between parseInt(s.nextLine()) & s.nextInt()  (#fe42)
 
-# Unit: Algorithms
+# Unit: Algorithms (2 weeks)
 
 ## Searching Algorithms
 
@@ -555,7 +553,7 @@ targets: csa-book, csa-ced
 
 ## Hard searching and sorting MCQs
 
-# Unit: Abstraction and program design
+# Unit: Abstraction and program design (2 weeks)
 
 ## Abstraction
 
@@ -594,51 +592,11 @@ targets: csa-book, csa-ced
 - Describe ways software or operation failures can compromise privacy  (#eb1d)
 - Explain the purpose of an open source license.  (#f08c)
 
-# Unit: AP practice
+# Unit: AP practice (4 weeks)
 
 ## MCQ practice
 
 ## FRQ practice
-
-# Unit: Free Response Practice
-
-## FRQ 1A - Methods and Control - Part 1
-
-## FRQ 1A - Methods and Control - Part 2
-
-## FRQ 1A - Methods and Control - Part 3
-
-## FRQ 1B - Strings - Part 1
-
-## FRQ 1B - Strings - Part 2
-
-## FRQ 1B - Strings - Part 3
-
-## FRQ 2 - Class Design - Part 1
-
-## FRQ 2 - Class Design - Part 2
-
-## FRQ 2 - Class Design - Part 3
-
-## FRQ3 - ArrayLists - Part 1
-
-## FRQ3 - ArrayLists - Part 2
-
-## FRQ3 - ArrayLists - Part 3
-
-## FRQ4 - 2D Arrays - Part 1
-
-## FRQ4 - 2D Arrays - Part 2
-
-## FRQ4 - 2D Arrays - Part 3
-
-## Retired FRQ - Arrays - ArrayTester - Part A
-
-## Retired FRQ - Arrays - ArrayTester - Part B
-
-## Retired FRQ - Inheritance - NumberGroup - Part B
-
-## Retired FRQ - Inheritance - NumberGroup - Part C
 
 ## Pool — not yet placed
 
