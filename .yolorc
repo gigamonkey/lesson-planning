@@ -1,1 +1,7 @@
+# pyproject's bells path source is ../bells (a sibling of the repo), which doesn't
+# exist in a git worktree -- link it to the real lib (a sibling of the main
+# checkout, found via the common git dir) so uv can resolve it. The guard makes it
+# a no-op in the main checkout, where ../bells already resolves. Needs sudo because
+# the worktrees parent dir is root-owned.
+[ -e ../bells ] || sudo ln -s "$(realpath "$(git rev-parse --git-common-dir)/../../bells")" ../bells
 ./serve.sh -d
