@@ -17,7 +17,11 @@
 --
 -- The db.db file is a disposable cache, rebuilt from the markdown corpus
 -- (rebuild_db.py applies this file then loads every course). It is never migrated
--- in place; change the schema here and rebuild.
+-- in place; change the schema here, BUMP THE VERSION BELOW, and rebuild. The app
+-- stamps every db with this version (PRAGMA user_version) and, on startup,
+-- discards + rebuilds-from-corpus any db whose stamp doesn't match -- so a stale
+-- db.db from an older schema heals itself instead of 500ing.
+PRAGMA user_version = 1;
 
 -- Courses are the top-level organizing principle: a short human id (also the
 -- /<course> URL) and a title. Every hierarchy belongs to a course.

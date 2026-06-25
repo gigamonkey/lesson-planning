@@ -74,20 +74,38 @@ def db():
     return conn
 
 
-def ensure_schema():
-    """Apply the canonical schema to a fresh/empty db.
+def _schema_version():
+    """The schema's `PRAGMA user_version` value (the canonical schema stamps every
+    db with it). Single source of truth: schema.sql."""
+    m = re.search(r"PRAGMA\s+user_version\s*=\s*(\d+)", open(SCHEMA_PATH).read())
+    return int(m.group(1)) if m else 0
 
-    A first run (no db.db) thus boots into a valid, empty database -- ready to be
-    populated from the app (load a reference, or restore a snapshot) instead of
-    dead-ending at "no courses loaded". The db is a disposable cache rebuilt from
-    the markdown corpus, never migrated in place, so this only ever applies the
-    canonical schema.sql (the same file rebuild_db applies); it does NOT migrate
-    older databases. Delete db.db and reload the corpus after a schema change.
+
+def ensure_schema():
+    """Apply the canonical schema to a fresh/empty db, and discard a stale one.
+
+    A first run (no db.db) boots into a valid, empty database -- ready to be
+    populated (load a reference, restore a snapshot) instead of dead-ending at
+    "no courses loaded". The db is a disposable cache, never migrated in place; a
+    db.db left over from an OLDER schema (its `PRAGMA user_version` doesn't match
+    schema.sql) is deleted here so the schema is re-applied fresh and the startup
+    `seed` rebuilds it from the corpus -- rather than 500ing on a missing column.
+    (Any course that lived only in the db and was never saved to the corpus is
+    lost; the corpus is the source of truth.)
     """
+    if os.path.exists(DB_PATH):
+        with db() as conn:
+            populated = bool(conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='courses'").fetchone())
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if populated and version != _schema_version():
+            print(f"db.db is schema v{version}, current is v{_schema_version()}; "
+                  f"discarding it and rebuilding from the corpus.", file=sys.stderr)
+            os.remove(DB_PATH)
     with db() as conn:
         if "courses" not in {r[0] for r in conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")}:
-            conn.executescript(open(SCHEMA_PATH).read())
+            conn.executescript(open(SCHEMA_PATH).read())   # PRAGMA user_version included
             conn.commit()
 
 
