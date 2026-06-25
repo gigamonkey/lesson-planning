@@ -642,6 +642,14 @@
       }
     });
 
+    // Click/focus an editable weeks pill -> select its number so typing replaces it.
+    // (focusin covers tab; click re-selects after a click placed the caret.)
+    function selectWeeksPill(e) {
+      if (e.target.matches && e.target.matches('.cal-weeks input')) e.target.select();
+    }
+    document.addEventListener('focusin', selectWeeksPill);
+    document.addEventListener('click', selectWeeksPill);
+
     // Keep the per-course save icons' dirty state live: after any htmx mutation
     // (non-GET), and after the fetch-based drag saves (which call window.saveRefresh),
     // fire `save-refresh` so each course's save control re-fetches itself.
