@@ -18,7 +18,15 @@
   .cal-break-section { margin-bottom: 1.4rem; }
   .cal-unit-head { display: flex; align-items: baseline; gap: .5rem;
                    border-bottom: 2px solid var(--line); padding-bottom: .2rem; margin-bottom: .35rem; }
-  .cal-unit-head .name { font-weight: 700; font-size: 1.05rem; }
+  .cal-unit-head .name { font-weight: 700; font-size: 1.05rem; flex: 1 1 auto; min-width: 0; }
+  /* Click-to-edit unit title: looks like .name, gets a field outline on hover/focus. */
+  .cal-name { flex: 1 1 auto; margin: 0; min-width: 0; }
+  .cal-name input { font: inherit; font-weight: 700; font-size: 1.05rem; color: inherit;
+                    width: 100%; min-width: 0; padding: 0 .2rem; margin: 0 -.2rem;
+                    background: transparent; border: 1px solid transparent; border-radius: 4px; }
+  .cal-name input:hover { border-color: var(--line); }
+  .cal-name input:focus { border-color: #bcd; background: #fff; outline: none; }
+  .cal-unplanned .cal-name input { color: #b0b0b0; }
   .cal-badge { font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
                padding: .05rem .35rem; border-radius: 8px; background: #eef1f4; color: #555;
                border: 1px solid #e0e4e8; }

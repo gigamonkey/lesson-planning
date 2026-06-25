@@ -20,7 +20,17 @@
   {% else %}
   <section class="cal-unit {{ 'cal-unplanned' if u.unplanned }}">
     <div class="cal-unit-head">
-      <span class="name">{{ u.title }}</span>
+      {% if u.node_id %}
+        {# Click-to-edit unit title (htmx autosave on blur/Enter, like the outline). #}
+        <form class="cal-name autosave" method="post"
+              action="{{ url_for('unit_rename', course=course, unit_id=u.node_id) }}"
+              hx-post="{{ url_for('unit_rename', course=course, unit_id=u.node_id) }}" hx-swap="none">
+          <input type="text" name="title" value="{{ u.title }}"
+                 autocomplete="off" aria-label="Unit title" placeholder="Unit title…">
+        </form>
+      {% else %}
+        <span class="name">{{ u.title }}</span>
+      {% endif %}
       {% if u.unplanned %}
         <span class="cal-badge">{{ u.weeks }} {{ 'week' if u.weeks == 1 else 'weeks' }}</span>
       {% else %}
