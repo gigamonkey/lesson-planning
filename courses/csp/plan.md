@@ -80,28 +80,28 @@ targets: ced, course
 
 # Unit: Create task (2 weeks)
 
+## Create (10 days)
+
 # Unit: BJC Unit 5 - Algorithms and Simulations (3 weeks)
 
-## Lab 1: Search Algorithms and Efficiency
+## Lab 1: Search Algorithms and Efficiency (5 days)
 
-## Lab 2: Simulations
+## Lab 2: Simulations (5 days)
 
-## Lab 3: Turning Data into Information
+## Lab 3: Turning Data into Information (0 days)
 
-## Lab 4: Unsolvable and Undecidable Problems
+## Lab 4: Unsolvable and Undecidable Problems (0 days)
 
-## Lab 5: Computing in War
+## Lab 5: Computing in War (0 days)
 
-## Lab 6: Tic-Tac-Toe with a Computer Player
+## Lab 6: Tic-Tac-Toe with a Computer Player (5 days)
 
-# Unit: AP Prep (2 weeks)
+# Unit: AP prep and exam (2 weeks)
+
+## AP prep (5 days)
+
+## Practice test (3 days)
 
 # Unit: Project (2 weeks)
 
-# Unit: BJC Unit 6 - How Computers Work
-
-## Lab 1: Inside the Computer
-
-## Lab 2: History of Computers
-
-## Project
+## Project (9 days)
