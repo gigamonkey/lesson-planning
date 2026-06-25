@@ -66,10 +66,32 @@
           </div>
           <div class="cal-days">
             {% for c in row.cells %}
-              {% set label = 'Exams' if c.kind == 'exam' else (c.title or 'unscheduled') %}
-              <div class="cal-cell {{ c.kind }}" style="grid-column: span {{ c.days }}"
-                   title="{% if c.kind == 'off' %}No school{% else %}{{ label }} ({{ c.days }} day{{ '' if c.days == 1 else 's' }}){% endif %}">
-                {% if c.kind == 'lesson' or c.kind == 'special' %}{{ c.title }}{% elif c.kind == 'exam' %}Exams{% endif %}</div>
+              {% if c.kind == 'lesson' %}
+                {# Click-to-edit lesson: title (htmx autosave) + a days pill that
+                   appears while editing (hover/focus) and re-lays-out on change. #}
+                <div class="cal-cell lesson" style="grid-column: span {{ c.days }}">
+                  <form class="cal-lessonname autosave" method="post"
+                        action="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
+                        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}" hx-swap="none">
+                    <input type="text" name="title" value="{{ c.title }}"
+                           autocomplete="off" aria-label="Lesson title" placeholder="Lesson title…">
+                  </form>
+                  <form class="cal-lessondays autosave" method="post"
+                        action="{{ url_for('node_duration_set', course=course, node_id=c.node_id) }}"
+                        hx-post="{{ url_for('node_duration_set', course=course, node_id=c.node_id) }}"
+                        hx-target="#cal-content" hx-swap="innerHTML">
+                    <input type="hidden" name="view" value="calendar">
+                    <label><input type="number" name="amount" min="1" step="1" value="{{ c.lesson_days }}"
+                           title="Days this lesson takes" aria-label="Days"
+                           ><span class="cal-lessondays-unit">{{ 'day' if c.lesson_days == 1 else 'days' }}</span></label>
+                  </form>
+                </div>
+              {% else %}
+                {% set label = 'Exams' if c.kind == 'exam' else (c.title or 'unscheduled') %}
+                <div class="cal-cell {{ c.kind }}" style="grid-column: span {{ c.days }}"
+                     title="{% if c.kind == 'off' %}No school{% else %}{{ label }} ({{ c.days }} day{{ '' if c.days == 1 else 's' }}){% endif %}">
+                  {% if c.kind == 'special' %}{{ c.title }}{% elif c.kind == 'exam' %}Exams{% endif %}</div>
+              {% endif %}
             {% endfor %}
           </div>
         </div>

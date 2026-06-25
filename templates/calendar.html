@@ -60,8 +60,37 @@
      original). */
   .cal-days { display: grid; grid-template-columns: repeat(5, 6.25rem); gap: .3rem; flex: none; }
   .cal-cell { border-radius: 4px; padding: .3rem .4rem; font-size: .76rem; line-height: 1.2;
-              min-height: 4.45rem; min-width: 0; overflow: hidden; }
-  .cal-cell.lesson { background: #eafaf0; border: 1px solid #cdebd9; color: #2f6f4e; }
+              min-height: 4.45rem; min-width: 0; overflow: hidden;
+              /* Center the label horizontally and vertically. */
+              display: flex; flex-direction: column; align-items: center; justify-content: center;
+              gap: .15rem; text-align: center; }
+  .cal-cell.lesson { background: #eafaf0; border: 1px solid #cdebd9; color: #2f6f4e;
+              cursor: pointer; }              /* signals "click to edit" */
+  .cal-cell.lesson.editing { cursor: default; }
+  /* Lesson title: reads as plain centered text until the box is clicked into
+     edit mode (the `editing` class), then it's a bordered, editable field. */
+  .cal-lessonname { margin: 0; width: 100%; }
+  .cal-lessonname input { font: inherit; color: inherit; text-align: center; width: 100%;
+              box-sizing: border-box; padding: .05rem .2rem; background: transparent;
+              border: 1px solid transparent; border-radius: 4px; cursor: inherit; }
+  .cal-cell.lesson.editing .cal-lessonname input { cursor: text; }
+  .cal-cell.lesson.editing .cal-lessonname input:hover { border-color: #cdebd9; }
+  .cal-cell.lesson.editing .cal-lessonname input:focus { border-color: #bcd; background: #fff; outline: none; }
+  /* Days pill: hidden until the box is in edit mode, then editable. */
+  .cal-lessondays { display: none; margin: 0;
+              font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+              padding: .02rem .35rem; border-radius: 8px; background: #fff; color: #2f6f4e;
+              border: 1px solid #cdebd9; }
+  .cal-cell.lesson.editing .cal-lessondays { display: inline-flex; }
+  .cal-lessondays label { display: inline-flex; align-items: baseline; gap: .2rem; cursor: text; }
+  .cal-lessondays input { font: inherit; font-size: .6rem; font-weight: 700; color: #2f6f4e;
+              background: transparent; border: none; padding: 0; text-align: right;
+              field-sizing: content; box-sizing: content-box;
+              -moz-appearance: textfield; appearance: textfield; }
+  .cal-lessondays input::-webkit-outer-spin-button,
+  .cal-lessondays input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .cal-lessondays input:focus { outline: none; }
+  .cal-lessondays-unit { color: #6aa885; }
   .cal-cell.free { background: #f7f7f7; border: 1px dashed #e0e0e0; }
   .cal-cell.off { background: #e9e9e9; border: 1px solid #e0e0e0; }
   /* Exam days (from the calendar's nonClassDays) and any other labeled day. */
@@ -101,4 +130,62 @@
     <p class="cal-intro">{{ view.calendar_name }} - {{ view.year }} · {{ view.teaching_weeks }} teaching weeks.</p>
     <div id="cal-content">{% include "_calendar_content.html" %}</div>
   {% endif %}
+
+  <script>
+    // A lesson box is read-only text until clicked. Clicking it (or tabbing in)
+    // adds `editing`, which reveals the bordered title field and the days pill,
+    // both editable. A plain click on the box jumps straight to the days count;
+    // the title is still editable by clicking it. Escape in either field reverts
+    // it to its last value; editing turns off when focus leaves the box (the
+    // global autosave focusout handler saves any real change). Delegated, so it
+    // keeps working after htmx swaps #cal-content on a day-count change.
+    function calLessonCell(el) {
+      return (el && el.closest) ? el.closest('.cal-cell.lesson') : null;
+    }
+    document.addEventListener('mousedown', function (e) {
+      const cell = calLessonCell(e.target);
+      // Click-away: pressing anywhere outside an open box closes it (focusout
+      // alone isn't enough -- if nothing in the box ever took focus, it can't fire).
+      document.querySelectorAll('.cal-cell.lesson.editing').forEach(function (c) {
+        if (c !== cell) c.classList.remove('editing');
+      });
+      if (!cell || cell.classList.contains('editing')) return;
+      // First click anywhere in a box -> edit the days count (even if the click
+      // landed on the title text). preventDefault stops the title from taking
+      // focus; the pill is hidden until `editing`, so reveal it before focusing.
+      // Once editing, a click falls through so the title can be focused too.
+      e.preventDefault();
+      cell.classList.add('editing');
+      // The days number (not the form's hidden `view` input, which sorts first).
+      const days = cell.querySelector('.cal-lessondays input[name="amount"]');
+      if (days) {
+        void cell.offsetWidth;   // force reflow so the just-shown pill is focusable
+        days.focus();
+        days.select();
+      }
+    });
+    document.addEventListener('focusin', function (e) {
+      const cell = calLessonCell(e.target);
+      if (cell) cell.classList.add('editing');
+      if (e.target.matches && e.target.matches('.cal-lessondays input')) e.target.select();
+    });
+    document.addEventListener('focusout', function (e) {
+      const cell = calLessonCell(e.target);
+      if (!cell) return;
+      // Defer so we can see where focus landed; leaving the box ends editing.
+      setTimeout(function () {
+        if (!cell.contains(document.activeElement)) cell.classList.remove('editing');
+      }, 0);
+    });
+    // Escape reverts the field to its last-rendered/saved value and exits editing.
+    // Restoring defaultValue means the autosave focusout sees no change and skips.
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      const el = e.target;
+      if (el.matches && el.matches('.cal-lessonname input, .cal-lessondays input')) {
+        el.value = el.defaultValue;
+        el.blur();
+      }
+    });
+  </script>
 {% endblock %}

@@ -1253,7 +1253,7 @@ def plan(course):
 
 def _outline_units(conn, course):
     """The course outline as ordered units for the calendar: each
-    {title, weeks (float|None), lessons: [{title, days (int)}]}. Lessons not under
+    {title, weeks (float|None), lessons: [{node_id, title, days (int)}]}. Lessons not under
     a unit are omitted (the calendar lays out units)."""
     O = outline_hierarchy(conn, course)
     if not O:
@@ -1277,7 +1277,8 @@ def _outline_units(conn, course):
         for L in lessons_by_unit.get(n["node_id"], []):
             ld = durs.get(L["node_id"])
             days = int(ld[0]) if (ld and ld[1] == "day") else 1
-            lessons.append({"title": L["text"] or "Untitled lesson", "days": days})
+            lessons.append({"node_id": L["node_id"],
+                            "title": L["text"] or "Untitled lesson", "days": days})
         units.append({"node_id": n["node_id"], "title": n["text"] or "Untitled unit",
                       "weeks": weeks, "lessons": lessons})
     return units

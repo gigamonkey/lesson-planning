@@ -128,7 +128,9 @@ def _week_cells(week, assign, labels):
     column. A school day carrying a non-class label (`labels[d]`) renders as an
     'exam' cell (label 'exam') or a generic 'special' cell (any other label)
     instead of a lesson/free slot; consecutive same-label days merge like a
-    lesson does. `days` is the column span."""
+    lesson does. `days` is the column span. `assign` maps a date to its lesson
+    dict ({node_id, title, days}); a lesson cell carries `node_id` and the
+    lesson's own `lesson_days` (its outline duration) so the view can edit it."""
     schooldays = set(week["days"])
     slots = []
     for i in range(5):  # Monday .. Friday
@@ -136,20 +138,25 @@ def _week_cells(week, assign, labels):
         if d in schooldays:
             label = labels.get(d)
             if label:
-                slots.append(("exam" if label == "exam" else "special", label))
+                slots.append(("exam" if label == "exam" else "special", label, None))
             else:
-                title = assign.get(d)
-                slots.append(("lesson", title) if title else ("free", None))
+                L = assign.get(d)
+                slots.append(("lesson", L["title"], L) if L else ("free", None, None))
         else:
-            slots.append(("off", None))
+            slots.append(("off", None, None))
     cells = []
-    for kind, title in slots:
-        # Only contiguous days of the SAME lesson (or same special label) merge.
+    for kind, title, lesson in slots:
+        node_id = lesson["node_id"] if lesson else None
+        # Only contiguous days of the SAME lesson (by node) or same special label merge.
         if kind in ("lesson", "exam", "special") and cells and cells[-1]["kind"] == kind \
-                and cells[-1]["title"] == title:
+                and cells[-1]["title"] == title and cells[-1].get("node_id") == node_id:
             cells[-1]["days"] += 1
         else:
-            cells.append({"kind": kind, "title": title, "days": 1})
+            cell = {"kind": kind, "title": title, "days": 1}
+            if lesson:
+                cell["node_id"] = node_id
+                cell["lesson_days"] = lesson["days"]
+            cells.append(cell)
     return cells
 
 
@@ -241,7 +248,7 @@ def build_calendar(bs, data, units):
             need = max(1, int(L["days"]))
             fit = min(need, len(sdays) - i)
             for k in range(fit):
-                assign[sdays[i + k]] = L["title"]
+                assign[sdays[i + k]] = L
             i += fit
             if fit < need:
                 overflow.append({"title": L["title"], "days": need, "fit": fit})
