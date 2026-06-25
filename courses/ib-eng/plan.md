@@ -2,10 +2,9 @@
 course: ib-eng
 title: IB HL/Software Engineering
 primary_outline: ib-eng-plan
+calendar: bhs-2026-2027
 targets: ib-eng-syllabus
 ---
-
-# Unit: Intro to Python
 
 ## Pool — not yet placed
 

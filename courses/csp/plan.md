@@ -2,6 +2,7 @@
 course: csp
 title: AP Computer Science Principles
 primary_outline: csp-plan
+calendar: bhs-2026-2027
 targets: csp-ced
 ---
 
