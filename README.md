@@ -66,15 +66,17 @@ upload a hierarchy markdown file with the **+** in its sidebar header.
 A course is a directory of markdown + two TSVs; the corpus is a directory of
 those. The full spec — reference hierarchy markdown, the `plan.md` outline
 profile, and the two TSVs — is in [`FORMAT.md`](FORMAT.md). A reference hierarchy
-declares its identity (`slug:`), level names (`levels:`), and `title:` in front
-matter; heading depth encodes tree depth and each heading carries a verbatim id as
-its first token (the level-1 id via a small pattern list + a generic fallback):
+declares its level names (`levels:`) and `title:` in front matter; heading depth
+encodes tree depth and each heading carries a verbatim id as its first token (the
+level-1 id via a small pattern list + a generic fallback). This is the **source
+form** you upload — the app assigns the bare `slug:` (its course-relative identity)
+on upload and pins it into the stored copy:
 
 ```markdown
 ---
-slug: ced
 levels: unit, topic, learning-objective, essential-knowledge
 title: Intro to Widgets — Reference
+kind: ced
 ---
 # Unit 1: Widget Basics
 ## 1.1 What Is a Widget

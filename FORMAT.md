@@ -4,7 +4,9 @@ This repo stores a course as **human-editable markdown** (plus two small
 normalized TSVs), and uses SQLite only as a cache it loads from and exports back
 to those files. This document is the authoritative definition of that on-disk
 format — it is owned here, and the companion `hierarchy-extractors` repo's job is
-to **produce conforming reference markdown**.
+to **produce conforming reference markdown** in the *source form* (see
+[Reference hierarchy markdown](#reference-hierarchy-markdown): no `slug:`; the app
+assigns identity on upload).
 
 See `plans/markdown-as-storage.md` for the design rationale, and `plan_io.py` /
 `hierarchy.py` / `load_nodes.py` for the implementation.
@@ -41,15 +43,34 @@ Three file roles:
 
 A hierarchy is identified by **(course, slug)**. The slug is **course-relative
 ("bare")** — unique only within its course — so the on-disk form carries no course
-prefix and the same file can be dropped into two courses. It is **pinned** in the
-front matter's `slug:` key (authoritative on load), and by convention the file is
-named `{slug}.md` (`ced.md` → `ced`, `plan.md` → `plan`). If `slug:` is absent the
-filename stem is used; if the stem and a pinned `slug:` disagree, the loader warns
-(rename the file to match — never edit the slug, which is the identity coverage
-keys on). `coverage.tsv`, the outline's `targets:`, and `primary_outline:` all use
-these bare slugs; the database scopes them to the course.
+prefix and the same file can be dropped into two courses. In a course directory it
+is **pinned** in the front matter's `slug:` key (authoritative on load), and by
+convention the file is named `{slug}.md` (`ced.md` → `ced`, `plan.md` → `plan`). If
+`slug:` is absent the filename stem is used; if the stem and a pinned `slug:`
+disagree, the loader warns (rename the file to match — never edit the slug, which
+is the identity coverage keys on). `coverage.tsv`, the outline's `targets:`, and
+`primary_outline:` all use these bare slugs; the database scopes them to the
+course.
 
 ## Reference hierarchy markdown
+
+A reference exists in **two forms** that differ by exactly one field — the `slug:`:
+
+- **Source form** — what an extractor produces or you hand-author *for upload*. It
+  declares content and content metadata (`levels:`, `title:`, `kind:`) but **no
+  `slug:`**: a hierarchy's identity within a course is assigned when the file is
+  placed into one, so a source file is course-agnostic and portable. This is the
+  form `hierarchy-extractors` emits.
+- **Stored (corpus) form** — what the app writes into a course directory after an
+  upload, and reloads on startup. It is the source form **plus a pinned `slug:`**
+  (the bare, course-relative identity), with the file named `{slug}.md`.
+
+Uploading converts source → stored: the app assigns the bare slug (defaulting from
+the filename stem, editable on the confirm screen) and pins it into the saved
+front matter. The parser accepts **either** form — `slug:` is optional — so a
+hand-placed source file with no `slug:` still loads, falling back to its filename
+stem. Everything below describes the body + content metadata, which is identical
+in both forms.
 
 A `---` front-matter block (carrying the required `levels:` key) followed by ATX
 headings whose depth encodes tree depth. Each heading is `ID␠TEXT` (the id is a
@@ -66,7 +87,18 @@ format needs no special casing:
 | `# Theme X: TITLE`           | `X`             | `## A1 …`, `### A1.1 …`        |
 | `# ID TITLE` (any new shape) | `ID`            | `## ID …` (first token)        |
 
-Front matter (a small YAML subset — scalars only):
+Front matter (a small YAML subset — scalars only). **Source form** (for upload —
+no `slug:`):
+
+```
+---
+levels: unit, topic, learning-objective, essential-knowledge
+title: AP Computer Science A — 2025 CED
+kind: ced
+---
+```
+
+**Stored form** (in `courses/csa/ced.md`) is identical but adds the pinned slug:
 
 ```
 ---
@@ -77,9 +109,6 @@ kind: ced
 ---
 ```
 
-- `slug:` — the bare, course-relative identity (see Slugs above). Pinned here;
-  the filename should match (`{slug}.md`). Optional — defaults to the filename
-  stem — but pinning makes the hierarchy robust to file renames.
 - `levels:` — **required**. A comma-separated list of the level **tag** names in
   depth order: `levels[i]` names heading depth *i+1* (so `levels: unit, lab, page`
   tags `#` nodes `unit`, `##` nodes `lab`, `###` nodes `page`). Each node's tag is
@@ -89,6 +118,11 @@ kind: ced
 - `kind:` — optional, free-form **provenance** (`ced`, `syllabus`, a textbook
   name, `BJC`, …). A display label only; nothing branches on it, and a course may
   hold two hierarchies of the same kind.
+- `slug:` — **stored form only**. The bare, course-relative identity (see Slugs
+  above), assigned and pinned by the app on upload; the filename matches
+  (`{slug}.md`). A source file should omit it. If present in an uploaded file the
+  app treats it as the default slug suggestion (still editable on the confirm
+  screen).
 
 Ids are kept verbatim and treated as opaque. (The outline `plan.md` is parsed
 separately and does **not** take a `levels:`/`kind:` key — its levels are always
