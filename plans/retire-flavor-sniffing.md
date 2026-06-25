@@ -207,8 +207,14 @@ That's a breaking change to the on-disk contract, so:
    Replay is byte-for-byte (better fidelity than `to_markdown` had), and the
    bulleted/`unit/lab/page` cases `to_markdown` couldn't represent now round-trip
    for free. `LEVEL_TAGS` is now dead code, retained until step 4.
-2. **#3** — require `kind:` (and `course` where needed); delete `FLAVOR_META` /
-   `FLAVOR_KIND`. Bump to 2.0.0 here.
+2. **#3 — DONE.** `to_nodes` now requires `kind:` in front matter (deleted
+   `FLAVOR_KIND`); every reference already declared it, so the corpus was
+   unaffected. Deleted `FLAVOR_META` and `meta_for`: the `load_nodes` CLI now
+   defaults the slug to the input filename stem, the course to the slug, and the
+   course title to the course id upper-cased; the app upload takes kind from the
+   markdown (or a form override) and no longer reads `flavor`. Bumped
+   `FORMAT_VERSION` → 2.0.0 / `FORMAT_MAJOR` → 2 (levels + kind both required;
+   flavor no longer authoritative). FORMAT.md updated.
 3. **#2** — drop the `course` branch from the reference parser; document that the
    outline is loaded only via `plan_io.parse_plan`.
 4. **#1** — turn `parse_top_heading` into `parse_root_heading` (id only) with a

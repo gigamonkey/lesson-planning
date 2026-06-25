@@ -63,8 +63,8 @@ Front matter (a small YAML subset — scalars only):
 ```
 ---
 levels: unit, topic, learning-objective, essential-knowledge
-title: AP Computer Science A — 2025 CED
 kind: ced
+title: AP Computer Science A — 2025 CED
 ---
 ```
 
@@ -75,9 +75,9 @@ kind: ced
   here rather than the parser inferring it from the flavor — a new format with
   the same heading shape but different level names just declares different names.
   A heading nested deeper than the declared levels is an error.
+- `kind:` — **required**. What the hierarchy *is* (`ced`, `syllabus`, `book`, …).
+  The producer knows it, so it's declared rather than inferred from the flavor.
 - `title:` — a human title for the hierarchy (optional).
-- `kind:` — what the hierarchy *is* (`ced`, `syllabus`, `book`, …). Defaults per
-  flavor (`csa`/`csp` → `ced`, `ib` → `syllabus`, `book` → `book`).
 - `slug:` — overrides the filename-stem hierarchy id (optional).
 
 Ids are kept verbatim and treated as opaque. (The outline `plan.md` is parsed

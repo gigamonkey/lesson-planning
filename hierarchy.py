@@ -102,26 +102,18 @@ LEVEL_TAGS = {
     "course": {1: "unit", 2: "lesson", 3: "objective"},
 }
 
-# A hierarchy's "kind" — the type of document, distinct from but defaulting to a
-# function of the flavor (the CSA and CSP CEDs are both "ced", so kind is not 1:1
-# with flavor). Overridable per file via the `kind:` front-matter key.
-FLAVOR_KIND = {
-    "csa": "ced",
-    "csp": "ced",
-    "ib": "syllabus",
-    "book": "book",
-    "course": "course",
-}
-
 # Version of the node-list document emitted by to_nodes (see FORMAT.md).
 # Semantic versioning: bump major for any breaking change to an existing field or
 # guarantee; minor for backward-compatible additions (e.g. a new field).
 # 1.1.0 added the (nullable) "title" field and the "kind" field.
 # 1.2.0 added the (nullable) per-node "duration" field.
 # 1.3.0 sources "levels" (and each node's tag) from a now-required `levels:`
-#       front-matter key instead of the detected flavor. Output shape unchanged;
-#       a reference markdown file without `levels:` is no longer accepted.
-FORMAT_VERSION = "1.3.0"
+#       front-matter key instead of the detected flavor.
+# 2.0.0 makes the format metadata-driven: `levels:` and `kind:` are both required
+#       in front matter (no flavor-derived fallbacks), and the detected flavor
+#       governs only the heading/id shape. Breaking: a reference without `levels:`
+#       or `kind:` is rejected.
+FORMAT_VERSION = "2.0.0"
 
 
 def parse_front_matter(md):
@@ -298,7 +290,7 @@ def to_nodes(md, title=None):
         title   - a human title for the hierarchy, or None if unknown (from the
                   `title` argument, else the front matter's `title:`)
         kind    - the document kind (e.g. "ced", "syllabus", "book"); the front
-                  matter's `kind:` if given, else FLAVOR_KIND[flavor]
+                  matter's `kind:` (required)
         levels  - the flavor's level tags in order (levels[i] is the tag for
                   level i+1); the full set the flavor defines, independent of
                   which levels happen to have nodes
@@ -325,6 +317,10 @@ def to_nodes(md, title=None):
     meta, _ = parse_front_matter(md)
     flavor, sections = parse_sections(md)
     level_names = parse_levels(meta)
+    kind = meta.get("kind")
+    if not kind:
+        sys.exit("reference hierarchy markdown requires a 'kind:' front-matter key "
+                 "(what the hierarchy is, e.g. 'ced', 'syllabus', 'book')")
     nodes = []
     # Stack of (level, id) for the currently-open ancestors; a node's parent is
     # the nearest open ancestor at a shallower level (same nesting rule the XML
@@ -365,7 +361,7 @@ def to_nodes(md, title=None):
         "version": FORMAT_VERSION,
         "flavor": flavor,
         "title": title if title is not None else meta.get("title"),
-        "kind": meta.get("kind") or FLAVOR_KIND[flavor],
+        "kind": kind,
         "levels": level_names,
         "nodes": nodes,
     }

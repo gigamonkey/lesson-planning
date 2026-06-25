@@ -5,9 +5,9 @@ Parses a curriculum-hierarchy markdown file directly (via the in-repo
 already-tagged node list, then flattens that into one uniform table. Each node
 carries its declared level `tag` (from the markdown's required `levels:` front
 matter), structural `parent`, leaf flag, sibling ordinal, and text, so the app
-can run gap/coverage queries without caring about the level structure; the only
-curriculum-flavor knowledge here is mapping the detected `flavor` (the heading
-shape) to local course/kind/slug policy (`FLAVOR_META`):
+can run gap/coverage queries without caring about the level structure. No
+curriculum-flavor knowledge lives here anymore: kind comes from the markdown's
+required `kind:`, and the slug/course default from the input filename and flags.
 
     nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)
 
@@ -17,17 +17,18 @@ marks nodes with no children (the unit of "coverage"); `ordinal` is document
 order. Keyed by hierarchy slug: re-running replaces only that hierarchy's rows so
 several hierarchies can share one database. The hierarchy is registered in
 `hierarchies` (editable=0, of a kind/type like 'ced' or 'syllabus') and its
-`course` is upserted into `courses` -- the slug/course/kind default from the
-document's flavor and can be overridden with the matching flags.
+`course` is upserted into `courses`. The slug defaults to the input filename
+stem, the course to the slug; both (and the kind/title) take CLI overrides.
 
     uv run load_nodes.py my-course-hierarchy.md db.db
     uv run load_nodes.py another-hierarchy.md db.db --course mycourse
 
-The title and kind come from the markdown's `---` front matter (`title:` /
-`kind:`); both fall back to per-flavor defaults.
+The title and kind come from the markdown's `---` front matter; `kind:` is
+required, `title:` optional.
 """
 
 import argparse
+import os
 import sqlite3
 
 import hierarchy
@@ -56,33 +57,7 @@ NODE_DURATION_DDL = ("CREATE TABLE IF NOT EXISTS node_duration (hierarchy TEXT N
 
 # Major version of the hierarchy-document format this loader understands (the dict
 # hierarchy.to_nodes emits). Semver; only the major is checked. See FORMAT.md.
-FORMAT_MAJOR = 1
-
-# Per-flavor defaults for the course, reference kind (the TYPE), hierarchy slug,
-# and course title. The slug is an opaque-but-readable handle; CLI flags override.
-# This is consumer-side app policy -- the JSON contract carries only `flavor`.
-FLAVOR_META = {
-    "csa":  {"course": "csa",  "kind": "ced",         "slug": "csa-ced",
-             "course_title": "AP Computer Science A"},
-    "csp":  {"course": "csp",  "kind": "ced",         "slug": "csp-ced",
-             "course_title": "AP Computer Science Principles"},
-    "ib":   {"course": "ib",   "kind": "syllabus",    "slug": "ib-syllabus",
-             "course_title": "IB Computer Science"},
-    "book": {"course": "book", "kind": "book",        "slug": "book",
-             "course_title": "Book"},
-}
-
-
-def meta_for(flavor, course=None, kind=None, slug=None, course_title=None):
-    """Resolve (course, kind, slug, course_title) for a flavor, with overrides."""
-    m = dict(FLAVOR_META.get(flavor, {"course": flavor, "kind": flavor,
-                                       "slug": flavor, "course_title": flavor.upper()}))
-    for key, val in (("course", course), ("kind", kind), ("slug", slug),
-                     ("course_title", course_title)):
-        if val:
-            m[key] = val
-    return m
-
+FORMAT_MAJOR = 2
 
 def kind_label(course, kind):
     """Short, clean label for a hierarchy's kind. Drops a redundant leading course
@@ -105,8 +80,8 @@ def parse(text):
 
     Returns {version, flavor, title, kind, levels, nodes:[...]} -- the same shape
     `build_rows`/`load` consume. Title and kind come from the markdown's front
-    matter (with per-flavor kind fallback). Raises SystemExit on unparseable
-    markdown (propagated from hierarchy.py).
+    matter (`kind:` is required). Raises SystemExit on unparseable markdown or
+    missing required front matter (propagated from hierarchy.py).
     """
     return load_doc(hierarchy.to_nodes(text))
 
@@ -204,29 +179,30 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("input", help="hierarchy markdown file")
     parser.add_argument("database", help="SQLite database file")
-    parser.add_argument("--hierarchy", help="hierarchy slug (default: derived from flavor)")
-    parser.add_argument("--course", help="course id (default: derived from flavor)")
-    parser.add_argument("--kind", help="hierarchy kind/type (default: front matter / flavor)")
+    parser.add_argument("--hierarchy", help="hierarchy slug (default: input filename stem)")
+    parser.add_argument("--course", help="course id (default: the slug)")
+    parser.add_argument("--kind", help="hierarchy kind/type (default: front-matter kind:)")
     parser.add_argument("--course-title", dest="course_title",
-                        help="course title (default: derived from flavor)")
+                        help="course title (default: course id, upper-cased)")
     args = parser.parse_args()
 
     with open(args.input) as f:
         text = f.read()
     doc = parse(text)
-    flavor = doc["flavor"]
-    m = meta_for(flavor, args.course, args.kind or doc.get("kind"),
-                 args.hierarchy, args.course_title)
-    rows = build_rows(m["slug"], doc["nodes"])
-    durations = build_durations(m["slug"], doc["nodes"])
-    load(args.database, m["slug"], m["course"], m["kind"], m["course_title"],
+    slug = args.hierarchy or os.path.splitext(os.path.basename(args.input))[0]
+    course = args.course or slug
+    kind = args.kind or doc["kind"]
+    course_title = args.course_title or course.upper()
+    rows = build_rows(slug, doc["nodes"])
+    durations = build_durations(slug, doc["nodes"])
+    load(args.database, slug, course, kind, course_title,
          rows, source=args.input, title=doc.get("title"), durations=durations,
          source_md=text)
 
     leaves = sum(1 for r in rows if r[4])
     print(
-        f"{flavor}: loaded {len(rows)} nodes for hierarchy {m['slug']!r} "
-        f"(course {m['course']!r}, kind {m['kind']!r}, {leaves} leaves) into {args.database}"
+        f"loaded {len(rows)} nodes for hierarchy {slug!r} "
+        f"(course {course!r}, kind {kind!r}, {leaves} leaves) into {args.database}"
     )
 
 

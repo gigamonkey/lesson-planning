@@ -607,31 +607,29 @@ def hierarchy_load_course(course):
     text = f.read().decode("utf-8", "replace")
     try:
         doc = load_nodes.parse(text)
-        flavor = doc["flavor"]
-    except (Exception, SystemExit) as e:  # unparseable markdown / missing levels:
+    except (Exception, SystemExit) as e:  # unparseable / missing levels: or kind:
         flash(f"Could not load {f.filename!r}: {e}")
         return redirect(back)
     over = lambda k: (request.form.get(k) or "").strip() or None
-    # Resolve kind/title: explicit form override, else what the markdown carries,
-    # else derived (kind from flavor; title from course+kind inside load_nodes.load).
-    kind = over("kind") or doc.get("kind") or load_nodes.meta_for(flavor)["kind"]
+    # Course is fixed by context; kind/title come from the markdown unless the form
+    # overrides; the slug defaults to <course>-<kind>.
+    kind = over("kind") or doc["kind"]
     slug = over("hierarchy") or f"{course}-{kind}"
     title = over("title") or doc.get("title")
-    m = load_nodes.meta_for(flavor, course=course, kind=kind, slug=slug)
-    rows = load_nodes.build_rows(m["slug"], doc["nodes"])
+    rows = load_nodes.build_rows(slug, doc["nodes"])
     # Persist the markdown into the corpus as <slug>.md (the load source of truth).
     course_dir = os.path.join(CORPUS_DIR, course)
     os.makedirs(course_dir, exist_ok=True)
-    with open(os.path.join(course_dir, f"{m['slug']}.md"), "w", encoding="utf-8") as out:
+    with open(os.path.join(course_dir, f"{slug}.md"), "w", encoding="utf-8") as out:
         out.write(text if text.endswith("\n") else text + "\n")
     # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage
     # edges into ids the new version no longer has (a renamed/removed id surfaces).
     new_ids = {r[1] for r in rows}
     with db() as conn:
         existing = {r[0] for r in conn.execute(
-            "SELECT DISTINCT node_id FROM coverage WHERE hierarchy=?", (m["slug"],))}
+            "SELECT DISTINCT node_id FROM coverage WHERE hierarchy=?", (slug,))}
     orphaned = sorted(existing - new_ids)
-    load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], crow["title"],
+    load_nodes.load(DB_PATH, slug, course, kind, crow["title"],
                     rows, source=f.filename, title=title, source_md=text)
     # Measure the course outline against this new reference (the eager outline was
     # created before any reference existed, so link it here).
@@ -639,7 +637,7 @@ def hierarchy_load_course(course):
         O = outline_hierarchy(conn, course)
         if O:
             conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
-                         " VALUES (?, ?)", (O, m["slug"]))
+                         " VALUES (?, ?)", (O, slug))
     # The loaded hierarchy shows up in the setup table, so only surface the
     # non-obvious case: coverage edges now pointing at ids the new version dropped.
     if orphaned:
@@ -647,7 +645,7 @@ def hierarchy_load_course(course):
               f"point to node ids not in this version: {', '.join(orphaned[:6])}"
               f"{'…' if len(orphaned) > 6 else ''}")
     # Land on the loaded hierarchy so the upload (from the sidebar or setup) shows.
-    return redirect(url_for("hierarchy_view", course=course, hierarchy=m["slug"]))
+    return redirect(url_for("hierarchy_view", course=course, hierarchy=slug))
 
 
 @app.route("/<course>/hierarchy/<hierarchy>/delete", methods=["POST"])
