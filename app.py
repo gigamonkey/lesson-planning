@@ -102,18 +102,8 @@ def courses(conn):
 
 # A course is backed by hierarchies (the courses->hierarchies link). Its OUTLINE
 # (the authored lesson plan) is the course's explicit primary_outline pointer,
-# falling back to its single editable hierarchy. A reference is resolved by kind
-# (ced first). Both reference "coverage" and lesson "placement" are coverage edges
-# into a hierarchy.
-
-def reference_hierarchy(conn, course):
-    """The slug of a reference hierarchy for the course (ced-kind first), or None.
-    Used as the default target when a request doesn't name one (see active_ref)."""
-    row = conn.execute(
-        "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0 "
-        "ORDER BY (kind='ced') DESC, hierarchy LIMIT 1", (course,)).fetchone()
-    return row[0] if row else None
-
+# falling back to its single editable hierarchy. Both reference "coverage" and
+# lesson "placement" are coverage edges into a hierarchy.
 
 def outline_hierarchy(conn, course):
     """The bare slug of the course's official outline hierarchy, or None.
@@ -1089,11 +1079,11 @@ def _outline_swap(conn, course, flash_msg=None):
     return resp
 
 
-def active_ref(conn, course):
-    """The reference hierarchy this request targets (a `ref` arg/field), else the
-    course's default reference -- so the tree view and its AJAX endpoints all act
-    on whichever hierarchy is being shown (e.g. csa-ced vs csa-book)."""
-    return (request.values.get("ref") or "").strip() or reference_hierarchy(conn, course)
+def active_ref():
+    """The hierarchy this request targets: its explicit `ref` arg/field, else None.
+    The workspace's forms send the hierarchy being viewed; there is no default --
+    a request that doesn't name one simply doesn't place coverage."""
+    return (request.values.get("ref") or "").strip() or None
 
 
 @app.route("/<course>/objective/new", methods=["POST"])
@@ -1103,7 +1093,7 @@ def objective_new(course):
     u = None
     if text:
         with db() as conn:
-            R = active_ref(conn, course)
+            R = active_ref()
             # Intern by text: reuse the existing objective, or create a new one.
             row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
             u = row[0] if row else str(uuidlib.uuid4())
@@ -1111,7 +1101,7 @@ def objective_new(course):
                 conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
             conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid) VALUES (?, ?)",
                          (course, u))
-            if node:
+            if node and R:
                 nxt = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM coverage "
                                    "WHERE course=? AND hierarchy=? AND node_id=?",
                                    (course, R, node)).fetchone()[0]
