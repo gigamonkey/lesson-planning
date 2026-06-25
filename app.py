@@ -23,8 +23,8 @@ import sqlite3
 import sys
 import uuid as uuidlib
 
-from flask import (Flask, Response, abort, flash, jsonify, redirect,
-                   render_template, request, url_for)
+from flask import (Flask, Response, abort, flash, jsonify, make_response,
+                   redirect, render_template, request, url_for)
 from markupsafe import Markup
 
 # Import sibling repo-root modules (the lesson-planning scripts). The app wires
@@ -1174,6 +1174,35 @@ def _back(course):
     return redirect(target)
 
 
+def _outline_ctx(conn, course):
+    """Render context for the editable outline units partial (_outline_units.html):
+    the unit/lesson tree plus the inline durations and learning objectives. Shared
+    by the structural-edit routes so each can return just that region for an htmx
+    in-place swap (no full reload, scroll preserved)."""
+    O = ensure_outline(conn, course)
+    nodes, by_node, _pool = workspace_data(conn, course, O)
+    los = {r["node_id"]: r["value"] for r in conn.execute(
+        "SELECT node_id, value FROM node_attr "
+        "WHERE hierarchy=? AND name='learning_objective'", (O,))}
+    durations = {r["node_id"]: (int(r["amount"]) if float(r["amount"]).is_integer()
+                                else r["amount"])
+                 for r in conn.execute("SELECT node_id, amount FROM node_duration"
+                                       " WHERE hierarchy=?", (O,))}
+    return dict(course=course, ref=O, editable=True, los=los, durations=durations,
+                tree=build_tree(nodes, by_node, set()))
+
+
+def _outline_swap(conn, course, flash_msg=None):
+    """An htmx response that swaps the freshly re-rendered outline units region into
+    #outline-units. An optional flash rides along as an `HX-Trigger` event since
+    there's no page reload to surface a server flash."""
+    resp = make_response(render_template("_outline_units.html",
+                                         **_outline_ctx(conn, course)))
+    if flash_msg:
+        resp.headers["HX-Trigger"] = json.dumps({"flash": flash_msg})
+    return resp
+
+
 def active_ref(conn, course):
     """The reference hierarchy this request targets (a `ref` arg/field), else the
     course's default reference -- so the tree view and its AJAX endpoints all act
@@ -1242,7 +1271,15 @@ def export(course):
     course_dir = os.path.join(CORPUS_DIR, course)
     plan_path, n_obj, n_cov = plan_io.write_course(DB_PATH, course, course_dir)
     rel = os.path.relpath(course_dir, REPO_ROOT)
-    flash(f"Exported {course!r} to {rel}/ · {n_obj} objectives, {n_cov} coverage edges")
+    msg = f"Exported {course!r} to {rel}/ · {n_obj} objectives, {n_cov} coverage edges"
+    # htmx (the sidebar save icon): no reload -- the save control re-fetches itself
+    # via the body `save-refresh` event (now showing the clean state), and the flash
+    # rides an `HX-Trigger` event.
+    if request.headers.get("HX-Request"):
+        resp = make_response("", 204)
+        resp.headers["HX-Trigger"] = json.dumps({"flash": msg})
+        return resp
+    flash(msg)
     return redirect(request.referrer or url_for("objectives", course=course))
 
 
@@ -1399,6 +1436,8 @@ def unit_new(course):
                      " ordinal, text) VALUES (?, ?, NULL, 'unit', 0, ?, ?)",
                      (O, str(uuidlib.uuid4()), nxt, title))
         conn.commit()
+        if request.headers.get("HX-Request"):
+            return _outline_swap(conn, course)
     return redirect(url_for("hierarchy_view", course=course, hierarchy=O, focus_new_unit=1))
 
 
@@ -1427,7 +1466,10 @@ def unit_delete(course, unit_id):
         conn.execute("DELETE FROM node_attr WHERE hierarchy=? AND node_id=?", (O, unit_id))
         conn.execute("DELETE FROM nodes WHERE hierarchy=? AND node_id=?", (O, unit_id))
         conn.commit()
-    flash("Deleted unit; lessons moved to Unassigned, rough raws back in the pool.")
+        msg = "Deleted unit; lessons moved to Unassigned, rough raws back in the pool."
+        if request.headers.get("HX-Request"):
+            return _outline_swap(conn, course, msg)
+    flash(msg)
     return _back(course)
 
 
@@ -1448,6 +1490,8 @@ def unit_move(course, unit_id):
                     conn.execute("UPDATE nodes SET ordinal=? WHERE hierarchy=? AND node_id=?",
                                  (pos, O, uid))
                 conn.commit()
+        if request.headers.get("HX-Request"):
+            return _outline_swap(conn, course)
     return _back(course)
 
 
@@ -1472,6 +1516,8 @@ def lesson_new(course):
             "INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) "
             "VALUES (?, ?, ?, 'lesson', 1, ?, ?)", (O, str(uuidlib.uuid4()), unit, nxt, title))
         conn.commit()
+        if request.headers.get("HX-Request"):
+            return _outline_swap(conn, course)
     # The new lesson box appears on reload; no flash.
     return _back(course)
 
@@ -1511,7 +1557,10 @@ def lesson_delete(course, lesson_id):
         conn.execute("DELETE FROM node_attr WHERE hierarchy=? AND node_id=?", (O, lesson_id))
         conn.execute("DELETE FROM nodes WHERE hierarchy=? AND node_id=?", (O, lesson_id))
         conn.commit()
-    flash("Deleted lesson; its raws returned to the pool.")
+        msg = "Deleted lesson; its raws returned to the pool."
+        if request.headers.get("HX-Request"):
+            return _outline_swap(conn, course, msg)
+    flash(msg)
     return _back(course)
 
 

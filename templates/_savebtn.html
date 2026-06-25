@@ -4,7 +4,8 @@
 <span class="csave-wrap" id="csave-{{ c.course }}"
       hx-get="{{ url_for('save_button', course=c.course) }}"
       hx-trigger="save-refresh from:body" hx-target="this" hx-swap="outerHTML">
-  <form method="post" action="{{ url_for('export', course=c.course) }}" class="csave">
+  <form method="post" action="{{ url_for('export', course=c.course) }}" class="csave"
+        hx-post="{{ url_for('export', course=c.course) }}" hx-swap="none">
     <button type="submit" class="gear" {{ '' if c.dirty else 'disabled' }}
             title="{{ 'Save (export) this course to the corpus' if c.dirty else 'Saved — corpus is up to date' }}">
       <i class="bi bi-{{ 'floppy' if c.dirty else 'check2' }}"></i>

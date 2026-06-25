@@ -1,0 +1,120 @@
+{# The editable outline's units + their lessons, plus the Unassigned section.
+   Rendered both inline (workspace.html, inside #outline-units) and standalone by
+   the structural-edit routes (unit/lesson new/delete/move) so htmx can swap just
+   this region in place -- no full reload, scroll position preserved. Context:
+   tree, course, ref (the outline hierarchy), durations, los. #}
+
+{# An outline lesson: title + learning objective + its raws (editable). #}
+{% macro lessoncard(L) %}
+<li class="lessoncard" data-lesson-id="{{ L.id }}">
+  <div class="lessonhead">
+    <form method="post" class="edit autosave"
+          action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
+          hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
+      <textarea name="title" rows="1" placeholder="Lesson title…">{{ L.label }}</textarea>
+    </form>
+    <form class="durform autosave" method="post"
+          action="{{ url_for('node_duration_set', course=course, node_id=L.id) }}"
+          hx-post="{{ url_for('node_duration_set', course=course, node_id=L.id) }}" hx-swap="none">
+      <input class="durinput" type="number" name="amount" min="0" step="0.5"
+             value="{{ durations.get(L.id, '') }}" placeholder="1"
+             title="Days this lesson takes (default 1)" aria-label="Days">
+      <span class="durunit">d</span>
+    </form>
+    <button type="button" class="addobjbtn" title="Add or edit objectives for this lesson">+</button>
+    <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
+          hx-post="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
+          hx-target="#outline-units" hx-swap="innerHTML">
+      <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
+    </form>
+  </div>
+  <form method="post" class="loedit-form autosave"
+        action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
+        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
+    <input type="text" name="learning_objective" value="{{ los.get(L.id, '') }}"
+           placeholder="Learning objective (the whiteboard statement)…">
+  </form>
+  <ul class="sortable rawzone" data-to="node-{{ L.id }}">
+    {% for o in L.objectives %}{% include "_rawitem.html" %}{% endfor %}
+  </ul>
+  <form class="bulkobj" hidden method="post"
+        action="{{ url_for('node_objectives_bulk', course=course, hierarchy=ref, node_id=L.id) }}">
+    <div class="bulkeditor"></div>
+    <textarea name="objectives" hidden>{% for o in L.objectives %}- {{ o.text }}  (#{{ o.token }})
+{% endfor %}</textarea>
+    <div class="bulkctl">
+      <button type="submit" class="primary">Save objectives</button>
+      <button type="button" class="cancel">Cancel</button>
+    </div>
+  </form>
+</li>
+{% endmacro %}
+
+{% for u in tree if u.level == 'unit' %}
+  <section class="unit">
+    <div class="unithead">
+      <form method="post" class="edit autosave"
+            action="{{ url_for('unit_rename', course=course, unit_id=u.id) }}"
+            hx-post="{{ url_for('unit_rename', course=course, unit_id=u.id) }}" hx-swap="none">
+        <input type="text" name="title" value="{{ u.label }}" placeholder="Unit title…">
+      </form>
+      <form class="durform autosave" method="post"
+            action="{{ url_for('node_duration_set', course=course, node_id=u.id) }}"
+            hx-post="{{ url_for('node_duration_set', course=course, node_id=u.id) }}" hx-swap="none">
+        <input class="durinput" type="number" name="amount" min="0" step="0.5"
+               value="{{ durations.get(u.id, '') }}" placeholder="—"
+               title="Weeks this unit spans" aria-label="Weeks">
+        <span class="durunit">wk</span>
+      </form>
+      <form method="post" action="{{ url_for('lesson_new', course=course) }}"
+            hx-post="{{ url_for('lesson_new', course=course) }}"
+            hx-target="#outline-units" hx-swap="innerHTML">
+        <input type="hidden" name="unit" value="{{ u.id }}">
+        <button type="submit" title="Add a lesson to this unit">+ lesson</button>
+      </form>
+      <div class="lessonctl">
+        <form method="post" action="{{ url_for('unit_move', course=course, unit_id=u.id) }}"
+              hx-post="{{ url_for('unit_move', course=course, unit_id=u.id) }}"
+              hx-target="#outline-units" hx-swap="innerHTML">
+          <input type="hidden" name="dir" value="up"><button>↑</button>
+        </form>
+        <form method="post" action="{{ url_for('unit_move', course=course, unit_id=u.id) }}"
+              hx-post="{{ url_for('unit_move', course=course, unit_id=u.id) }}"
+              hx-target="#outline-units" hx-swap="innerHTML">
+          <input type="hidden" name="dir" value="down"><button>↓</button>
+        </form>
+        <form method="post" action="{{ url_for('unit_delete', course=course, unit_id=u.id) }}"
+              hx-post="{{ url_for('unit_delete', course=course, unit_id=u.id) }}"
+              hx-target="#outline-units" hx-swap="innerHTML">
+          <button class="iconbtn" title="Delete unit"><i class="bi bi-trash3"></i></button>
+        </form>
+      </div>
+    </div>
+    {% if u.objectives %}
+      {# Units are not drop targets; surface any legacy unit-level
+         objectives read-only so they aren't silently orphaned. #}
+      <div class="roughzone">
+        <span class="zonelabel">objectives on this unit (move into a lesson)</span>
+        <ul class="rawzone readonly">
+          {% for o in u.objectives %}{% include "_rawitem.html" %}{% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+    <ul class="sortable unitlessons" data-unit="{{ u.id }}">
+      {% for L in u.children if L.level == 'lesson' %}{{ lessoncard(L) }}{% endfor %}
+    </ul>
+  </section>
+{% endfor %}
+<section class="unit unassigned">
+  <div class="unithead">
+    <span class="unitlabel">Unassigned lessons</span>
+    <form method="post" action="{{ url_for('lesson_new', course=course) }}"
+          hx-post="{{ url_for('lesson_new', course=course) }}"
+          hx-target="#outline-units" hx-swap="innerHTML">
+      <button type="submit" title="Add an unassigned lesson">+ lesson</button>
+    </form>
+  </div>
+  <ul class="sortable unitlessons" data-unit="none">
+    {% for L in tree if L.level == 'lesson' %}{{ lessoncard(L) }}{% endfor %}
+  </ul>
+</section>

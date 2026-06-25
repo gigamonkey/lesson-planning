@@ -595,11 +595,8 @@
 
     // Flash messages (e.g. "Saved …"): show subtly on the coverage-stats line
     // (or as a muted line where there isn't one), then fade away after ~2s.
-    (function () {
-      const data = document.getElementById('flash-data');
-      if (!data) return;
-      const text = data.textContent.trim();
-      data.remove();
+    function showFlash(text) {
+      text = (text || '').trim();
       if (!text) return;
       const note = document.querySelector('.wstats .wstats-note');
       let el;
@@ -611,12 +608,27 @@
         const main = document.querySelector('main');
         main.insertBefore(el, main.firstChild);
       }
+      el.classList.remove('fade');
       setTimeout(function () { el.classList.add('fade'); }, 1600);
       setTimeout(function () {
         if (el.classList.contains('wstats-note')) { el.textContent = ''; el.classList.remove('fade'); }
         else el.remove();
       }, 2400);
+    }
+    // On page load: surface any server-rendered flash.
+    (function () {
+      const data = document.getElementById('flash-data');
+      if (!data) return;
+      const text = data.textContent.trim();
+      data.remove();
+      showFlash(text);
     })();
+    // From htmx responses (no reload): an `HX-Trigger: {"flash": "…"}` event. htmx
+    // passes the value as the event detail (string, or {value} depending on form).
+    document.body.addEventListener('flash', function (e) {
+      const d = e.detail;
+      showFlash((d && typeof d === 'object') ? (d.value || d.message || '') : d);
+    });
 
     // Auto-save: an inline field in a `.autosave` form saves on blur if it
     // changed (Enter still saves too). Those forms are htmx (hx-post) so saving

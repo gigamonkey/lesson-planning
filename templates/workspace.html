@@ -38,53 +38,12 @@
   {% endfor %}
 {% endmacro %}
 
-{# An outline lesson: title + learning objective + its raws (editable). #}
-{% macro lessoncard(L) %}
-<li class="lessoncard" data-lesson-id="{{ L.id }}">
-  <div class="lessonhead">
-    <form method="post" class="edit autosave"
-          action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
-          hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
-      <textarea name="title" rows="1" placeholder="Lesson title…">{{ L.label }}</textarea>
-    </form>
-    <form class="durform autosave" method="post"
-          action="{{ url_for('node_duration_set', course=course, node_id=L.id) }}"
-          hx-post="{{ url_for('node_duration_set', course=course, node_id=L.id) }}" hx-swap="none">
-      <input class="durinput" type="number" name="amount" min="0" step="0.5"
-             value="{{ durations.get(L.id, '') }}" placeholder="1"
-             title="Days this lesson takes (default 1)" aria-label="Days">
-      <span class="durunit">d</span>
-    </form>
-    <button type="button" class="addobjbtn" title="Add or edit objectives for this lesson">+</button>
-    <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}">
-      <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
-    </form>
-  </div>
-  <form method="post" class="loedit-form autosave"
-        action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
-        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
-    <input type="text" name="learning_objective" value="{{ los.get(L.id, '') }}"
-           placeholder="Learning objective (the whiteboard statement)…">
-  </form>
-  <ul class="sortable rawzone" data-to="node-{{ L.id }}">
-    {% for o in L.objectives %}{% include "_rawitem.html" %}{% endfor %}
-  </ul>
-  <form class="bulkobj" hidden method="post"
-        action="{{ url_for('node_objectives_bulk', course=course, hierarchy=ref, node_id=L.id) }}">
-    <div class="bulkeditor"></div>
-    <textarea name="objectives" hidden>{% for o in L.objectives %}- {{ o.text }}  (#{{ o.token }})
-{% endfor %}</textarea>
-    <div class="bulkctl">
-      <button type="submit" class="primary">Save objectives</button>
-      <button type="button" class="cancel">Cancel</button>
-    </div>
-  </form>
-</li>
-{% endmacro %}
-
 {% block titlebtn %}
   {% if editable %}
-    <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addunit-form">
+    <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addunit-form"
+          hx-post="{{ url_for('unit_new', course=course) }}"
+          hx-target="#outline-units" hx-swap="innerHTML"
+          hx-on::after-request="window.focusNewUnit && window.focusNewUnit()">
       <button type="submit" class="addunit" title="Add a unit">+</button>
     </form>
     <a class="editmd" href="{{ url_for('outline_edit', course=course) }}"
@@ -116,70 +75,15 @@
   </dialog>
 
   <div class="board workspace-board">
-    <section class="nodes {{ 'units' if editable else 'reftree' }}">
-      {% if editable %}
-        {% for u in tree if u.level == 'unit' %}
-          <section class="unit">
-            <div class="unithead">
-              <form method="post" class="edit autosave"
-                    action="{{ url_for('unit_rename', course=course, unit_id=u.id) }}"
-                    hx-post="{{ url_for('unit_rename', course=course, unit_id=u.id) }}" hx-swap="none">
-                <input type="text" name="title" value="{{ u.label }}" placeholder="Unit title…">
-              </form>
-              <form class="durform autosave" method="post"
-                    action="{{ url_for('node_duration_set', course=course, node_id=u.id) }}"
-                    hx-post="{{ url_for('node_duration_set', course=course, node_id=u.id) }}" hx-swap="none">
-                <input class="durinput" type="number" name="amount" min="0" step="0.5"
-                       value="{{ durations.get(u.id, '') }}" placeholder="—"
-                       title="Weeks this unit spans" aria-label="Weeks">
-                <span class="durunit">wk</span>
-              </form>
-              <form method="post" action="{{ url_for('lesson_new', course=course) }}">
-                <input type="hidden" name="unit" value="{{ u.id }}">
-                <button type="submit" title="Add a lesson to this unit">+ lesson</button>
-              </form>
-              <div class="lessonctl">
-                <form method="post" action="{{ url_for('unit_move', course=course, unit_id=u.id) }}">
-                  <input type="hidden" name="dir" value="up"><button>↑</button>
-                </form>
-                <form method="post" action="{{ url_for('unit_move', course=course, unit_id=u.id) }}">
-                  <input type="hidden" name="dir" value="down"><button>↓</button>
-                </form>
-                <form method="post" action="{{ url_for('unit_delete', course=course, unit_id=u.id) }}">
-                  <button class="iconbtn" title="Delete unit"><i class="bi bi-trash3"></i></button>
-                </form>
-              </div>
-            </div>
-            {% if u.objectives %}
-              {# Units are not drop targets; surface any legacy unit-level
-                 objectives read-only so they aren't silently orphaned. #}
-              <div class="roughzone">
-                <span class="zonelabel">objectives on this unit (move into a lesson)</span>
-                <ul class="rawzone readonly">
-                  {% for o in u.objectives %}{% include "_rawitem.html" %}{% endfor %}
-                </ul>
-              </div>
-            {% endif %}
-            <ul class="sortable unitlessons" data-unit="{{ u.id }}">
-              {% for L in u.children if L.level == 'lesson' %}{{ lessoncard(L) }}{% endfor %}
-            </ul>
-          </section>
-        {% endfor %}
-        <section class="unit unassigned">
-          <div class="unithead">
-            <span class="unitlabel">Unassigned lessons</span>
-            <form method="post" action="{{ url_for('lesson_new', course=course) }}">
-              <button type="submit" title="Add an unassigned lesson">+ lesson</button>
-            </form>
-          </div>
-          <ul class="sortable unitlessons" data-unit="none">
-            {% for L in tree if L.level == 'lesson' %}{{ lessoncard(L) }}{% endfor %}
-          </ul>
-        </section>
-      {% else %}
+    {% if editable %}
+      {# Structural edits (unit/lesson add/delete/move) swap just this region via
+         htmx -- see _outline_units.html and the routes -- so the page never reloads. #}
+      <section class="nodes units" id="outline-units">{% include "_outline_units.html" %}</section>
+    {% else %}
+      <section class="nodes reftree">
         <table class="reftable"><tbody>{{ reftable(tree) }}</tbody></table>
-      {% endif %}
-    </section>
+      </section>
+    {% endif %}
 
     <section class="pool">
       <div class="poolhead">
@@ -240,8 +144,13 @@
       if (window.htmx) htmx.ajax('GET', statsURL, { target: '#wstats', swap: 'outerHTML' });
     }
 
-    // Raw objectives: drag between the pool and any node's drop zone.
-    document.querySelectorAll('.sortable.rawzone').forEach(function (el) {
+    // Raw objectives: drag between the pool and any node's drop zone. Wired per
+    // zone, guarded so re-running over htmx-swapped outline content (new lessons,
+    // re-rendered units) only inits the fresh zones, not the untouched pool.
+    function initRawSortables(root) {
+    root.querySelectorAll('.sortable.rawzone').forEach(function (el) {
+      if (el.dataset.sortInit) return;
+      el.dataset.sortInit = '1';
       new Sortable(el, {
         group: 'raws', draggable: 'li.rawitem',
         animation: 120, ghostClass: 'sortable-ghost',
@@ -268,6 +177,7 @@
         }
       });
     });
+    }
 
     // The + by a leaf node's title (reference) or a lesson's title (outline) opens
     // a bulk editor for that node's objectives. Save reconciles the node's set. The
@@ -294,7 +204,10 @@
         ta.setSelectionRange(ta.value.length, ta.value.length);
       }
     }
-    document.querySelectorAll('.addobjbtn').forEach(function (btn) {
+    function initAddObj(root) {
+    root.querySelectorAll('.addobjbtn').forEach(function (btn) {
+      if (btn.dataset.objInit) return;
+      btn.dataset.objInit = '1';
       btn.addEventListener('click', function () {
         const host = bulkHost(btn);
         const form = host.querySelector('form.bulkobj');
@@ -305,7 +218,11 @@
         if (opening) openBulk(form);
       });
     });
-    document.querySelectorAll('form.bulkobj').forEach(function (form) {
+    }
+    function initBulk(root) {
+    root.querySelectorAll('form.bulkobj').forEach(function (form) {
+      if (form.dataset.bulkInit) return;
+      form.dataset.bulkInit = '1';
       const ta = form.querySelector('textarea');
       const zone = bulkHost(form).querySelector('ul.rawzone');
       let baseline = ta.value;       // the last saved buffer, restored on cancel
@@ -333,10 +250,14 @@
           });
       });
     });
+    }
 
     // Outline only: drag lessons between units / reorder.
-    if (editable) {
-      document.querySelectorAll('.sortable.unitlessons').forEach(function (el) {
+    function initLessonSortables(root) {
+      if (!editable) return;
+      root.querySelectorAll('.sortable.unitlessons').forEach(function (el) {
+        if (el.dataset.sortInit) return;
+        el.dataset.sortInit = '1';
         new Sortable(el, {
           group: 'lessons', draggable: 'li.lessoncard',
           filter: 'input, textarea, button, ul.rawzone', preventOnFilter: false,
@@ -354,23 +275,51 @@
           }
         });
       });
-
-      // Just added a unit (the "+" by the title redirects with ?focus_new_unit):
-      // focus the new (last) unit's title so it's immediately editable.
-      if (new URLSearchParams(location.search).has('focus_new_unit')) {
-        const inputs = document.querySelectorAll(
-          '.units > .unit:not(.unassigned) .unithead .edit input');
-        const last = inputs[inputs.length - 1];
-        if (last) { last.focus(); last.select(); }
-        history.replaceState(null, '', location.pathname);  // drop the query flag
-      }
     }
 
-    // After an htmx add (new raw item appended), refresh stats + re-filter. Skip
-    // when the swap *was* the stats refresh, to avoid an infinite loop.
+    // Auto-grow the lesson-title textareas (fallback where field-sizing:content
+    // isn't supported), on load, on input, and when the column width changes.
+    function autosizeTitle(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+    function autosizeTitles(root) {
+      root.querySelectorAll('.lessonhead .edit textarea').forEach(autosizeTitle);
+    }
+
+    // Focus (and select) the newest unit's title -- called after the "+"-by-title
+    // add-unit htmx swap so a just-added unit is immediately editable.
+    window.focusNewUnit = function () {
+      const inputs = document.querySelectorAll(
+        '.units > .unit:not(.unassigned) .unithead .edit input');
+      const last = inputs[inputs.length - 1];
+      if (last) { last.focus(); last.select(); }
+    };
+
+    // Wire every interactive piece within `root`. Idempotent (each helper guards
+    // already-initialized elements), so it's safe to run on the whole document at
+    // load and again on just the htmx-swapped outline region.
+    function initWorkspace(root) {
+      initRawSortables(root);
+      initLessonSortables(root);
+      initAddObj(root);
+      initBulk(root);
+      autosizeTitles(root);
+    }
+    initWorkspace(document);
+
+    // Non-htmx fallback: unit_new redirects with ?focus_new_unit when htmx isn't
+    // driving the add (the htmx path focuses via the form's after-request instead).
+    if (editable && new URLSearchParams(location.search).has('focus_new_unit')) {
+      window.focusNewUnit();
+      history.replaceState(null, '', location.pathname);  // drop the query flag
+    }
+
+    // After an htmx swap: refresh stats + re-filter, and (when the editable
+    // outline region was swapped by a structural edit) re-wire the fresh DOM.
+    // Skip the stats refresh's own swap to avoid an infinite loop.
     document.body.addEventListener('htmx:afterSwap', function (e) {
       var path = (e.detail && e.detail.requestConfig && e.detail.requestConfig.path) || '';
       if (path.indexOf('/stats') !== -1) return;
+      var target = e.detail && e.detail.target;
+      if (target && target.id === 'outline-units') initWorkspace(target);
       refreshStats();
       applyRawFilter();
     });
@@ -378,14 +327,9 @@
     // (Enter-to-blur for inline autosave fields lives in base.html, so it applies
     // on every page.)
 
-    // Auto-grow the lesson-title textareas (fallback where field-sizing:content
-    // isn't supported), on load, on input, and when the column width changes.
-    function autosizeTitle(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
-    const titleTAs = document.querySelectorAll('.lessonhead .edit textarea');
-    titleTAs.forEach(autosizeTitle);
     document.addEventListener('input', function (e) {
       if (e.target.matches && e.target.matches('.lessonhead .edit textarea')) autosizeTitle(e.target);
     });
-    window.addEventListener('resize', function () { titleTAs.forEach(autosizeTitle); });
+    window.addEventListener('resize', function () { autosizeTitles(document); });
   </script>
 {% endblock %}
