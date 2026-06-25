@@ -602,7 +602,7 @@ def hierarchy_load_course(course):
     try:
         doc = load_nodes.parse(text)
         flavor = doc["flavor"]
-    except Exception as e:  # unparseable markdown / unknown flavor
+    except (Exception, SystemExit) as e:  # unparseable markdown / missing levels:
         flash(f"Could not load {f.filename!r}: {e}")
         return redirect(back)
     over = lambda k: (request.form.get(k) or "").strip() or None
@@ -805,7 +805,40 @@ def workspace_stats(nodes, by_node, pool):
     return {"leaves": len(leaves), "covered": covered, "gaps": len(leaves) - covered,
             "pct": round(100 * covered / len(leaves)) if leaves else 0,
             "pool": len(pool), "placed": placed, "total": total,
-            "placed_pct": round(100 * placed / total) if total else 0}
+            "placed_pct": round(100 * placed / total) if total else 0,
+            "levels": level_counts(nodes)}
+
+
+def level_counts(nodes):
+    """Per-level node tallies for the stat bar, shallowest-first
+    (e.g. [{count: 4, label: 'units'}, {count: 123, label: 'pages'}]).
+
+    A tag maps 1:1 to a depth in the flavor, so order the tags by the depth of any
+    node carrying them."""
+    parent_of = {n["node_id"]: n["parent_id"] for n in nodes}
+
+    def depth(nid):
+        d = 0
+        while parent_of.get(nid):
+            nid, d = parent_of[nid], d + 1
+        return d
+
+    counts, depths = {}, {}
+    for n in nodes:
+        tag = n["level"]
+        counts[tag] = counts.get(tag, 0) + 1
+        depths.setdefault(tag, depth(n["node_id"]))
+    return [{"count": counts[t], "label": pluralize_tag(t, counts[t])}
+            for t in sorted(counts, key=lambda t: depths[t])]
+
+
+def pluralize_tag(tag, n):
+    """A level tag as a display word, pluralized for the count: the hyphenated
+    tag becomes spaced words ('learning-objective' -> 'learning objectives')."""
+    words = tag.replace("-", " ")
+    if n != 1:
+        words += "es" if words.endswith(("s", "x", "ch", "sh")) else "s"
+    return words
 
 
 @app.route("/<course>")
@@ -1629,7 +1662,9 @@ if os.path.isdir(CORPUS_DIR):
 if __name__ == "__main__":
     # In a yolo container the app must bind 0.0.0.0 to be reachable from the host
     # browser (127.0.0.1 inside the container isn't); on a normal machine keep the
-    # safer localhost default. An explicit HOST env var always wins.
-    default_host = "0.0.0.0" if os.environ.get("YOLO_SESSION") == "1" else "127.0.0.1"
+    # safer localhost default. yolo marks the container with YOLO_SESSION set to a
+    # non-empty value ('cwd'/'worktree'/'1' across versions), so treat any value as
+    # a yolo session. An explicit HOST env var always wins.
+    default_host = "0.0.0.0" if os.environ.get("YOLO_SESSION") else "127.0.0.1"
     app.run(debug=True, host=os.environ.get("HOST", default_host),
             port=int(os.environ.get("PORT", "5001")))

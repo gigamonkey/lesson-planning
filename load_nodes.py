@@ -3,10 +3,11 @@
 Parses a curriculum-hierarchy markdown file directly (via the in-repo
 `hierarchy.py`, which this repo now owns -- see `FORMAT.md`) into a flat,
 already-tagged node list, then flattens that into one uniform table. Each node
-carries its resolved level `tag`, structural `parent`, leaf flag, sibling
-ordinal, and text, so the app can run gap/coverage queries without caring about
-the per-flavor level structure; the only curriculum-flavor knowledge here is
-mapping the detected `flavor` to local course/kind/slug policy (`FLAVOR_META`):
+carries its declared level `tag` (from the markdown's required `levels:` front
+matter), structural `parent`, leaf flag, sibling ordinal, and text, so the app
+can run gap/coverage queries without caring about the level structure; the only
+curriculum-flavor knowledge here is mapping the detected `flavor` (the heading
+shape) to local course/kind/slug policy (`FLAVOR_META`):
 
     nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)
 

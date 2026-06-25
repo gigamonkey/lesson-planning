@@ -1,4 +1,5 @@
 ---
+levels: chapter, section, subsection
 title: BHSawesome - AP CSA
 kind: book
 ---

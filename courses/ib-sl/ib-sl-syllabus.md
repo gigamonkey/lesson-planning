@@ -1,4 +1,5 @@
 ---
+levels: theme, topic, subtopic, learning-statement, content
 title: Computer science guide (SL)
 kind: syllabus
 ---

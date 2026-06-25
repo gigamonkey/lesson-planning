@@ -5,13 +5,22 @@ load_nodes.py (references) and plan_io.py (helpers). The flavor is detected from
 the first level-1 heading; sections carry their ids verbatim (e.g. "1", "1.1",
 "1.1.A", "1.1.A.1") and consumers apply their own id transformations.
 
-Flavors and their per-level tags:
+Level *names* are NOT inferred — a reference declares them in a required
+`levels:` front-matter key (an ordered list, depth 1 first), so a producer that
+knows its own vocabulary states it rather than relying on fragile inference. The
+detected flavor governs only the heading/id *shape*, not the level vocabulary.
 
-- csp:    big-idea / essential-understanding / learning-objective / essential-knowledge
-- csa:    unit / topic / learning-objective / essential-knowledge
-- ib:     theme / topic / subtopic / learning-statement / content
-- book:   chapter / section / subsection
-- course: unit / lesson / objective
+Flavors and the heading shapes they parse:
+
+- csp:    `# Big Idea N: TITLE (CODE)` (level-1 id is the parenthesized CODE)
+- csa:    `# Unit N: TITLE`
+- ib:     `# Theme X: TITLE`
+- book:   `# Chapter N: TITLE`
+- course: `# Unit N: TITLE`, lessons at level 2, objectives as bullets
+
+The conventional tag vocabularies (`LEVEL_TAGS`) are kept as the defaults
+producers usually declare and as what `to_markdown` re-emits, but they no longer
+drive parsing.
 
 The `course` flavor shares csa's level-1 heading (`# Unit N: TITLE`), so the two
 are told apart by heading *depth* (see detect_flavor): csa nests headings down to
@@ -65,6 +74,9 @@ def format_duration(duration):
     unit = duration["unit"] + ("" if amount == 1 else "s")
     return f" ({amount} {unit})"
 
+# Conventional per-level tag vocabularies. No longer drive parsing (a reference's
+# `levels:` front matter does); kept as the names producers usually declare and as
+# what to_markdown re-emits for each heading flavor.
 LEVEL_TAGS = {
     "csp": {
         1: "big-idea",
@@ -105,7 +117,10 @@ FLAVOR_KIND = {
 # guarantee; minor for backward-compatible additions (e.g. a new field).
 # 1.1.0 added the (nullable) "title" field and the "kind" field.
 # 1.2.0 added the (nullable) per-node "duration" field.
-FORMAT_VERSION = "1.2.0"
+# 1.3.0 sources "levels" (and each node's tag) from a now-required `levels:`
+#       front-matter key instead of the detected flavor. Output shape unchanged;
+#       a reference markdown file without `levels:` is no longer accepted.
+FORMAT_VERSION = "1.3.0"
 
 
 def parse_front_matter(md):
@@ -253,6 +268,21 @@ def section_text(sec):
     return "\n".join(lines)
 
 
+def parse_levels(meta):
+    """The required `levels:` front-matter value as an ordered list of level tags
+    (`levels[i]` names heading depth i+1). The value is a comma-separated list,
+    e.g. `levels: unit, lab, page`. Raises SystemExit if absent or empty.
+
+    Level *names* live in the markdown (the producer knows them); the detected
+    flavor governs only the heading/id shape, not the vocabulary."""
+    names = [s.strip() for s in (meta.get("levels") or "").split(",") if s.strip()]
+    if not names:
+        sys.exit("reference hierarchy markdown requires a 'levels:' front-matter "
+                 "key: a comma-separated list of level names in depth order, "
+                 "e.g. 'levels: unit, lab, page'")
+    return names
+
+
 def to_nodes(md, title=None):
     """Parse a hierarchy markdown file into a flat, already-tagged node list.
 
@@ -293,7 +323,7 @@ def to_nodes(md, title=None):
     """
     meta, _ = parse_front_matter(md)
     flavor, sections = parse_sections(md)
-    tags = LEVEL_TAGS[flavor]
+    level_names = parse_levels(meta)
     nodes = []
     # Stack of (level, id) for the currently-open ancestors; a node's parent is
     # the nearest open ancestor at a shallower level (same nesting rule the XML
@@ -312,10 +342,14 @@ def to_nodes(md, title=None):
         # A trailing duration tag rides the heading; strip it off the head before
         # building the node text so the stored title is clean.
         sec["head"], duration = split_duration(sec["head"])
+        if level > len(level_names):
+            sys.exit(f"node {sec['id']!r} is at heading depth {level}, but the "
+                     f"'levels:' front matter only names {len(level_names)} "
+                     f"level(s): {', '.join(level_names)}")
         nodes.append({
             "id": sec["id"],
             "level": level,
-            "tag": tags[level],
+            "tag": level_names[level - 1],
             "parent": parent,
             "ordinal": ordinals[parent],
             "is_leaf": True,  # corrected below once all parents are known
@@ -326,13 +360,12 @@ def to_nodes(md, title=None):
     for node in nodes:
         if node["id"] in parents:
             node["is_leaf"] = False
-    levels = [tags[level] for level in sorted(tags)]
     return {
         "version": FORMAT_VERSION,
         "flavor": flavor,
         "title": title if title is not None else meta.get("title"),
         "kind": meta.get("kind") or FLAVOR_KIND[flavor],
-        "levels": levels,
+        "levels": level_names,
         "nodes": nodes,
     }
 
@@ -364,18 +397,19 @@ def to_markdown(rows, title=None, kind=None):
     re-parses to the same nodes. `rows` are mappings with keys node_id, level (the
     TAG string, e.g. 'unit'), and text, in document (pre-order) order; an optional
     `duration` key ({"amount", "unit"}) re-emits the heading's duration tag. Emits
-    optional `title`/`kind` front matter. Heading-based flavors only -- raises
-    ValueError for tags it can't represent (e.g. the bulleted 'course' flavor)."""
+    a `levels:` front-matter key (the level names, which to_nodes requires) plus
+    optional `title`/`kind`. Heading-based flavors only -- raises ValueError for
+    tags it can't represent (e.g. the bulleted 'course' flavor, or any level
+    vocabulary that doesn't match a known heading flavor's tags)."""
     flavor = _flavor_for_tags({r["level"] for r in rows})
     level_of = {tag: lvl for lvl, tag in LEVEL_TAGS[flavor].items()}
-    out = []
-    if title or kind:
-        out.append("---")
-        if title:
-            out.append(f"title: {title}")
-        if kind:
-            out.append(f"kind: {kind}")
-        out.extend(("---", ""))
+    level_names = [LEVEL_TAGS[flavor][lvl] for lvl in sorted(LEVEL_TAGS[flavor])]
+    out = ["---", f"levels: {', '.join(level_names)}"]
+    if title:
+        out.append(f"title: {title}")
+    if kind:
+        out.append(f"kind: {kind}")
+    out.extend(("---", ""))
     n1 = 0
     for r in rows:
         lines = (r["text"] or "").split("\n")

@@ -45,35 +45,44 @@ overrides it.
 
 ## Reference hierarchy markdown
 
-An optional `---` front-matter block followed by ATX headings whose depth encodes
-tree depth. Each heading is `ID␠TEXT` (the id is a whitespace-free token); body
-lines under a heading belong to that node. The level-1 heading both names the
-root and signals the **flavor**:
+A `---` front-matter block (carrying the required `levels:` key) followed by ATX
+headings whose depth encodes tree depth. Each heading is `ID␠TEXT` (the id is a
+whitespace-free token); body lines under a heading belong to that node. The
+level-1 heading both names the root and signals the **flavor** — which governs
+only the heading/id *shape*, not the level names:
 
-| Flavor   | Level 1                      | Level 2                       | Level 3                  | Level 4                   | Level 5            |
-|----------|------------------------------|-------------------------------|--------------------------|---------------------------|--------------------|
-| `csa`    | `# Unit N: TITLE`            | `## 1.1 …` topic              | `### 1.1.A …` LO         | `#### 1.1.A.1 …` EK        | —                  |
-| `csp`    | `# Big Idea N: TITLE (CODE)` | `## CRD-1 …` EU               | `### CRD-1.A …` LO       | `#### CRD-1.A.1 …` EK      | —                  |
-| `book`   | `# Chapter N: TITLE`         | `## N.M …` section            | `### N.M.K …` subsection | —                         | —                  |
-| `ib`     | `# Theme X: TITLE`           | `## A1 …` topic               | `### A1.1 …` subtopic    | `#### A1.1.1 …` statement  | `##### A1.1.1.1 …` |
+| Flavor   | Level 1                      | Level 2 …                                       |
+|----------|------------------------------|-------------------------------------------------|
+| `csa`    | `# Unit N: TITLE`            | `## 1.1 …`, `### 1.1.A …`, `#### 1.1.A.1 …`     |
+| `csp`    | `# Big Idea N: TITLE (CODE)` | `## CRD-1 …`, `### CRD-1.A …`, `#### CRD-1.A.1 …` (level-1 id is the parenthesized CODE) |
+| `book`   | `# Chapter N: TITLE`         | `## N.M …`, `### N.M.K …`                       |
+| `ib`     | `# Theme X: TITLE`           | `## A1 …`, `### A1.1 …`, `#### A1.1.1 …`, `##### A1.1.1.1 …` |
 
 Front matter (a small YAML subset — scalars only):
 
 ```
 ---
+levels: unit, topic, learning-objective, essential-knowledge
 title: AP Computer Science A — 2025 CED
 kind: ced
 ---
 ```
 
+- `levels:` — **required**. A comma-separated list of the level **tag** names in
+  depth order: `levels[i]` names heading depth *i+1* (so `levels: unit, lab, page`
+  tags `#` nodes `unit`, `##` nodes `lab`, `###` nodes `page`). Each node's tag is
+  stored as its `level`. The producer knows its own vocabulary, so it states it
+  here rather than the parser inferring it from the flavor — a new format with
+  the same heading shape but different level names just declares different names.
+  A heading nested deeper than the declared levels is an error.
 - `title:` — a human title for the hierarchy (optional).
 - `kind:` — what the hierarchy *is* (`ced`, `syllabus`, `book`, …). Defaults per
   flavor (`csa`/`csp` → `ced`, `ib` → `syllabus`, `book` → `book`).
 - `slug:` — overrides the filename-stem hierarchy id (optional).
 
-The flavor's per-level **tag** (`unit`, `topic`, `learning-objective`, …) is
-resolved by the parser and stored as the node's `level`. Ids are kept verbatim
-and treated as opaque.
+Ids are kept verbatim and treated as opaque. (The outline `plan.md` is parsed
+separately and does **not** take a `levels:` key — its levels are always unit /
+lesson.)
 
 ## The outline: `plan.md`
 

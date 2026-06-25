@@ -1,4 +1,5 @@
 ---
+levels: unit, topic, learning-objective, essential-knowledge
 title: Intro to Widgets — Reference
 kind: ced
 ---

@@ -1,5 +1,6 @@
 ---
 title: Computer science guide (HL)
+levels: theme, topic, subtopic, learning-statement, content
 kind: syllabus
 ---
 
