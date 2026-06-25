@@ -18,9 +18,9 @@ Flavors and the heading shapes they parse:
 - book:   `# Chapter N: TITLE`
 - course: `# Unit N: TITLE`, lessons at level 2, objectives as bullets
 
-The conventional tag vocabularies (`LEVEL_TAGS`) are kept as the defaults
-producers usually declare and as what `to_markdown` re-emits, but they no longer
-drive parsing.
+The conventional tag vocabularies (`LEVEL_TAGS`) are kept only as the names
+producers usually declare; they no longer drive parsing and nothing in this
+module reads them anymore (see plans/retire-flavor-sniffing.md).
 
 The `course` flavor shares csa's level-1 heading (`# Unit N: TITLE`), so the two
 are told apart by heading *depth* (see detect_flavor): csa nests headings down to
@@ -75,8 +75,9 @@ def format_duration(duration):
     return f" ({amount} {unit})"
 
 # Conventional per-level tag vocabularies. No longer drive parsing (a reference's
-# `levels:` front matter does); kept as the names producers usually declare and as
-# what to_markdown re-emits for each heading flavor.
+# `levels:` front matter does) and no longer read by any code here; kept as the
+# names producers usually declare, pending the flavor retirement (step 4 of
+# plans/retire-flavor-sniffing.md).
 LEVEL_TAGS = {
     "csp": {
         1: "big-idea",
@@ -368,60 +369,3 @@ def to_nodes(md, title=None):
         "levels": level_names,
         "nodes": nodes,
     }
-
-
-def _flavor_for_tags(used):
-    """The heading-based flavor whose level tags cover the set `used`. The 'course'
-    flavor is skipped (its level-3 is bulleted, not headings, so it can't be
-    round-tripped by to_markdown). Raises ValueError if none fits."""
-    for flavor, levels in LEVEL_TAGS.items():
-        if flavor != "course" and set(used) <= set(levels.values()):
-            return flavor
-    raise ValueError(f"no heading-based flavor for tags {sorted(used)}")
-
-
-def _level1_heading(flavor, n, node_id, head):
-    """A level-1 heading line, the inverse of parse_top_heading. `n` is the 1-based
-    position among level-1 nodes (only used to number CSP big ideas)."""
-    if flavor == "csp":
-        return f"# Big Idea {n}: {head} ({node_id})"
-    if flavor == "ib":
-        return f"# Theme {node_id}: {head}"
-    if flavor == "book":
-        return f"# Chapter {node_id}: {head}"
-    return f"# Unit {node_id}: {head}"   # csa
-
-
-def to_markdown(rows, title=None, kind=None):
-    """Serialize already-parsed nodes back to hierarchy markdown that `to_nodes`
-    re-parses to the same nodes. `rows` are mappings with keys node_id, level (the
-    TAG string, e.g. 'unit'), and text, in document (pre-order) order; an optional
-    `duration` key ({"amount", "unit"}) re-emits the heading's duration tag. Emits
-    a `levels:` front-matter key (the level names, which to_nodes requires) plus
-    optional `title`/`kind`. Heading-based flavors only -- raises ValueError for
-    tags it can't represent (e.g. the bulleted 'course' flavor, or any level
-    vocabulary that doesn't match a known heading flavor's tags)."""
-    flavor = _flavor_for_tags({r["level"] for r in rows})
-    level_of = {tag: lvl for lvl, tag in LEVEL_TAGS[flavor].items()}
-    level_names = [LEVEL_TAGS[flavor][lvl] for lvl in sorted(LEVEL_TAGS[flavor])]
-    out = ["---", f"levels: {', '.join(level_names)}"]
-    if title:
-        out.append(f"title: {title}")
-    if kind:
-        out.append(f"kind: {kind}")
-    out.extend(("---", ""))
-    n1 = 0
-    for r in rows:
-        lines = (r["text"] or "").split("\n")
-        head, body = lines[0], lines[1:]
-        lvl = level_of[r["level"]]
-        if out and out[-1] != "":
-            out.append("")   # readability blank before each node (trimmed on reparse)
-        if lvl == 1:
-            n1 += 1
-            heading = _level1_heading(flavor, n1, r["node_id"], head)
-        else:
-            heading = f"{'#' * lvl} {r['node_id']} {head}".rstrip()
-        out.append(heading + format_duration(r.get("duration")))
-        out.extend(body)
-    return "\n".join(out).rstrip() + "\n"

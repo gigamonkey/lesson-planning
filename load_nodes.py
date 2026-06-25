@@ -49,7 +49,7 @@ COURSES_DDL = ("CREATE TABLE IF NOT EXISTS courses (course TEXT PRIMARY KEY,"
                " title TEXT NOT NULL, primary_outline TEXT)")
 HIERARCHIES_DDL = ("CREATE TABLE IF NOT EXISTS hierarchies (hierarchy TEXT PRIMARY KEY,"
                    " course TEXT NOT NULL, kind TEXT NOT NULL, editable INTEGER NOT NULL,"
-                   " title TEXT NOT NULL, source TEXT)")
+                   " title TEXT NOT NULL, source TEXT, source_md TEXT)")
 NODE_DURATION_DDL = ("CREATE TABLE IF NOT EXISTS node_duration (hierarchy TEXT NOT NULL,"
                      " node_id TEXT NOT NULL, amount REAL NOT NULL, unit TEXT NOT NULL,"
                      " PRIMARY KEY (hierarchy, node_id))")
@@ -151,12 +151,14 @@ def build_durations(hierarchy, nodes):
 
 
 def load_into(conn, slug, course, kind, course_title, rows, source=None, title=None,
-              durations=None):
+              durations=None, source_md=None):
     """Replace one reference hierarchy's nodes + register it, on a caller's conn.
 
     `durations` are node_duration rows (hierarchy, node_id, amount, unit); the
-    hierarchy's durations are cleared and replaced (None == none). Does not commit
-    (the caller owns the transaction). See `load` for the self-contained wrapper.
+    hierarchy's durations are cleared and replaced (None == none). `source_md` is
+    the verbatim source markdown, stored so write_course can replay it (keeps the
+    corpus self-contained without reconstructing markdown from nodes). Does not
+    commit (the caller owns the transaction). See `load` for the wrapper.
     """
     conn.execute(COURSES_DDL)
     conn.execute(HIERARCHIES_DDL)
@@ -171,15 +173,16 @@ def load_into(conn, slug, course, kind, course_title, rows, source=None, title=N
     conn.executemany("INSERT INTO node_duration VALUES (?, ?, ?, ?)", durations or [])
     title = title or hierarchy_title(course, kind)
     conn.execute(
-        "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
-        " VALUES (?, ?, ?, 0, ?, ?)"
+        "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source, source_md)"
+        " VALUES (?, ?, ?, 0, ?, ?, ?)"
         " ON CONFLICT(hierarchy) DO UPDATE SET course=excluded.course, kind=excluded.kind,"
-        " editable=0, title=excluded.title, source=excluded.source",
-        (slug, course, kind, title, source))
+        " editable=0, title=excluded.title, source=excluded.source,"
+        " source_md=excluded.source_md",
+        (slug, course, kind, title, source, source_md))
 
 
 def load(db_path, slug, course, kind, course_title, rows, source=None, title=None,
-         durations=None):
+         durations=None, source_md=None):
     """Replace one reference hierarchy's nodes and register its course/hierarchy.
 
     `rows` carry `slug` as their hierarchy column. The course is created if new but
@@ -190,7 +193,8 @@ def load(db_path, slug, course, kind, course_title, rows, source=None, title=Non
     """
     conn = sqlite3.connect(db_path)
     try:
-        load_into(conn, slug, course, kind, course_title, rows, source, title, durations)
+        load_into(conn, slug, course, kind, course_title, rows, source, title, durations,
+                  source_md)
         conn.commit()
     finally:
         conn.close()
@@ -208,14 +212,16 @@ def main():
     args = parser.parse_args()
 
     with open(args.input) as f:
-        doc = parse(f.read())
+        text = f.read()
+    doc = parse(text)
     flavor = doc["flavor"]
     m = meta_for(flavor, args.course, args.kind or doc.get("kind"),
                  args.hierarchy, args.course_title)
     rows = build_rows(m["slug"], doc["nodes"])
     durations = build_durations(m["slug"], doc["nodes"])
     load(args.database, m["slug"], m["course"], m["kind"], m["course_title"],
-         rows, source=args.input, title=doc.get("title"), durations=durations)
+         rows, source=args.input, title=doc.get("title"), durations=durations,
+         source_md=text)
 
     leaves = sum(1 for r in rows if r[4])
     print(

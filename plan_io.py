@@ -294,13 +294,15 @@ def read_course(db_path, course_dir):
         n_refs = 0
         for path in refs:
             with open(path, encoding="utf-8") as f:
-                doc = load_nodes.parse(f.read())
+                ref_text = f.read()
+            doc = load_nodes.parse(ref_text)
             slug = doc.get("slug") or os.path.splitext(os.path.basename(path))[0]
             rows = load_nodes.build_rows(slug, doc["nodes"])
             durations = load_nodes.build_durations(slug, doc["nodes"])
             load_nodes.load_into(conn, slug, course, doc.get("kind") or "reference",
                                  title, rows, source=os.path.basename(path),
-                                 title=doc.get("title"), durations=durations)
+                                 title=doc.get("title"), durations=durations,
+                                 source_md=ref_text)
             n_refs += 1
 
         # Outline hierarchy (editable=1): units + lessons as positional nodes.
@@ -546,26 +548,17 @@ def render_course(conn, course):
 
 
 def _reference_files(conn, course):
-    """{<slug>.md: markdown} for each reference hierarchy, serialized from its db
-    nodes so the corpus is self-contained (reloadable). Skips a hierarchy whose
-    flavor to_markdown can't represent (e.g. bulleted 'course')."""
+    """{<slug>.md: markdown} for each reference hierarchy, from its stored verbatim
+    source markdown, so the corpus is self-contained (reloadable). A reference is
+    load-only, so its markdown is replayed exactly as loaded -- not reconstructed
+    from the db nodes. Skips a reference with no stored source (e.g. one created by
+    an older import); such a hierarchy has no canonical markdown to emit."""
     conn.row_factory = sqlite3.Row
     files = {}
-    for h in conn.execute("SELECT hierarchy, kind, title FROM hierarchies "
+    for h in conn.execute("SELECT hierarchy, source_md FROM hierarchies "
                           "WHERE course=? AND editable=0", (course,)).fetchall():
-        dur = {r["node_id"]: {"amount": r["amount"], "unit": r["unit"]}
-               for r in conn.execute("SELECT node_id, amount, unit FROM node_duration"
-                                     " WHERE hierarchy=?", (h["hierarchy"],))}
-        rows = [dict(r, duration=dur.get(r["node_id"])) for r in conn.execute(
-            "SELECT node_id, level, text FROM nodes WHERE hierarchy=? ORDER BY ordinal, node_id",
-            (h["hierarchy"],))]
-        if not rows:
-            continue
-        try:
-            files[f"{h['hierarchy']}.md"] = hierarchy.to_markdown(
-                rows, title=h["title"], kind=h["kind"])
-        except ValueError:
-            continue
+        if h["source_md"]:
+            files[f"{h['hierarchy']}.md"] = h["source_md"]
     return files
 
 

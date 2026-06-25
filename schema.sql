@@ -35,7 +35,10 @@ CREATE TABLE IF NOT EXISTS hierarchies (
   kind      TEXT NOT NULL,            -- WHAT it is: 'ced'|'ib-syllabus'|'lesson-plan'|'book'
   editable  INTEGER NOT NULL,         -- 0 = reference (external, read-only) | 1 = authored
   title     TEXT NOT NULL,
-  source    TEXT                      -- reference: the markdown path; authored: NULL
+  source    TEXT,                     -- reference: the markdown path; authored: NULL
+  source_md TEXT                      -- reference: the verbatim source markdown,
+                                      --   replayed by write_course so the corpus
+                                      --   stays self-contained; authored: NULL
 );
 
 -- Nodes of any hierarchy (one row per node), keyed by hierarchy (not course).

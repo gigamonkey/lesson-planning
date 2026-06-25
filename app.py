@@ -297,6 +297,12 @@ def ensure_schema():
             # courses); drop it if an earlier build added it.
             if "start_date" in ccols2:
                 conn.execute("ALTER TABLE courses DROP COLUMN start_date")
+            # A reference now stashes its verbatim source markdown, replayed by
+            # write_course instead of reconstructing markdown from nodes. Existing
+            # references backfill on their next load (db is a cache).
+            if "source_md" not in [r[1] for r in conn.execute(
+                    "PRAGMA table_info(hierarchies)")]:
+                conn.execute("ALTER TABLE hierarchies ADD COLUMN source_md TEXT")
             conn.commit()
     except sqlite3.OperationalError:
         pass  # tables not created yet (unseeded db)
@@ -626,7 +632,7 @@ def hierarchy_load_course(course):
             "SELECT DISTINCT node_id FROM coverage WHERE hierarchy=?", (m["slug"],))}
     orphaned = sorted(existing - new_ids)
     load_nodes.load(DB_PATH, m["slug"], m["course"], m["kind"], crow["title"],
-                    rows, source=f.filename, title=title)
+                    rows, source=f.filename, title=title, source_md=text)
     # Measure the course outline against this new reference (the eager outline was
     # created before any reference existed, so link it here).
     with db() as conn:
