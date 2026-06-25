@@ -390,40 +390,83 @@ def course_new():
     return redirect(url_for("tree", course=course))
 
 
-@app.route("/<course>/hierarchy/load", methods=["POST"])
-def hierarchy_load_course(course):
-    """Load an uploaded hierarchy MARKDOWN file as a reference of THIS course, and
-    persist it into the course's corpus directory so the on-disk corpus stays
-    complete. The course is fixed by context; title/kind come from the markdown;
-    the bare slug defaults to the file's `slug:`/filename stem (pinned into the
-    saved front matter). Optional form fields override kind / hierarchy / title."""
+def _hierarchy_confirm(course, text, filename, slug=None, title=None, kind=None,
+                       mode=None, error=None):
+    """Render the upload confirmation page: the parsed summary plus the editable
+    slug / title / kind, so the user fixes the bare slug before it's committed.
+    Re-used for the validation/collision error re-render. Returns a redirect if the
+    markdown won't parse at all."""
+    stem = os.path.splitext(os.path.basename(filename))[0]
+    try:
+        doc = load_nodes.parse(text)
+    except (Exception, SystemExit) as e:  # unparseable / missing levels: or title:
+        flash(f"Could not load {filename!r}: {e}")
+        return redirect(url_for("tree", course=course))
+    slug = (slug if slug is not None else doc.get("slug") or stem).strip().lower()
     with db() as conn:
-        crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
-        if not crow:
+        existing = sorted(r["hierarchy"] for r in conn.execute(
+            "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0", (course,)))
+        outline = outline_hierarchy(conn, course)
+    return render_template(
+        "hierarchy_confirm.html", course=course, filename=filename, text=text,
+        slug=slug, title=title if title is not None else doc.get("title"),
+        kind=kind if kind is not None else doc.get("kind"),
+        levels=doc.get("levels"), node_count=len(doc["nodes"]),
+        root=(doc["nodes"][0]["id"] if doc["nodes"] else None),
+        existing=existing, outline=outline, mode=mode, error=error,
+        page_title=f"Add a reference to {course.upper()}")
+
+
+@app.route("/<course>/hierarchy/prepare", methods=["POST"])
+def hierarchy_prepare(course):
+    """Step 1 of a reference upload: parse the chosen .md and show the confirm page
+    (editable bare slug / title / kind) rather than committing immediately."""
+    with db() as conn:
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
     back = request.referrer or url_for("tree", course=course)
     f = request.files.get("file")
     if not f or not f.filename:
         flash("No file chosen.")
         return redirect(back)
-    text = f.read().decode("utf-8", "replace")
+    return _hierarchy_confirm(course, f.read().decode("utf-8", "replace"), f.filename)
+
+
+@app.route("/<course>/hierarchy/load", methods=["POST"])
+def hierarchy_load_course(course):
+    """Step 2 (commit): load the confirmed reference markdown into THIS course and
+    persist it to the corpus as `{slug}.md` with the bare slug pinned in the front
+    matter. The slug/title/kind come from the confirm form; `mode` ('add'|'replace')
+    resolves a slug that already names a reference in the course."""
+    with db() as conn:
+        crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
+        if not crow:
+            abort(404)
+    text = request.form.get("text") or ""
+    filename = request.form.get("filename") or "upload.md"
+    over = lambda k: (request.form.get(k) or "").strip() or None
+    mode = request.form.get("mode")
     try:
         doc = load_nodes.parse(text)
-    except (Exception, SystemExit) as e:  # unparseable / missing levels: or kind:
-        flash(f"Could not load {f.filename!r}: {e}")
-        return redirect(back)
-    over = lambda k: (request.form.get(k) or "").strip() or None
-    # Course is fixed by context; kind/title come from the markdown. The slug is the
-    # bare, course-relative id: the form override, else the file's own `slug:`, else
-    # its filename stem -- never derived from kind (so two same-kind references in a
-    # course don't collide). It is pinned into the saved markdown's front matter.
+    except (Exception, SystemExit) as e:
+        flash(f"Could not load {filename!r}: {e}")
+        return redirect(url_for("tree", course=course))
     kind = over("kind") or doc.get("kind")
-    stem = os.path.splitext(os.path.basename(f.filename))[0]
-    slug = (over("hierarchy") or doc.get("slug") or stem).strip().lower()
-    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
-        flash(f"Invalid slug {slug!r}: use lowercase letters, digits, and hyphens.")
-        return redirect(back)
     title = over("title") or doc.get("title")
+    stem = os.path.splitext(os.path.basename(filename))[0]
+    slug = (over("hierarchy") or doc.get("slug") or stem).strip().lower()
+    confirm = lambda err: _hierarchy_confirm(course, text, filename, over("hierarchy") or slug,
+                                             title, kind, mode, err)
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
+        return confirm(f"Invalid slug {slug!r}: use lowercase letters, digits, and hyphens.")
+    with db() as conn:
+        row = conn.execute("SELECT editable FROM hierarchies WHERE course=? AND hierarchy=?",
+                           (course, slug)).fetchone()
+    if row and row["editable"]:
+        return confirm(f"{slug!r} is the course outline — choose a different slug.")
+    if row and mode != "replace":
+        return confirm(f"A reference {slug!r} already exists. Choose Replace, "
+                       f"or rename the slug to add it as a new hierarchy.")
     text = _pin_slug(text, slug)   # author the bare slug into the front matter
     rows = load_nodes.build_rows(course, slug, doc["nodes"])
     # Persist the markdown into the corpus as <slug>.md (the load source of truth).
@@ -440,7 +483,7 @@ def hierarchy_load_course(course):
             (course, slug))}
     orphaned = sorted(existing - new_ids)
     load_nodes.load(DB_PATH, slug, course, kind, crow["title"],
-                    rows, source=f.filename, title=title, source_md=text)
+                    rows, source=filename, title=title, source_md=text)
     # Measure the course outline against this new reference (the eager outline was
     # created before any reference existed, so link it here).
     with db() as conn:
@@ -451,7 +494,7 @@ def hierarchy_load_course(course):
     # The loaded hierarchy shows up in the setup table, so only surface the
     # non-obvious case: coverage edges now pointing at ids the new version dropped.
     if orphaned:
-        flash(f"Loaded {f.filename!r}, but {len(orphaned)} existing coverage edge(s) now "
+        flash(f"Loaded {slug!r}, but {len(orphaned)} existing coverage edge(s) now "
               f"point to node ids not in this version: {', '.join(orphaned[:6])}"
               f"{'…' if len(orphaned) > 6 else ''}")
     # Land on the loaded hierarchy so the upload (from the sidebar or setup) shows.

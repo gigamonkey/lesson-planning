@@ -468,9 +468,9 @@
           <div class="coursehead">
             <span class="coursename">{{ c.course|upper }}</span>
             <span class="coursehead-actions">
-              <form method="post" action="{{ url_for('hierarchy_load_course', course=c.course) }}"
+              <form method="post" action="{{ url_for('hierarchy_prepare', course=c.course) }}"
                     enctype="multipart/form-data" class="addhier">
-                <label class="gear" title="Add a hierarchy (upload .md)">
+                <label class="gear" title="Add a reference hierarchy (upload .md)">
                   <i class="bi bi-plus-lg"></i>
                   <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
                 </label>

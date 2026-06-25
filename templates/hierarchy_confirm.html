@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+  .confirm-upload { max-width: 38rem; }
+  .confirm-summary { color: var(--muted); font-size: .9rem; margin: 0 0 1.2rem; }
+  .confirm-summary code { font-size: .85em; }
+  .confirm-error { background: #fdecea; color: #9b2c2c; border: 1px solid #f5c6c0;
+                   border-radius: 6px; padding: .5rem .75rem; margin: 0 0 1rem; font-size: .9rem; }
+  .confirm-upload .field { display: block; margin: 0 0 .9rem; font-size: .85rem; color: #444; }
+  .confirm-upload .field input { display: block; width: 100%; margin-top: .25rem;
+                                 padding: .4rem .5rem; font-size: .95rem; box-sizing: border-box; }
+  .confirm-upload .field .hint { font-weight: 400; color: var(--muted); }
+  .confirm-collision { border: 1px solid #f0dcc0; background: #fff8ef; border-radius: 6px;
+                       padding: .6rem .75rem; margin: 0 0 1rem; }
+  .confirm-collision legend { font-weight: 600; color: #b7791f; font-size: .85rem; padding: 0 .3rem; }
+  .confirm-collision label { display: block; font-size: .9rem; margin: .3rem 0; }
+  .confirm-actions { display: flex; gap: .75rem; align-items: center; margin-top: 1.2rem; }
+  .confirm-actions .btn { color: var(--muted); text-decoration: none; font-size: .9rem; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="confirm-upload">
+  {% if error %}<div class="confirm-error">{{ error }}</div>{% endif %}
+
+  <p class="confirm-summary">
+    Parsed <strong>{{ filename }}</strong> — {{ node_count }} node{{ '' if node_count == 1 else 's' }},
+    root id <code>{{ root }}</code>.
+    Levels: {{ levels|join(' › ') }}.
+  </p>
+
+  <form method="post" action="{{ url_for('hierarchy_load_course', course=course) }}">
+    <textarea name="text" hidden>{{ text }}</textarea>
+    <input type="hidden" name="filename" value="{{ filename }}">
+
+    <label class="field">
+      Slug <span class="hint">— the hierarchy's identity in {{ course|upper }}; saved as <code>{{ slug }}.md</code></span>
+      <input type="text" name="hierarchy" value="{{ slug }}" pattern="[a-z0-9][a-z0-9-]*"
+             autocomplete="off" required autofocus>
+    </label>
+
+    <label class="field">
+      Title <span class="hint">— shown in the sidebar</span>
+      <input type="text" name="title" value="{{ title or '' }}" autocomplete="off" required>
+    </label>
+
+    <label class="field">
+      Kind <span class="hint">— provenance, optional (e.g. ced, syllabus, a textbook name)</span>
+      <input type="text" name="kind" value="{{ kind or '' }}" autocomplete="off"
+             placeholder="optional">
+    </label>
+
+    {% if slug in existing %}
+      <fieldset class="confirm-collision">
+        <legend>A reference “{{ slug }}” already exists</legend>
+        <label><input type="radio" name="mode" value="replace"
+                {{ 'checked' if mode != 'add' else '' }}> Replace it (re-load under the same slug)</label>
+        <label><input type="radio" name="mode" value="add"
+                {{ 'checked' if mode == 'add' else '' }}> Add as a new hierarchy — change the slug above first</label>
+      </fieldset>
+    {% endif %}
+
+    <div class="confirm-actions">
+      <a class="btn" href="{{ url_for('tree', course=course) }}">Cancel</a>
+      <button type="submit" class="primary">Load reference</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

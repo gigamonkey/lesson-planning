@@ -4,7 +4,9 @@
 > matter, file named `{slug}.md`), composite `(course, slug)` db keys across all
 > hierarchy-scoped tables, `title:` required, `kind:` optional free-form
 > provenance, `primary_outline` as the sole outline identity, and the slug
-> mismatch/collision warnings all landed. See `test_schema_load.py`.
+> mismatch/collision warnings all landed. The reference upload is a two-step
+> confirm flow (`hierarchy_confirm.html`): an editable bare slug / title / kind
+> with add-vs-replace handling for a colliding slug. See `test_schema_load.py`.
 
 
 `kind` is doing too much. It is, today, simultaneously: a human-readable
