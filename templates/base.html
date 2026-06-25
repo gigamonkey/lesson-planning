@@ -498,7 +498,7 @@
                    autocomplete="off" aria-label="Course title" placeholder="course title…">
           </form>
           <ul class="hiers">
-            <li class="outlineitem {{ 'active' if c.outline and c.outline == active_hierarchy else '' }}">
+            <li class="outlineitem {{ 'active' if c.course == nav_course and c.outline and c.outline == active_hierarchy else '' }}">
               <a href="{{ url_for('plan', course=c.course) }}">Course outline</a>
               {% if c.hierarchies %}
                 <button type="button" class="miniadd"
@@ -544,7 +544,7 @@
               </form>
             </li>
             {% for h in c.hierarchies %}
-              <li class="hieritem {{ 'active' if h.hierarchy == active_hierarchy else '' }}">
+              <li class="hieritem {{ 'active' if c.course == nav_course and h.hierarchy == active_hierarchy else '' }}">
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
                    title="{{ h.label }}">{{ h.label }}</a>
                 {% if h.kind %}<span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>{% endif %}
