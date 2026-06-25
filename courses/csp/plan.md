@@ -28,7 +28,7 @@ targets: ced, course
 
 # Unit: BJC Unit 2 - Abstraction (9 weeks)
 
-## Lab 1: Games (4 days)
+## Lab 1: Games (5 days)
 
 ## Lab 2: Making Lists (5 days)
 
@@ -46,31 +46,37 @@ targets: ced, course
 
 # Unit: BJC Unit 3 - Data Structures (8 weeks)
 
-## Lab 1: Dealing with Complexity
+## Lab 1: Dealing with Complexity (5 days)
 
-## Lab 2: Contact List
+## Lab 2: Contact List (3 days)
 
-## Lab 3: Tic Tac Toe (revisited)
+## Make a fun game (4 days)
 
-## Project: Monty Hall Simulator
+## Lab 3: Tic Tac Toe (revisited) (5 days)
 
-## Lab 4: Artificial Intelligence
+## Project: Monty Hall Simulator (8 days)
+
+## Lab 4: Artificial Intelligence (2 days)
 
 ## Optional Projects
 
 # Unit: Practice create task (2 weeks)
 
-# Unit: BJC Unit 4 - How the Internet Works (3 weeks)
+## Practice (8 days)
 
-## Lab 1: Computer Networks
+# Unit: BJC Unit 4 - How the Internet Works (4 weeks)
 
-## Lab 2: Cybersecurity
+## Lab 1: Computer Networks (2 days)
 
-## Lab 3: Community and Online Interactions
+## Competitive Internet
 
-## Lab 4: Data Representation and Compression
+## Lab 2: Cybersecurity (5 days)
 
-## Unit 4 Project: Binary Converter
+## Lab 3: Community and Online Interactions (2 days)
+
+## Lab 4: Data Representation and Compression (3 days)
+
+## Unit 4 Project: Binary Converter (6 days)
 
 # Unit: Create task (2 weeks)
 
