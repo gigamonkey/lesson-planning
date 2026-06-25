@@ -3,7 +3,7 @@ course: csa
 title: AP Computer Science A
 primary_outline: plan
 calendar: bhs-2026-2027
-targets: book, ced
+targets: ced, book
 ---
 
 # Unit: Introduction (1 week)

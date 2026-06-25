@@ -6,7 +6,7 @@ calendar: bhs-2026-2027
 targets: ced, course
 ---
 
-# Unit: Introduction to Programming
+# Unit: Introduction to Programming (6 weeks)
 
 ## Lab 1: Click Alonzo Game
 
