@@ -27,8 +27,8 @@
       <tr>
         <th class="th-text sorted" data-sort="text">Objective</th>
         {% for h in hierarchies %}
-          <th class="th-hier" data-sort="{{ h.hierarchy }}" title="{{ h.title }}">
-            <span class="pill pill-{{ h.kind or 'none' }}">{{ {'course-outline': 'outline'}.get(h.kind, h.kind) or h.hierarchy }}</span>
+          <th class="th-hier" data-sort="{{ h.hierarchy }}" title="{{ h.title }}{% if h.kind %} ({{ h.kind }}){% endif %}">
+            <span class="pill pill-{{ h.kind or 'none' }}">{{ h.hierarchy }}</span>
           </th>
         {% endfor %}
       </tr>
