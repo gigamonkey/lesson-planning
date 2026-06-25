@@ -27,8 +27,8 @@
       <tr>
         <th class="th-text sorted" data-sort="text">Objective</th>
         {% for h in hierarchies %}
-          <th class="th-hier" data-sort="{{ h.hierarchy }}" title="{{ h.title }}{% if h.kind %} ({{ h.kind }}){% endif %}">
-            <span class="pill pill-{{ h.kind or 'none' }}">{{ h.hierarchy }}</span>
+          <th class="th-hier" data-sort="{{ h.hierarchy }}" title="{{ h.title }}">
+            <span class="pill pill-{{ h.hierarchy }}">{{ h.hierarchy }}</span>
           </th>
         {% endfor %}
       </tr>
@@ -46,7 +46,7 @@
           {% for h in hierarchies %}
             {% set cell = o.cells[h.hierarchy] %}
             <td class="hcell" data-hier="{{ h.hierarchy }}" data-ord="{{ cell.ord }}">
-              {% for t in cell.tags %}<span class="otag pill-{{ h.kind }}"
+              {% for t in cell.tags %}<span class="otag pill-{{ h.hierarchy }}"
                     data-tip="{{ t.id }} — {{ t.title }}">{{ t.id }}</span>{% endfor %}
             </td>
           {% endfor %}

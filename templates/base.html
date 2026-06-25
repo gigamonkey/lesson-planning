@@ -136,7 +136,7 @@
             background: #eef1f4; color: #555; border: 1px solid #e0e4e8; }
     .pill-ced { background: #eaf3ff; color: #2b6cb0; border-color: #cfe0f5; }
     .pill-book { background: #f3eefe; color: #6b46c1; border-color: #e0d4f5; }
-    .pill-course-outline { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
+    .pill-plan { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
     .pill-syllabus { background: #fff4e6; color: #b7791f; border-color: #f0dcc0; }
 
     .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0 0 1rem;
@@ -408,7 +408,7 @@
     .objtable .otag.pill-ced { background: #eaf3ff; color: #2b6cb0; border-color: #cfe0f5; }
     .objtable .otag.pill-book { background: #f3eefe; color: #6b46c1; border-color: #e0d4f5; }
     .objtable .otag.pill-syllabus { background: #fff4e6; color: #b7791f; border-color: #f0dcc0; }
-    .objtable .otag.pill-course-outline { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
+    .objtable .otag.pill-plan { background: #eafaf0; color: #2f855a; border-color: #cdebd9; }
     /* Custom tooltip: instant on hover; below the pill, flips above when marked. */
     .objtable .otag[data-tip]:hover::after {
             content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 5px);
@@ -547,7 +547,7 @@
               <li class="hieritem {{ 'active' if c.course == nav_course and h.hierarchy == active_hierarchy else '' }}">
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
                    title="{{ h.label }}">{{ h.label }}</a>
-                {% if h.kind %}<span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>{% endif %}
+                <span class="pill pill-{{ h.hierarchy }}">{{ h.hierarchy }}</span>
                 <form method="post" class="objadd" enctype="multipart/form-data"
                       action="{{ url_for('hierarchy_upload', course=c.course, hierarchy=h.hierarchy) }}">
                   <label class="miniadd" title="Upload an objectives TSV (uuid, text, node_id) into this hierarchy">
