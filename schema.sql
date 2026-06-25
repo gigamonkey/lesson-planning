@@ -131,11 +131,14 @@ CREATE TABLE IF NOT EXISTS node_duration (
 
 -- Pair an outline with the reference(s) it is measured against, so the UI can
 -- show the outline's coverage stats (gaps/planned) against the reference. Both
--- sides are hierarchies of the same course (by bare slug).
+-- sides are hierarchies of the same course (by bare slug). Every reference is a
+-- target, so this doubles as the course's ordered list of references: `position`
+-- is the display order (the order they were added; the plan.md `targets:` list).
 CREATE TABLE IF NOT EXISTS hierarchy_targets (
   course    TEXT NOT NULL,
   outline   TEXT NOT NULL,             -- bare slug
   reference TEXT NOT NULL,             -- bare slug
+  position  INTEGER,                   -- order among the course's references
   PRIMARY KEY (course, outline, reference),
   FOREIGN KEY (course, outline)   REFERENCES hierarchies(course, hierarchy),
   FOREIGN KEY (course, reference) REFERENCES hierarchies(course, hierarchy)

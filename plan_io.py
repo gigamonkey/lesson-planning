@@ -336,10 +336,15 @@ def read_course(db_path, course_dir):
             conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"
                          " VALUES (?, ?, ?, ?, ?)", (course, hid, uuid, node_id, p))
 
-        # Outline -> reference targets.
-        for ref in targets:
-            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
-                         " VALUES (?, ?, ?)", (course, outline, ref))
+        # Outline -> reference targets, ordered. Every loaded reference is a target
+        # (references == the course's ordered reference list): keep the plan.md
+        # `targets:` order for those listed, then append any reference it omits.
+        ordered = [t for t in targets if t in seen]
+        ordered += [s for s in seen if s not in ordered]
+        for pos, ref in enumerate(ordered):
+            conn.execute("INSERT OR IGNORE INTO hierarchy_targets"
+                         "(course, outline, reference, position) VALUES (?, ?, ?, ?)",
+                         (course, outline, ref, pos))
         conn.commit()
         n_obj = conn.execute("SELECT count(*) FROM course_objectives WHERE course=?",
                              (course,)).fetchone()[0]
@@ -405,9 +410,17 @@ def load_plan_text(db_path, course, text):
 
         _rebuild_outline_nodes(conn, course, outline, units, lessons, los)
         n_place = _resolve_bullets(conn, course, outline, bullets, known_uuids)
-        for ref in targets:
-            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
-                         " VALUES (?, ?, ?)", (course, outline, ref))
+        # Ordered targets: the edited plan.md order for listed references, then any
+        # of the course's existing references it omits (references == targets).
+        refs = [r[0] for r in conn.execute(
+            "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0 ORDER BY hierarchy",
+            (course,))]
+        ordered = [t for t in targets if t in refs]
+        ordered += [s for s in refs if s not in ordered]
+        for pos, ref in enumerate(ordered):
+            conn.execute("INSERT OR IGNORE INTO hierarchy_targets"
+                         "(course, outline, reference, position) VALUES (?, ?, ?, ?)",
+                         (course, outline, ref, pos))
         conn.commit()
         n_obj = conn.execute("SELECT count(*) FROM course_objectives WHERE course=?",
                              (course,)).fetchone()[0]
@@ -484,7 +497,7 @@ def render_course(conn, course):
             "calendar": crow["calendar"],
             "targets": ", ".join(r["reference"] for r in conn.execute(
                 "SELECT reference FROM hierarchy_targets WHERE course=? AND outline=?"
-                " ORDER BY reference", (course, outline)))}
+                " ORDER BY position, reference", (course, outline)))}
 
     out = [_emit_front_matter(meta), ""]
     lessons_by_unit = {}

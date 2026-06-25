@@ -3,7 +3,7 @@ course: csp
 title: AP Computer Science Principles
 primary_outline: plan
 calendar: bhs-2026-2027
-targets: ced
+targets: ced, course
 ---
 
 # Unit: Introduction to Programming

@@ -129,10 +129,11 @@ def ensure_outline(conn, course):
         conn.execute("INSERT OR IGNORE INTO hierarchies(course, hierarchy, kind, editable, title,"
                      " source) VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)",
                      (course, O))
-        # Measure the plan against each of the course's references.
-        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
-                     " SELECT ?, ?, hierarchy FROM hierarchies WHERE course=? AND editable=0",
-                     (course, O, course))
+        # Measure the plan against each of the course's references (ordered).
+        conn.execute(
+            "INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference, position)"
+            " SELECT ?, ?, hierarchy, ROW_NUMBER() OVER (ORDER BY hierarchy) - 1"
+            " FROM hierarchies WHERE course=? AND editable=0", (course, O, course))
     # Make it the course's official outline if one isn't set yet.
     conn.execute("UPDATE courses SET primary_outline=? WHERE course=? AND primary_outline IS NULL",
                  (O, course))
@@ -169,10 +170,11 @@ def inject_nav():
                 "ORDER BY course").fetchall()
             by_course = {}
             for h in conn.execute(
-                "SELECT hierarchy, course, kind, editable, title FROM hierarchies "
-                "ORDER BY course, editable, (kind='ced') DESC, hierarchy"):
+                "SELECT h.hierarchy, h.course, h.editable, h.title FROM hierarchies h "
+                "LEFT JOIN hierarchy_targets t ON t.course=h.course AND t.reference=h.hierarchy "
+                "ORDER BY h.course, h.editable, t.position, h.hierarchy"):
                 by_course.setdefault(h["course"], []).append(
-                    {"hierarchy": h["hierarchy"], "kind": h["kind"],
+                    {"hierarchy": h["hierarchy"],
                      "editable": h["editable"], "label": h["title"]})
             for c in cs:
                 hs = by_course.get(c["course"], [])
@@ -479,8 +481,12 @@ def hierarchy_load_course(course):
     with db() as conn:
         O = outline_hierarchy(conn, course)
         if O:
-            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
-                         " VALUES (?, ?, ?)", (course, O, slug))
+            # Append the new reference to the course's ordered targets (a re-upload
+            # of an existing slug keeps its position via OR IGNORE).
+            conn.execute(
+                "INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference, position)"
+                " SELECT ?, ?, ?, COALESCE(MAX(position), -1) + 1 FROM hierarchy_targets"
+                " WHERE course=? AND outline=?", (course, O, slug, course, O))
     # The loaded hierarchy shows up in the setup table, so only surface the
     # non-obvious case: coverage edges now pointing at ids the new version dropped.
     if orphaned:
@@ -899,8 +905,9 @@ def objectives(course):
     BIG = 10 ** 9
     with db() as conn:
         cols = [dict(r) for r in conn.execute(
-            "SELECT hierarchy, kind, editable, title FROM hierarchies WHERE course=? "
-            "ORDER BY editable, (kind='ced') DESC, hierarchy", (course,))]
+            "SELECT h.hierarchy, h.editable, h.title FROM hierarchies h "
+            "LEFT JOIN hierarchy_targets t ON t.course=h.course AND t.reference=h.hierarchy "
+            "WHERE h.course=? ORDER BY h.editable, t.position, h.hierarchy", (course,))]
         slugs = [h["hierarchy"] for h in cols]
         # (hierarchy, node_id) -> (display_id, sort_ord, tooltip). References use the
         # verbatim id + document ordinal; editable outlines use synthetic ids.

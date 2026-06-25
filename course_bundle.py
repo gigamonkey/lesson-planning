@@ -60,8 +60,8 @@ def export_course(conn, course):
         "ORDER BY hierarchy, node_id, position, uuid", (course,))]
 
     targets = [dict(r) for r in conn.execute(
-        "SELECT outline, reference FROM hierarchy_targets WHERE course=? "
-        "ORDER BY outline, reference", (course,))]
+        "SELECT outline, reference, position FROM hierarchy_targets WHERE course=? "
+        "ORDER BY position, reference", (course,))]
 
     return {"version": BUNDLE_VERSION,
             "course": {"course": crow["course"], "title": crow["title"],
@@ -138,8 +138,8 @@ def import_course(conn, doc, course=None):
                      (cid, cv["hierarchy"], uuid_map.get(cv["uuid"], cv["uuid"]), cv["node_id"],
                       cv.get("position")))
     for t in doc["hierarchy_targets"]:
-        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
-                     " VALUES (?, ?, ?)", (cid, t["outline"], t["reference"]))
+        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference, position)"
+                     " VALUES (?, ?, ?, ?)", (cid, t["outline"], t["reference"], t.get("position")))
     return cid
 
 
