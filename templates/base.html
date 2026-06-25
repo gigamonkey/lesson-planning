@@ -547,7 +547,7 @@
               <li class="hieritem {{ 'active' if h.hierarchy == active_hierarchy else '' }}">
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
                    title="{{ h.label }}">{{ h.label }}</a>
-                <span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>
+                {% if h.kind %}<span class="pill pill-{{ h.kind }}">{{ h.kind }}</span>{% endif %}
                 <form method="post" class="objadd" enctype="multipart/form-data"
                       action="{{ url_for('hierarchy_upload', course=c.course, hierarchy=h.hierarchy) }}">
                   <label class="miniadd" title="Upload an objectives TSV (uuid, text, node_id) into this hierarchy">

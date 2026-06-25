@@ -4,11 +4,12 @@ This is the storage half of "markdown is the fundamental on-disk form of a
 course" (see `plans/markdown-as-storage.md` and `FORMAT.md`). A course directory
 holds:
 
-  * one or more REFERENCE hierarchy markdown files (csa/csp/ib/book flavor) --
-    load-only inputs, never rewritten here (loaded via load_nodes);
-  * the OUTLINE `plan.md` (course flavor) -- the one hierarchy this module writes,
-    whose front matter also carries the course-level wiring (course id, title,
-    primary_outline, targets);
+  * one or more REFERENCE hierarchy markdown files (each pins a bare, course-
+    relative `slug:`) -- load-only inputs, never rewritten here (loaded via
+    load_nodes);
+  * the OUTLINE `plan.md` (units -> lessons -> objective bullets) -- the one
+    hierarchy this module writes, whose front matter also carries the course-level
+    wiring (course id, title, primary_outline, targets);
   * `objectives.tsv` (uuid, text) -- the full uuid<->text registry for the pool;
   * `coverage.tsv` (uuid, hierarchy_id, node_id) -- the many-to-many coverage
     edges into the REFERENCE hierarchies (outline placement is structural in
@@ -169,14 +170,14 @@ def _slug_of(path, meta):
     return meta.get("slug") or os.path.splitext(os.path.basename(path))[0]
 
 
-def _set_duration(conn, hierarchy, node_id, duration):
+def _set_duration(conn, course, hierarchy, node_id, duration):
     if duration:
-        conn.execute("INSERT INTO node_duration(hierarchy, node_id, amount, unit)"
-                     " VALUES (?, ?, ?, ?)",
-                     (hierarchy, node_id, duration["amount"], duration["unit"]))
+        conn.execute("INSERT INTO node_duration(course, hierarchy, node_id, amount, unit)"
+                     " VALUES (?, ?, ?, ?, ?)",
+                     (course, hierarchy, node_id, duration["amount"], duration["unit"]))
 
 
-def _rebuild_outline_nodes(conn, outline, units, lessons, los):
+def _rebuild_outline_nodes(conn, course, outline, units, lessons, los):
     """Insert the outline's unit + lesson nodes (positional ids "1", "1.1", ...),
     each lesson's learning-objective attr, and any unit/lesson durations. The caller
     has already cleared the outline's nodes/node_attr/node_duration. Shared by
@@ -187,19 +188,20 @@ def _rebuild_outline_nodes(conn, outline, units, lessons, los):
         if parent in unit_has_lesson:
             unit_has_lesson[parent] = True
     for uid, utitle, duration in units:
-        conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
-                     (outline, uid, None, "unit", 0 if unit_has_lesson[uid] else 1,
-                      ordinal, utitle))
-        _set_duration(conn, outline, uid, duration)
+        conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     (course, outline, uid, None, "unit",
+                      0 if unit_has_lesson[uid] else 1, ordinal, utitle))
+        _set_duration(conn, course, outline, uid, duration)
         ordinal += 1
     for lid, parent, ltitle, duration in lessons:
-        conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)",
-                     (outline, lid, parent, "lesson", 1, ordinal, ltitle))
+        conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     (course, outline, lid, parent, "lesson", 1, ordinal, ltitle))
         ordinal += 1
         if los.get(lid):
-            conn.execute("INSERT INTO node_attr(hierarchy, node_id, name, value)"
-                         " VALUES (?, ?, 'learning_objective', ?)", (outline, lid, los[lid]))
-        _set_duration(conn, outline, lid, duration)
+            conn.execute("INSERT INTO node_attr(course, hierarchy, node_id, name, value)"
+                         " VALUES (?, ?, ?, 'learning_objective', ?)",
+                         (course, outline, lid, los[lid]))
+        _set_duration(conn, course, outline, lid, duration)
 
 
 def _resolve_bullets(conn, course, outline, bullets, known_uuids):
@@ -235,8 +237,8 @@ def _resolve_bullets(conn, course, outline, bullets, known_uuids):
             # The bullet order within a lesson/unit is the per-node order.
             p = outline_pos.get(placement, 0)
             outline_pos[placement] = p + 1
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
-                         " VALUES (?, ?, ?, ?)", (outline, uuid, placement, p))
+            conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"
+                         " VALUES (?, ?, ?, ?, ?)", (course, outline, uuid, placement, p))
             n_place += 1
     return n_place
 
@@ -265,25 +267,19 @@ def read_course(db_path, course_dir):
         meta, units, lessons, los, bullets = parse_plan(f.read())
     course = meta["course"]
     title = meta.get("title") or course.upper()
-    # The outline slug comes from the front matter (course-scoped, e.g. "csa-plan"),
-    # NOT the plan's filename -- every plan is named plan.md, so the filename would
-    # give every course the same slug "plan" (a hierarchies PK collision) and rename
-    # the outline on each round-trip.
+    # The outline slug is course-relative (bare, normally "plan") -- from the
+    # front matter's primary_outline, else the plan's filename stem.
     outline = meta.get("primary_outline") or _slug_of(plan_path, meta)
     targets = _split_list(meta.get("targets"))
 
     conn = sqlite3.connect(db_path)
     try:
         conn.executescript(SCHEMA_DDL)
-        # Scoped reset: drop everything owned by this course, then rebuild.
-        hs = [h for (h,) in conn.execute(
-            "SELECT hierarchy FROM hierarchies WHERE course=?", (course,))] + [outline]
-        ph = ",".join("?" * len(hs))
-        for tbl in ("coverage", "node_attr", "node_duration", "nodes"):
-            conn.execute(f"DELETE FROM {tbl} WHERE hierarchy IN ({ph})", hs)
-        conn.execute(f"DELETE FROM hierarchy_targets WHERE outline IN ({ph})", hs)
-        conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
-        conn.execute("DELETE FROM hierarchies WHERE course=?", (course,))
+        # Scoped reset: every hierarchy-scoped table carries `course`, so dropping
+        # this course's rows is a flat per-table delete.
+        for tbl in ("coverage", "node_attr", "node_duration", "nodes",
+                    "hierarchy_targets", "course_objectives", "hierarchies"):
+            conn.execute(f"DELETE FROM {tbl} WHERE course=?", (course,))
         conn.execute(
             "INSERT INTO courses(course, title, primary_outline, calendar)"
             " VALUES (?, ?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
@@ -292,14 +288,23 @@ def read_course(db_path, course_dir):
 
         # Reference hierarchies (editable=0), parsed straight from markdown.
         n_refs = 0
+        seen = {}   # bare slug -> filename, to catch in-course slug collisions
         for path in refs:
             with open(path, encoding="utf-8") as f:
                 ref_text = f.read()
             doc = load_nodes.parse(ref_text)
-            slug = doc.get("slug") or os.path.splitext(os.path.basename(path))[0]
-            rows = load_nodes.build_rows(slug, doc["nodes"])
-            durations = load_nodes.build_durations(slug, doc["nodes"])
-            load_nodes.load_into(conn, slug, course, doc.get("kind") or "reference",
+            stem = os.path.splitext(os.path.basename(path))[0]
+            slug = doc.get("slug") or stem
+            if doc.get("slug") and doc["slug"] != stem:
+                print(f"warning: {os.path.basename(path)!r} pins slug {slug!r}; rename "
+                      f"the file to {slug}.md (the slug is identity -- don't edit it)")
+            if slug in seen:
+                raise ValueError(f"two hierarchies in {course!r} resolve to slug {slug!r}: "
+                                 f"{seen[slug]} and {os.path.basename(path)}")
+            seen[slug] = os.path.basename(path)
+            rows = load_nodes.build_rows(course, slug, doc["nodes"])
+            durations = load_nodes.build_durations(course, slug, doc["nodes"])
+            load_nodes.load_into(conn, slug, course, doc.get("kind"),
                                  title, rows, source=os.path.basename(path),
                                  title=doc.get("title"), durations=durations,
                                  source_md=ref_text)
@@ -307,10 +312,10 @@ def read_course(db_path, course_dir):
 
         # Outline hierarchy (editable=1): units + lessons as positional nodes.
         conn.execute(
-            "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
+            "INSERT INTO hierarchies(course, hierarchy, kind, editable, title, source)"
             " VALUES (?, ?, ?, 1, ?, ?)",
-            (outline, course, OUTLINE_KIND, "Course outline", os.path.basename(plan_path)))
-        _rebuild_outline_nodes(conn, outline, units, lessons, los)
+            (course, outline, OUTLINE_KIND, "Course outline", os.path.basename(plan_path)))
+        _rebuild_outline_nodes(conn, course, outline, units, lessons, los)
 
         # Objectives: seed the uuid<->text registry, then resolve each bullet's
         # token (by prefix) to a uuid, or intern by text / mint a fresh uuid.
@@ -328,13 +333,13 @@ def read_course(db_path, course_dir):
         for uuid, hid, node_id in _read_coverage_tsv(course_dir):
             p = ref_pos.get((hid, node_id), 0)
             ref_pos[(hid, node_id)] = p + 1
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
-                         " VALUES (?, ?, ?, ?)", (hid, uuid, node_id, p))
+            conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"
+                         " VALUES (?, ?, ?, ?, ?)", (course, hid, uuid, node_id, p))
 
         # Outline -> reference targets.
         for ref in targets:
-            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
-                         " VALUES (?, ?)", (outline, ref))
+            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
+                         " VALUES (?, ?, ?)", (course, outline, ref))
         conn.commit()
         n_obj = conn.execute("SELECT count(*) FROM course_objectives WHERE course=?",
                              (course,)).fetchone()[0]
@@ -373,7 +378,7 @@ def load_plan_text(db_path, course, text):
         if not row:
             raise ValueError(f"unknown course {course!r}")
         cur_outline, cur_title = row
-        outline = meta.get("primary_outline") or cur_outline or f"{course}-plan"
+        outline = meta.get("primary_outline") or cur_outline or "plan"
         title = meta.get("title") or cur_title or course.upper()
 
         # The token registry is the course's CURRENT pool (what render_course
@@ -383,11 +388,10 @@ def load_plan_text(db_path, course, text):
 
         # Reset ONLY the outline + the pool; reference hierarchies and their
         # coverage edges are not represented in plan.md, so they stay as they are.
-        conn.execute("DELETE FROM coverage WHERE hierarchy=?", (outline,))
-        conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (outline,))
-        conn.execute("DELETE FROM node_duration WHERE hierarchy=?", (outline,))
-        conn.execute("DELETE FROM nodes WHERE hierarchy=?", (outline,))
-        conn.execute("DELETE FROM hierarchy_targets WHERE outline=?", (outline,))
+        for tbl in ("coverage", "node_attr", "node_duration", "nodes"):
+            conn.execute(f"DELETE FROM {tbl} WHERE course=? AND hierarchy=?", (course, outline))
+        conn.execute("DELETE FROM hierarchy_targets WHERE course=? AND outline=?",
+                     (course, outline))
         conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
 
         conn.execute(
@@ -395,15 +399,15 @@ def load_plan_text(db_path, course, text):
             (title, outline, meta.get("calendar"), course))
         # The outline hierarchy row normally already exists; ensure it does.
         conn.execute(
-            "INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title, source)"
+            "INSERT OR IGNORE INTO hierarchies(course, hierarchy, kind, editable, title, source)"
             " VALUES (?, ?, ?, 1, ?, ?)",
-            (outline, course, OUTLINE_KIND, "Course outline", PLAN_FILE))
+            (course, outline, OUTLINE_KIND, "Course outline", PLAN_FILE))
 
-        _rebuild_outline_nodes(conn, outline, units, lessons, los)
+        _rebuild_outline_nodes(conn, course, outline, units, lessons, los)
         n_place = _resolve_bullets(conn, course, outline, bullets, known_uuids)
         for ref in targets:
-            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
-                         " VALUES (?, ?)", (outline, ref))
+            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
+                         " VALUES (?, ?, ?)", (course, outline, ref))
         conn.commit()
         n_obj = conn.execute("SELECT count(*) FROM course_objectives WHERE course=?",
                              (course,)).fetchone()[0]
@@ -450,19 +454,20 @@ def render_course(conn, course):
         raise KeyError(course)
     outline = crow["primary_outline"] or _first_outline(conn, course)
 
-    units = conn.execute("SELECT node_id, text FROM nodes WHERE hierarchy=? AND level='unit'"
-                        " ORDER BY ordinal", (outline,)).fetchall()
-    lessons = conn.execute("SELECT node_id, parent_id, text FROM nodes WHERE hierarchy=?"
-                         " AND level='lesson' ORDER BY ordinal", (outline,)).fetchall()
+    units = conn.execute("SELECT node_id, text FROM nodes WHERE course=? AND hierarchy=?"
+                        " AND level='unit' ORDER BY ordinal", (course, outline)).fetchall()
+    lessons = conn.execute("SELECT node_id, parent_id, text FROM nodes WHERE course=?"
+                         " AND hierarchy=? AND level='lesson' ORDER BY ordinal",
+                         (course, outline)).fetchall()
     dur_of = {r["node_id"]: {"amount": r["amount"], "unit": r["unit"]}
               for r in conn.execute("SELECT node_id, amount, unit FROM node_duration"
-                                    " WHERE hierarchy=?", (outline,))}
+                                    " WHERE course=? AND hierarchy=?", (course, outline))}
     los = {r["node_id"]: r["value"] for r in conn.execute(
-        "SELECT node_id, value FROM node_attr WHERE hierarchy=? AND name='learning_objective'",
-        (outline,))}
+        "SELECT node_id, value FROM node_attr WHERE course=? AND hierarchy=?"
+        " AND name='learning_objective'", (course, outline))}
     placed = {}   # node_id -> [uuid], in per-node coverage.position order
-    for r in conn.execute("SELECT uuid, node_id, position FROM coverage WHERE hierarchy=?"
-                          " ORDER BY position, uuid", (outline,)):
+    for r in conn.execute("SELECT uuid, node_id, position FROM coverage WHERE course=?"
+                          " AND hierarchy=? ORDER BY position, uuid", (course, outline)):
         placed.setdefault(r["node_id"], []).append(r["uuid"])
 
     pool = conn.execute("SELECT co.uuid, co.position, o.text FROM course_objectives co"
@@ -478,8 +483,8 @@ def render_course(conn, course):
             "primary_outline": outline,
             "calendar": crow["calendar"],
             "targets": ", ".join(r["reference"] for r in conn.execute(
-                "SELECT reference FROM hierarchy_targets WHERE outline=? ORDER BY reference",
-                (outline,)))}
+                "SELECT reference FROM hierarchy_targets WHERE course=? AND outline=?"
+                " ORDER BY reference", (course, outline)))}
 
     out = [_emit_front_matter(meta), ""]
     lessons_by_unit = {}
@@ -534,8 +539,8 @@ def render_course(conn, course):
     # back by encounter order); stable across saves until the order changes.
     cov = conn.execute(
         "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv"
-        " JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?"
-        " WHERE cv.hierarchy<>? ORDER BY cv.hierarchy, cv.node_id, cv.position, cv.uuid",
+        " WHERE cv.course=? AND cv.hierarchy<>?"
+        " ORDER BY cv.hierarchy, cv.node_id, cv.position, cv.uuid",
         (course, outline)).fetchall()
     cov_buf = io.StringIO()
     w = csv.writer(cov_buf, delimiter="\t", lineterminator="\n")
@@ -612,8 +617,9 @@ def is_dirty(conn, course, course_dir):
     return False
 
 
-def import_structure(conn, outline, reference):
-    """Rebuild `outline`'s structure from the first two levels of `reference`.
+def import_structure(conn, course, outline, reference):
+    """Rebuild `outline`'s structure from the first two levels of `reference`
+    (both bare slugs in `course`).
 
     Each level-1 (root) node of the reference becomes a unit; each of its level-2
     children becomes a lesson; and every objective covering a lesson's subtree (the
@@ -633,8 +639,8 @@ def import_structure(conn, outline, reference):
     """
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT node_id, parent_id, ordinal, text FROM nodes WHERE hierarchy=?",
-        (reference,)).fetchall()
+        "SELECT node_id, parent_id, ordinal, text FROM nodes WHERE course=? AND hierarchy=?",
+        (course, reference)).fetchall()
     children = {}
     for r in rows:
         children.setdefault(r["parent_id"], []).append(r)
@@ -649,14 +655,13 @@ def import_structure(conn, outline, reference):
         return ids
 
     cov = {}   # reference node_id -> [uuid], in the reference's per-node order
-    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE hierarchy=?"
-                          " ORDER BY position, uuid", (reference,)):
+    for r in conn.execute("SELECT uuid, node_id FROM coverage WHERE course=? AND hierarchy=?"
+                          " ORDER BY position, uuid", (course, reference)):
         cov.setdefault(r["node_id"], []).append(r["uuid"])
 
     # Replace the outline's structure wholesale.
-    conn.execute("DELETE FROM coverage WHERE hierarchy=?", (outline,))
-    conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (outline,))
-    conn.execute("DELETE FROM nodes WHERE hierarchy=?", (outline,))
+    for tbl in ("coverage", "node_attr", "nodes"):
+        conn.execute(f"DELETE FROM {tbl} WHERE course=? AND hierarchy=?", (course, outline))
 
     placed = set()   # global: each objective lands in exactly one lesson/unit
     node_pos = {}    # outline node_id -> next per-node coverage position
@@ -671,23 +676,25 @@ def import_structure(conn, outline, reference):
             placed.add(u)
             p = node_pos.get(node_id, 0)
             node_pos[node_id] = p + 1
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
-                         " VALUES (?, ?, ?, ?)", (outline, u, node_id, p))
+            conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"
+                         " VALUES (?, ?, ?, ?, ?)", (course, outline, u, node_id, p))
             n_placed += 1
 
     for unit in children.get(None, []):
         uid = _new_uuid()
         lessons = children.get(unit["node_id"], [])
-        conn.execute("INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf,"
-                     " ordinal, text) VALUES (?, ?, NULL, 'unit', ?, ?, ?)",
-                     (outline, uid, 0 if lessons else 1, ordinal, title_of.get(unit["node_id"], "")))
+        conn.execute("INSERT INTO nodes(course, hierarchy, node_id, parent_id, level, is_leaf,"
+                     " ordinal, text) VALUES (?, ?, ?, NULL, 'unit', ?, ?, ?)",
+                     (course, outline, uid, 0 if lessons else 1, ordinal,
+                      title_of.get(unit["node_id"], "")))
         ordinal += 1
         n_units += 1
         for lesson in lessons:
             lid = _new_uuid()
-            conn.execute("INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf,"
-                         " ordinal, text) VALUES (?, ?, ?, 'lesson', 1, ?, ?)",
-                         (outline, lid, uid, ordinal, title_of.get(lesson["node_id"], "")))
+            conn.execute("INSERT INTO nodes(course, hierarchy, node_id, parent_id, level, is_leaf,"
+                         " ordinal, text) VALUES (?, ?, ?, ?, 'lesson', 1, ?, ?)",
+                         (course, outline, lid, uid, ordinal,
+                          title_of.get(lesson["node_id"], "")))
             ordinal += 1
             n_lessons += 1
             uuids = [u for nid in subtree(lesson["node_id"]) for u in cov.get(nid, [])]
@@ -700,10 +707,11 @@ def import_structure(conn, outline, reference):
 
 
 def _first_outline(conn, course):
+    """Fallback outline slug when courses.primary_outline is unset: the course's
+    (normally only) editable hierarchy, else the conventional 'plan'."""
     row = conn.execute("SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1"
-                      " ORDER BY (kind=?) DESC, hierarchy LIMIT 1",
-                      (course, OUTLINE_KIND)).fetchone()
-    return row[0] if row else course + "-plan"
+                      " ORDER BY hierarchy LIMIT 1", (course,)).fetchone()
+    return row[0] if row else "plan"
 
 
 # The schema this module needs present (a superset is fine). Applied with IF NOT

@@ -31,20 +31,19 @@ def export_course(conn, course):
     if not crow:
         raise KeyError(course)
 
-    hierarchies, slugs = [], []
+    hierarchies = []
     for h in conn.execute(
         "SELECT hierarchy, kind, editable, title, source, source_md FROM hierarchies "
         "WHERE course=? ORDER BY editable, hierarchy", (course,)):
-        slugs.append(h["hierarchy"])
         nodes = [dict(r) for r in conn.execute(
             "SELECT node_id, parent_id, level, is_leaf, ordinal, text FROM nodes "
-            "WHERE hierarchy=? ORDER BY ordinal, node_id", (h["hierarchy"],))]
+            "WHERE course=? AND hierarchy=? ORDER BY ordinal, node_id", (course, h["hierarchy"]))]
         attrs = [dict(r) for r in conn.execute(
             "SELECT node_id, name, value FROM node_attr "
-            "WHERE hierarchy=? ORDER BY node_id, name", (h["hierarchy"],))]
+            "WHERE course=? AND hierarchy=? ORDER BY node_id, name", (course, h["hierarchy"]))]
         durations = [dict(r) for r in conn.execute(
             "SELECT node_id, amount, unit FROM node_duration "
-            "WHERE hierarchy=? ORDER BY node_id", (h["hierarchy"],))]
+            "WHERE course=? AND hierarchy=? ORDER BY node_id", (course, h["hierarchy"]))]
         hierarchies.append({"hierarchy": h["hierarchy"], "kind": h["kind"],
                             "editable": h["editable"], "title": h["title"],
                             "source": h["source"], "source_md": h["source_md"],
@@ -56,17 +55,13 @@ def export_course(conn, course):
         "JOIN course_objectives co ON co.uuid=o.uuid AND co.course=? "
         "ORDER BY co.position, o.text", (course,))]
 
-    coverage = []
-    if slugs:
-        ph = ",".join("?" * len(slugs))
-        coverage = [dict(r) for r in conn.execute(
-            f"SELECT hierarchy, uuid, node_id, position FROM coverage WHERE hierarchy IN ({ph}) "
-            "ORDER BY hierarchy, node_id, position, uuid", slugs)]
+    coverage = [dict(r) for r in conn.execute(
+        "SELECT hierarchy, uuid, node_id, position FROM coverage WHERE course=? "
+        "ORDER BY hierarchy, node_id, position, uuid", (course,))]
 
     targets = [dict(r) for r in conn.execute(
-        "SELECT ht.outline, ht.reference FROM hierarchy_targets ht "
-        "JOIN hierarchies h ON h.hierarchy=ht.outline WHERE h.course=? "
-        "ORDER BY ht.outline, ht.reference", (course,))]
+        "SELECT outline, reference FROM hierarchy_targets WHERE course=? "
+        "ORDER BY outline, reference", (course,))]
 
     return {"version": BUNDLE_VERSION,
             "course": {"course": crow["course"], "title": crow["title"],
@@ -91,29 +86,28 @@ def import_course(conn, doc, course=None):
     cid = course or doc["course"]["course"]
     if conn.execute("SELECT 1 FROM courses WHERE course=?", (cid,)).fetchone():
         raise ValueError(f"course {cid!r} already exists")
-    for h in doc["hierarchies"]:
-        if conn.execute("SELECT 1 FROM hierarchies WHERE hierarchy=?",
-                        (h["hierarchy"],)).fetchone():
-            raise ValueError(f"hierarchy slug {h['hierarchy']!r} already exists")
+    # Slugs are course-relative now, so a fresh course can't collide with another.
 
     conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)",
                  (cid, doc["course"]["title"]))
     for h in doc["hierarchies"]:
-        conn.execute("INSERT INTO hierarchies(hierarchy, course, kind, editable, title,"
+        conn.execute("INSERT INTO hierarchies(course, hierarchy, kind, editable, title,"
                      " source, source_md) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                     (h["hierarchy"], cid, h["kind"], h["editable"], h["title"],
+                     (cid, h["hierarchy"], h["kind"], h["editable"], h["title"],
                       h.get("source"), h.get("source_md")))
         conn.executemany(
-            "INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [(h["hierarchy"], n["node_id"], n["parent_id"], n["level"], n["is_leaf"],
+            "INSERT INTO nodes(course, hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [(cid, h["hierarchy"], n["node_id"], n["parent_id"], n["level"], n["is_leaf"],
               n["ordinal"], n["text"]) for n in h["nodes"]])
         conn.executemany(
-            "INSERT INTO node_attr(hierarchy, node_id, name, value) VALUES (?, ?, ?, ?)",
-            [(h["hierarchy"], a["node_id"], a["name"], a["value"]) for a in h.get("node_attr", [])])
+            "INSERT INTO node_attr(course, hierarchy, node_id, name, value) VALUES (?, ?, ?, ?, ?)",
+            [(cid, h["hierarchy"], a["node_id"], a["name"], a["value"])
+             for a in h.get("node_attr", [])])
         conn.executemany(
-            "INSERT INTO node_duration(hierarchy, node_id, amount, unit) VALUES (?, ?, ?, ?)",
-            [(h["hierarchy"], d["node_id"], d["amount"], d["unit"])
+            "INSERT INTO node_duration(course, hierarchy, node_id, amount, unit)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [(cid, h["hierarchy"], d["node_id"], d["amount"], d["unit"])
              for d in h.get("node_duration", [])])
 
     # Restore the course's outline pointer + calendar binding now that its
@@ -139,13 +133,13 @@ def import_course(conn, doc, course=None):
                      " VALUES (?, ?, ?)", (cid, uid, o.get("position")))
 
     for cv in doc["coverage"]:
-        conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
-                     " VALUES (?, ?, ?, ?)",
-                     (cv["hierarchy"], uuid_map.get(cv["uuid"], cv["uuid"]), cv["node_id"],
+        conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"
+                     " VALUES (?, ?, ?, ?, ?)",
+                     (cid, cv["hierarchy"], uuid_map.get(cv["uuid"], cv["uuid"]), cv["node_id"],
                       cv.get("position")))
     for t in doc["hierarchy_targets"]:
-        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference) VALUES (?, ?)",
-                     (t["outline"], t["reference"]))
+        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
+                     " VALUES (?, ?, ?)", (cid, t["outline"], t["reference"]))
     return cid
 
 

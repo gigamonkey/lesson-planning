@@ -1,5 +1,12 @@
 # Retire flavor sniffing
 
+> **Status: done.** All four uses are gone. `flavor` no longer exists: level-1
+> ids come from `parse_root_id` (pattern list + generic `# ID TEXT` fallback), the
+> course outline is parsed only by `plan_io.parse_plan`, metadata is declared in
+> front matter, and `to_markdown`/`detect_flavor`/`LEVEL_TAGS`/`FLAVOR_*` were
+> deleted.
+
+
 Now that a reference hierarchy declares its level names in a required `levels:`
 front-matter key (see `FORMAT.md`, format 1.3.0), the detected **flavor**
 (`csa`/`csp`/`ib`/`book`/`course`) no longer names levels. It still survives in a

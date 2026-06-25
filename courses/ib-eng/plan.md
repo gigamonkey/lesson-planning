@@ -1,9 +1,9 @@
 ---
 course: ib-eng
 title: IB HL/Software Engineering
-primary_outline: ib-eng-plan
+primary_outline: plan
 calendar: bhs-2026-2027
-targets: ib-eng-syllabus
+targets: syllabus
 ---
 
 ## Pool — not yet placed

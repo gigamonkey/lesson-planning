@@ -17,8 +17,8 @@ One course directory holds everything that describes that course:
 ```
 courses/                 # the corpus root (load source AND export target)
   widgets/
-    widgets-ced.md       # a reference hierarchy (csa flavor) — load-only input
-    plan.md              # the outline (course flavor) + course wiring in front matter
+    ced.md               # a reference hierarchy — load-only input
+    plan.md              # the outline + course wiring in front matter
     objectives.tsv       # (uuid, text)                 — machine-maintained
     coverage.tsv         # (uuid, hierarchy_id, node_id) — machine-maintained
 ```
@@ -26,63 +26,73 @@ courses/                 # the corpus root (load source AND export target)
 Three file roles:
 
 - **Reference hierarchy markdown** — one file per external standard (a CED, an IB
-  syllabus, a book), in its flavor's heading shape. Loaded read-only
-  (`hierarchies.editable = 0`); the app and CLI never rewrite these.
+  syllabus, a book). Loaded read-only (`hierarchies.editable = 0`); the app and
+  CLI never rewrite these.
 
-- **The outline `plan.md`** — the course's authored lesson plan, in the `course`
-  flavor. The one hierarchy file the app writes (`hierarchies.editable = 1`). Its
-  front matter additionally carries the **course-level wiring**.
+- **The outline `plan.md`** — the course's authored lesson plan (units → lessons →
+  objective bullets). The one hierarchy file the app writes
+  (`hierarchies.editable = 1`); its front matter additionally carries the
+  **course-level wiring**.
 
 - **The two TSVs** — the normalized connective tissue (objective identity and the
   many-to-many coverage that cannot live inline in any one file).
 
-### Slugs
+### Slugs (hierarchy identity)
 
-Each hierarchy's id (`hierarchy_id` / the `nodes.hierarchy` column / the keys in
-`coverage.tsv` and the target list) is the markdown file's **filename stem**:
-`widgets-ced.md` → `widgets-ced`, `plan.md` → `plan`. A front-matter `slug:`
-overrides it.
+A hierarchy is identified by **(course, slug)**. The slug is **course-relative
+("bare")** — unique only within its course — so the on-disk form carries no course
+prefix and the same file can be dropped into two courses. It is **pinned** in the
+front matter's `slug:` key (authoritative on load), and by convention the file is
+named `{slug}.md` (`ced.md` → `ced`, `plan.md` → `plan`). If `slug:` is absent the
+filename stem is used; if the stem and a pinned `slug:` disagree, the loader warns
+(rename the file to match — never edit the slug, which is the identity coverage
+keys on). `coverage.tsv`, the outline's `targets:`, and `primary_outline:` all use
+these bare slugs; the database scopes them to the course.
 
 ## Reference hierarchy markdown
 
 A `---` front-matter block (carrying the required `levels:` key) followed by ATX
 headings whose depth encodes tree depth. Each heading is `ID␠TEXT` (the id is a
-whitespace-free token); body lines under a heading belong to that node. The
-level-1 heading both names the root and signals the **flavor** — which governs
-only the heading/id *shape*, not the level names:
+whitespace-free token); body lines under a heading belong to that node. There is
+no "flavor": the level-1 id is read by a small list of heading patterns, then a
+generic `# ID TEXT` fallback (id = first token, like every deeper level), so a new
+format needs no special casing:
 
-| Flavor   | Level 1                      | Level 2 …                                       |
-|----------|------------------------------|-------------------------------------------------|
-| `csa`    | `# Unit N: TITLE`            | `## 1.1 …`, `### 1.1.A …`, `#### 1.1.A.1 …`     |
-| `csp`    | `# Big Idea N: TITLE (CODE)` | `## CRD-1 …`, `### CRD-1.A …`, `#### CRD-1.A.1 …` (level-1 id is the parenthesized CODE) |
-| `book`   | `# Chapter N: TITLE`         | `## N.M …`, `### N.M.K …`                       |
-| `ib`     | `# Theme X: TITLE`           | `## A1 …`, `### A1.1 …`, `#### A1.1.1 …`, `##### A1.1.1.1 …` |
+| Level-1 heading              | Level-1 id      | Deeper levels                  |
+|------------------------------|-----------------|--------------------------------|
+| `# Unit N: TITLE`            | `N`             | `## 1.1 …`, `### 1.1.A …`      |
+| `# Big Idea N: TITLE (CODE)` | the `(CODE)`    | `## CRD-1 …`, `### CRD-1.A …`  |
+| `# Chapter N: TITLE`         | `N`             | `## N.M …`, `### N.M.K …`      |
+| `# Theme X: TITLE`           | `X`             | `## A1 …`, `### A1.1 …`        |
+| `# ID TITLE` (any new shape) | `ID`            | `## ID …` (first token)        |
 
 Front matter (a small YAML subset — scalars only):
 
 ```
 ---
+slug: ced
 levels: unit, topic, learning-objective, essential-knowledge
-kind: ced
 title: AP Computer Science A — 2025 CED
+kind: ced
 ---
 ```
 
+- `slug:` — the bare, course-relative identity (see Slugs above). Pinned here;
+  the filename should match (`{slug}.md`). Optional — defaults to the filename
+  stem — but pinning makes the hierarchy robust to file renames.
 - `levels:` — **required**. A comma-separated list of the level **tag** names in
   depth order: `levels[i]` names heading depth *i+1* (so `levels: unit, lab, page`
   tags `#` nodes `unit`, `##` nodes `lab`, `###` nodes `page`). Each node's tag is
   stored as its `level`. The producer knows its own vocabulary, so it states it
-  here rather than the parser inferring it from the flavor — a new format with
-  the same heading shape but different level names just declares different names.
-  A heading nested deeper than the declared levels is an error.
-- `kind:` — **required**. What the hierarchy *is* (`ced`, `syllabus`, `book`, …).
-  The producer knows it, so it's declared rather than inferred from the flavor.
-- `title:` — a human title for the hierarchy (optional).
-- `slug:` — overrides the filename-stem hierarchy id (optional).
+  here. A heading nested deeper than the declared levels is an error.
+- `title:` — **required**. The hierarchy's human label, shown in the sidebar.
+- `kind:` — optional, free-form **provenance** (`ced`, `syllabus`, a textbook
+  name, `BJC`, …). A display label only; nothing branches on it, and a course may
+  hold two hierarchies of the same kind.
 
 Ids are kept verbatim and treated as opaque. (The outline `plan.md` is parsed
-separately and does **not** take a `levels:` key — its levels are always unit /
-lesson.)
+separately and does **not** take a `levels:`/`kind:` key — its levels are always
+unit / lesson.)
 
 ## The outline: `plan.md`
 

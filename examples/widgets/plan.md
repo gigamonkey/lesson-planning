@@ -2,7 +2,7 @@
 course: widgets
 title: Intro to Widgets
 primary_outline: plan
-targets: widgets-ced
+targets: ced
 ---
 
 # Unit: Widget Basics

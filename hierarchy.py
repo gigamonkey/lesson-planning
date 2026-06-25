@@ -1,34 +1,23 @@
 """Parse a curriculum/book hierarchy markdown file into a flat list of sections.
 
 The curriculum-hierarchy markdown parser this repo owns (see FORMAT.md); used by
-load_nodes.py (references) and plan_io.py (helpers). The flavor is detected from
-the first level-1 heading; sections carry their ids verbatim (e.g. "1", "1.1",
-"1.1.A", "1.1.A.1") and consumers apply their own id transformations.
+load_nodes.py (references) and plan_io.py (helpers). There is no "flavor" concept:
+heading *depth* encodes tree depth, ids are verbatim (the level-1 id via a small
+list of id-extraction patterns, deeper ids the first whitespace token), and level
+*names* are declared in the required `levels:` front-matter key (an ordered list,
+depth 1 first). So a producer states its own vocabulary rather than the parser
+inferring it. See plans/retire-flavor-sniffing.md for the history.
 
-Level *names* are NOT inferred — a reference declares them in a required
-`levels:` front-matter key (an ordered list, depth 1 first), so a producer that
-knows its own vocabulary states it rather than relying on fragile inference. The
-detected flavor governs only the heading/id *shape*, not the level vocabulary.
+The known level-1 heading shapes parse_root_id recognizes (then a generic
+`# ID TEXT` fallback, id = first token, for any new format):
 
-Flavors and the heading shapes they parse:
+- `# Big Idea N: TITLE (CODE)` -> id is the parenthesized CODE
+- `# Unit N: TITLE`            -> id "N"
+- `# Theme X: TITLE`           -> id "X"
+- `# Chapter N: TITLE`         -> id "N"
 
-- csp:    `# Big Idea N: TITLE (CODE)` (level-1 id is the parenthesized CODE)
-- csa:    `# Unit N: TITLE`
-- ib:     `# Theme X: TITLE`
-- book:   `# Chapter N: TITLE`
-- course: `# Unit N: TITLE`, lessons at level 2, objectives as bullets
-
-The conventional tag vocabularies (`LEVEL_TAGS`) are kept only as the names
-producers usually declare; they no longer drive parsing and nothing in this
-module reads them anymore (see plans/retire-flavor-sniffing.md).
-
-The `course` flavor shares csa's level-1 heading (`# Unit N: TITLE`), so the two
-are told apart by heading *depth* (see detect_flavor): csa nests headings down to
-level 3-4 (`### 1.1.A`, `#### 1.1.A.1`), while course stops at level-2 lesson
-headings (`## N.1 TITLE`) and lists its level-3 raw objectives as a markdown
-bulleted list (`- …`) instead of `###` headings. Bullet objectives have no
-authored id, so one is synthesized as the lesson id plus a sequential number
-(lesson `1.1` -> `1.1.1`, `1.1.2`, …), like IB content.
+The course OUTLINE (units/lessons + objective bullets) is a separate concern,
+parsed by plan_io.parse_plan, not here.
 """
 
 import re
@@ -39,7 +28,11 @@ BIG_IDEA = re.compile(r"^Big Idea \d+: (.+) \((\w+)\)$")
 UNIT = re.compile(r"^Unit (\d+): (.+)$")
 THEME = re.compile(r"^Theme ([AB]): (.+)$")
 CHAPTER = re.compile(r"^Chapter (\d+): (.+)$")
-# A course-flavor raw objective: a top-level (column-0) markdown bullet.
+# Fallback level-1 heading: `# ID TEXT` (id = first whitespace token), the same
+# shape every deeper heading uses, so a new format needs no bespoke pattern.
+GENERIC_ROOT = re.compile(r"^(\S+)\s+(.+)$")
+# A raw objective bullet in the course outline: a top-level (column-0) markdown
+# bullet. Used by plan_io.parse_plan (the outline parser), not by to_nodes.
 OBJECTIVE_BULLET = re.compile(r"^[-*] +(.+)$")
 
 # A trailing duration tag on a node's heading, e.g. "… (2 weeks)", "… (3 days)",
@@ -74,33 +67,6 @@ def format_duration(duration):
     unit = duration["unit"] + ("" if amount == 1 else "s")
     return f" ({amount} {unit})"
 
-# Conventional per-level tag vocabularies. No longer drive parsing (a reference's
-# `levels:` front matter does) and no longer read by any code here; kept as the
-# names producers usually declare, pending the flavor retirement (step 4 of
-# plans/retire-flavor-sniffing.md).
-LEVEL_TAGS = {
-    "csp": {
-        1: "big-idea",
-        2: "essential-understanding",
-        3: "learning-objective",
-        4: "essential-knowledge",
-    },
-    "csa": {
-        1: "unit",
-        2: "topic",
-        3: "learning-objective",
-        4: "essential-knowledge",
-    },
-    "ib": {
-        1: "theme",
-        2: "topic",
-        3: "subtopic",
-        4: "learning-statement",
-        5: "content",
-    },
-    "book": {1: "chapter", 2: "section", 3: "subsection"},
-    "course": {1: "unit", 2: "lesson", 3: "objective"},
-}
 
 # Version of the node-list document emitted by to_nodes (see FORMAT.md).
 # Semantic versioning: bump major for any breaking change to an existing field or
@@ -109,10 +75,11 @@ LEVEL_TAGS = {
 # 1.2.0 added the (nullable) per-node "duration" field.
 # 1.3.0 sources "levels" (and each node's tag) from a now-required `levels:`
 #       front-matter key instead of the detected flavor.
-# 2.0.0 makes the format metadata-driven: `levels:` and `kind:` are both required
-#       in front matter (no flavor-derived fallbacks), and the detected flavor
-#       governs only the heading/id shape. Breaking: a reference without `levels:`
-#       or `kind:` is rejected.
+# 2.0.0 makes the format metadata-driven and removes the "flavor" concept. The
+#       output drops "flavor" and adds "slug" (the front matter's bare id). The
+#       required `levels:` front matter carries level names; `kind:` and `slug:`
+#       are optional. Level-1 ids come from a small pattern list + a generic
+#       `# ID TEXT` fallback (no flavor). Breaking: no `flavor`; `levels:` required.
 FORMAT_VERSION = "2.0.0"
 
 
@@ -138,77 +105,37 @@ def parse_front_matter(md):
     return {}, md
 
 
-def parse_top_heading(rest):
-    """Parse a level-1 heading, returning (flavor, id, head).
+def parse_root_id(rest):
+    """Parse a level-1 heading, returning (id, head).
 
-    The id is verbatim (e.g. "1" for "Unit 1: ...", "A" for "Theme A: ...", or
-    the parenthesized code for a Big Idea); head is the heading's prose.
-
-    Note: a `# Unit N:` heading is reported as "csa"; the course flavor shares it
-    and is told apart by heading depth (see detect_flavor).
-    """
+    The id is verbatim. The known curriculum heading shapes are tried first
+    (`# Unit N:` -> id "N", `# Theme A:` -> "A", `# Chapter N:` -> "N",
+    `# Big Idea N: … (CODE)` -> the parenthesized CODE), then a generic
+    `# ID TEXT` (id = first whitespace token, like every deeper heading level).
+    These are pure id-extraction heuristics -- no flavor is inferred."""
     m = BIG_IDEA.match(rest)
     if m:
-        return "csp", m.group(2), m.group(1)
-    m = UNIT.match(rest)
+        return m.group(2), m.group(1)     # id is the parenthesized code
+    for pat in (UNIT, THEME, CHAPTER):
+        m = pat.match(rest)
+        if m:
+            return m.group(1), m.group(2)
+    m = GENERIC_ROOT.match(rest)
     if m:
-        return "csa", m.group(1), m.group(2)
-    m = THEME.match(rest)
-    if m:
-        return "ib", m.group(1), m.group(2)
-    m = CHAPTER.match(rest)
-    if m:
-        return "book", m.group(1), m.group(2)
+        return m.group(1), m.group(2)
     sys.exit(f"unparseable top-level heading: {rest!r}")
 
 
-def detect_flavor(md):
-    """Determine the hierarchy flavor by examining all heading levels.
-
-    csp/ib/book are identified by their level-1 heading alone. csa and course
-    share the `# Unit N:` heading, so they are told apart by heading depth: csa
-    nests headings to level 3+ (topic -> learning objective -> …), while course
-    stops at level-2 lessons and lists its objectives as bullets. A `# Unit` file
-    with no level-3 heading is therefore course (this also covers a partial course
-    whose lessons have no objectives yet).
-    """
-    _, body = parse_front_matter(md)
-    base = None
-    max_depth = 0
-    for line in body.splitlines():
-        m = HEADING.match(line)
-        if not m:
-            continue
-        depth = len(m.group(1))
-        max_depth = max(max_depth, depth)
-        if depth == 1:
-            heading_flavor = parse_top_heading(m.group(2))[0]
-            if base is None:
-                base = heading_flavor
-            elif heading_flavor != base:
-                sys.exit(f"mixed hierarchy flavors: {m.group(2)!r}")
-    if base is None:
-        sys.exit("no top-level heading found")
-    return "course" if base == "csa" and max_depth < 3 else base
-
-
 def parse_sections(md):
-    """Walk markdown lines; return (flavor, flat list of section dicts).
+    """Walk markdown lines; return a flat list of section dicts.
 
-    Each section dict has: level, id (verbatim, or synthesized for course
-    objectives), head (heading text after the id) and body (raw lines up to the
-    next heading or, for course, the next objective bullet).
-
-    The course flavor (see detect_flavor) is handled specially: its level-3 raw
-    objectives are top-level markdown bullets, each becoming a level-3 section
-    with a synthesized "lessonid.N" id, rather than `###` headings.
+    Each section dict has: level (heading depth), id (verbatim -- the level-1 id
+    via parse_root_id, deeper ids the first whitespace token of the heading),
+    head (heading text after the id) and body (raw lines up to the next heading).
     """
-    flavor = detect_flavor(md)
     _, body = parse_front_matter(md)
     sections = []
     current = None
-    lesson_id = None   # id of the lesson whose bullet objectives we're numbering
-    obj_n = 0          # sequential counter for synthesized course objective ids
     for line in body.splitlines():
         m = HEADING.match(line)
         if m:
@@ -218,32 +145,17 @@ def parse_sections(md):
             level = len(m.group(1))
             rest = m.group(2)
             if level == 1:
-                _, id_, head = parse_top_heading(rest)
-                lesson_id, obj_n = None, 0
+                id_, head = parse_root_id(rest)
             else:
                 parts = rest.split(" ", 1)
                 id_ = parts[0]
                 head = parts[1] if len(parts) > 1 else ""
-                if flavor == "course" and level == 2:
-                    lesson_id, obj_n = id_, 0
             current = {"level": level, "id": id_, "head": head, "body": []}
-        elif flavor == "course" and lesson_id is not None and OBJECTIVE_BULLET.match(line):
-            # A top-level bullet under a lesson is a level-3 raw objective with a
-            # synthesized id (lesson id + sequential number, like IB content).
-            if current is not None:
-                sections.append(current)
-            obj_n += 1
-            current = {
-                "level": 3,
-                "id": f"{lesson_id}.{obj_n}",
-                "head": OBJECTIVE_BULLET.match(line).group(1),
-                "body": [],
-            }
         elif current is not None:
             current["body"].append(line)
     if current is not None:
         sections.append(current)
-    return flavor, sections
+    return sections
 
 
 def section_text(sec):
@@ -266,8 +178,8 @@ def parse_levels(meta):
     (`levels[i]` names heading depth i+1). The value is a comma-separated list,
     e.g. `levels: unit, lab, page`. Raises SystemExit if absent or empty.
 
-    Level *names* live in the markdown (the producer knows them); the detected
-    flavor governs only the heading/id shape, not the vocabulary."""
+    Level *names* live in the markdown (the producer knows them) rather than being
+    inferred from the heading shape."""
     names = [s.strip() for s in (meta.get("levels") or "").split(",") if s.strip()]
     if not names:
         sys.exit("reference hierarchy markdown requires a 'levels:' front-matter "
@@ -282,24 +194,23 @@ def to_nodes(md, title=None):
     `title` overrides any `title:` in the markdown's front matter; if neither is
     given the emitted title is null.
 
-    Returns a JSON-serializable dict {"version": ..., "flavor": ..., "title": ...,
+    Returns a JSON-serializable dict {"version": ..., "slug": ..., "title": ...,
     "kind": ..., "levels": [...], "nodes": [...]}:
 
         version - the FORMAT_VERSION of this contract (semver string)
-        flavor  - the detected flavor ("csa"/"csp"/"ib"/"book"/"course")
+        slug    - the front matter's `slug:` (the bare, course-relative id), or
+                  None (then the consumer falls back to the filename stem)
         title   - a human title for the hierarchy, or None if unknown (from the
                   `title` argument, else the front matter's `title:`)
-        kind    - the document kind (e.g. "ced", "syllabus", "book"); the front
-                  matter's `kind:` (required)
-        levels  - the flavor's level tags in order (levels[i] is the tag for
-                  level i+1); the full set the flavor defines, independent of
-                  which levels happen to have nodes
+        kind    - the front matter's `kind:` provenance label, or None (optional)
+        levels  - the declared level tags in order (levels[i] tags heading depth
+                  i+1), from the required `levels:` front matter
         nodes   - the flattened hierarchy; each node is a plain dict:
 
         id       - the verbatim hierarchy id ("1", "1.1", "1.1.A.1", "CRD-1.A")
         level    - the 1-based heading depth (int)
-        tag      - the level's tag for this flavor (LEVEL_TAGS[flavor][level]),
-                   e.g. "unit", "topic", "learning-objective"
+        tag      - the level's declared tag (levels[level-1]), e.g. "unit",
+                   "topic", "learning-objective"
         parent   - the id of the enclosing node, or None for a level-1 root
         ordinal  - 1-based position among siblings (nodes sharing a parent),
                    in document order
@@ -310,17 +221,14 @@ def to_nodes(md, title=None):
                    "week"|"day"|"hour"}, or None
 
     parent/ordinal/is_leaf are derived from the markdown's heading nesting, so a
-    consumer can load this with zero flavor knowledge and zero markdown parsing.
-    This is the producer side of the cross-repo contract documented in
-    HIERARCHIES.md and plans/extract-extractors.md.
+    consumer can load this with zero markdown parsing.
     """
     meta, _ = parse_front_matter(md)
-    flavor, sections = parse_sections(md)
+    sections = parse_sections(md)
     level_names = parse_levels(meta)
-    kind = meta.get("kind")
-    if not kind:
-        sys.exit("reference hierarchy markdown requires a 'kind:' front-matter key "
-                 "(what the hierarchy is, e.g. 'ced', 'syllabus', 'book')")
+    title = title if title is not None else meta.get("title")
+    if not title:
+        sys.exit("reference hierarchy markdown requires a 'title:' front-matter key")
     nodes = []
     # Stack of (level, id) for the currently-open ancestors; a node's parent is
     # the nearest open ancestor at a shallower level (same nesting rule the XML
@@ -359,9 +267,9 @@ def to_nodes(md, title=None):
             node["is_leaf"] = False
     return {
         "version": FORMAT_VERSION,
-        "flavor": flavor,
-        "title": title if title is not None else meta.get("title"),
-        "kind": kind,
+        "slug": meta.get("slug"),
+        "title": title,
+        "kind": meta.get("kind"),
         "levels": level_names,
         "nodes": nodes,
     }

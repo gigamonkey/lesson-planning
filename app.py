@@ -79,233 +79,20 @@ def db():
 
 
 def ensure_schema():
-    """Apply the canonical schema to a fresh/empty db, then run idempotent
-    migrations on an existing working-copy db.
+    """Apply the canonical schema to a fresh/empty db.
 
     A first run (no db.db) thus boots into a valid, empty database -- ready to be
-    populated from the app (Data page: load a reference, or restore a snapshot) --
-    instead of dead-ending at "no courses loaded". schema.sql is the same canonical
-    file rebuild_db applies, so this adds no second source of truth.
+    populated from the app (load a reference, or restore a snapshot) instead of
+    dead-ending at "no courses loaded". The db is a disposable cache rebuilt from
+    the markdown corpus, never migrated in place, so this only ever applies the
+    canonical schema.sql (the same file rebuild_db applies); it does NOT migrate
+    older databases. Delete db.db and reload the corpus after a schema change.
     """
-    try:
-        with db() as conn:
-            if "courses" not in {r[0] for r in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'")}:
-                conn.executescript(open(SCHEMA_PATH).read())
-            # Generalize nodes/coverage: course -> hierarchy, and a registry.
-            ncols = [r[1] for r in conn.execute("PRAGMA table_info(nodes)")]
-            if ncols and "course" in ncols:
-                conn.execute("ALTER TABLE nodes RENAME COLUMN course TO hierarchy")
-                conn.execute("ALTER TABLE coverage RENAME COLUMN course TO hierarchy")
-            conn.execute("CREATE TABLE IF NOT EXISTS hierarchies (hierarchy TEXT PRIMARY KEY,"
-                         " kind TEXT NOT NULL, title TEXT NOT NULL, source TEXT)")
-            if conn.execute("SELECT count(*) FROM hierarchies").fetchone()[0] == 0:
-                conn.executemany(
-                    "INSERT OR IGNORE INTO hierarchies(hierarchy, kind, title, source)"
-                    " VALUES (?, 'reference', ?, NULL)",
-                    [(h, h) for (h,) in conn.execute("SELECT DISTINCT hierarchy FROM nodes")])
-
-            conn.execute("CREATE TABLE IF NOT EXISTS node_attr (hierarchy TEXT NOT NULL,"
-                         " node_id TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL,"
-                         " PRIMARY KEY (hierarchy, node_id, name))")
-            conn.execute("CREATE TABLE IF NOT EXISTS hierarchy_targets (outline TEXT NOT NULL,"
-                         " reference TEXT NOT NULL, PRIMARY KEY (outline, reference))")
-
-            # Stage 1: the lesson plan becomes an 'outline' hierarchy. Convert the
-            # old units/lessons tables + plan_unit/plan_lesson placement into
-            # nodes + coverage + node_attr, then drop them.
-            have = {r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'")}
-            if "units" in have and "lessons" in have:
-                plan_courses = [c for (c,) in conn.execute(
-                    "SELECT course FROM units UNION SELECT course FROM lessons "
-                    "UNION SELECT course FROM course_objectives")]
-                for course in plan_courses:
-                    O = course + "-plan"
-                    conn.execute(
-                        "INSERT OR IGNORE INTO hierarchies(hierarchy, kind, title, source)"
-                        " VALUES (?, 'outline', ?, NULL)", (O, course.upper() + " Lesson Plan"))
-                    conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
-                                 " VALUES (?, ?)", (O, course))
-                    for u in conn.execute(
-                        "SELECT uuid, title, position FROM units WHERE course=?",
-                        (course,)).fetchall():
-                        conn.execute(
-                            "INSERT OR IGNORE INTO nodes(hierarchy, node_id, parent_id, level,"
-                            " is_leaf, ordinal, text) VALUES (?, ?, NULL, 'unit', 0, ?, ?)",
-                            (O, u["uuid"], u["position"], u["title"]))
-                    for L in conn.execute(
-                        "SELECT uuid, unit_id, title, learning_objective, position"
-                        " FROM lessons WHERE course=?", (course,)).fetchall():
-                        conn.execute(
-                            "INSERT OR IGNORE INTO nodes(hierarchy, node_id, parent_id, level,"
-                            " is_leaf, ordinal, text) VALUES (?, ?, ?, 'lesson', 1, ?, ?)",
-                            (O, L["uuid"], L["unit_id"], L["position"], L["title"] or ""))
-                        if (L["learning_objective"] or "").strip():
-                            conn.execute(
-                                "INSERT OR IGNORE INTO node_attr(hierarchy, node_id, name, value)"
-                                " VALUES (?, ?, 'learning_objective', ?)",
-                                (O, L["uuid"], L["learning_objective"]))
-                    for r in conn.execute(
-                        "SELECT uuid, plan_unit, plan_lesson FROM course_objectives"
-                        " WHERE course=?", (course,)).fetchall():
-                        node = r["plan_lesson"] or r["plan_unit"]
-                        if node:
-                            conn.execute(
-                                "INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
-                                " VALUES (?, ?, ?)", (O, r["uuid"], node))
-                conn.execute("DROP TABLE IF EXISTS lessons")
-                conn.execute("DROP TABLE IF EXISTS units")
-                # Rebuild course_objectives without the plan_unit/plan_lesson columns.
-                conn.execute("CREATE TABLE course_objectives_new (course TEXT NOT NULL,"
-                             " uuid TEXT NOT NULL REFERENCES objectives(uuid),"
-                             " position INTEGER, PRIMARY KEY (course, uuid))")
-                conn.execute("INSERT INTO course_objectives_new(course, uuid, position)"
-                             " SELECT course, uuid, position FROM course_objectives")
-                conn.execute("DROP TABLE course_objectives")
-                conn.execute("ALTER TABLE course_objectives_new RENAME TO course_objectives")
-
-            # Stage 2: courses become first-class and hierarchies carry an explicit
-            # course + kind (the TYPE) + editable flag; the old kind ('reference'/
-            # 'outline') splits into kind/editable, and a reference's slug is renamed
-            # off the course id (e.g. 'csa' -> 'csa-ced') so the slug is a pure handle.
-            hcols = [r[1] for r in conn.execute("PRAGMA table_info(hierarchies)")]
-            if hcols and "course" not in hcols:
-                conn.execute("CREATE TABLE IF NOT EXISTS courses "
-                             "(course TEXT PRIMARY KEY, title TEXT NOT NULL)")
-                targets = dict(conn.execute(
-                    "SELECT outline, reference FROM hierarchy_targets").fetchall())
-                COURSE_TITLES = {"csa": "AP Computer Science A",
-                                 "csp": "AP Computer Science Principles",
-                                 "ib": "IB Computer Science"}
-                REF_KIND = {"ib": ("ib-syllabus", "ib-syllabus")}  # course -> (kind, new slug)
-                new_rows, renames, course_set = [], {}, set()
-                for slug, kind, title, source in conn.execute(
-                        "SELECT hierarchy, kind, title, source FROM hierarchies").fetchall():
-                    if kind == "outline":
-                        course = targets.get(slug, slug)  # ref slug == course (pre-rename)
-                        new_rows.append((slug, course, "lesson-plan", 1, title, source))
-                    else:  # reference: slug currently == the course id
-                        course = slug
-                        rkind, newslug = REF_KIND.get(course, ("ced", course + "-ced"))
-                        renames[slug] = newslug
-                        rtitle = (title if title and title != slug
-                                  else f"{course.upper()} {rkind.replace('-', ' ').upper()}")
-                        new_rows.append((newslug, course, rkind, 0, rtitle, source))
-                    course_set.add(course)
-                for old_slug, new_slug in renames.items():
-                    for tbl, col in [("nodes", "hierarchy"), ("coverage", "hierarchy"),
-                                     ("node_attr", "hierarchy"), ("hierarchy_targets", "reference")]:
-                        conn.execute(f"UPDATE {tbl} SET {col}=? WHERE {col}=?",
-                                     (new_slug, old_slug))
-                conn.executemany("INSERT OR IGNORE INTO courses(course, title) VALUES (?, ?)",
-                                 [(c, COURSE_TITLES.get(c, c.upper())) for c in sorted(course_set)])
-                conn.execute("DROP TABLE hierarchies")
-                conn.execute("CREATE TABLE hierarchies (hierarchy TEXT PRIMARY KEY,"
-                             " course TEXT NOT NULL REFERENCES courses(course), kind TEXT NOT NULL,"
-                             " editable INTEGER NOT NULL, title TEXT NOT NULL, source TEXT)")
-                conn.executemany(
-                    "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source)"
-                    " VALUES (?, ?, ?, ?, ?, ?)", new_rows)
-
-            # Drop the unused objectives.merged_into column. It carries a self-FK,
-            # which a plain DROP COLUMN can't remove, so rebuild the table (FKs are
-            # off, so dropping the referenced table is fine).
-            if "merged_into" in [r[1] for r in conn.execute("PRAGMA table_info(objectives)")]:
-                conn.execute("DROP TABLE IF EXISTS objectives_new")
-                conn.execute("CREATE TABLE objectives_new (uuid TEXT PRIMARY KEY,"
-                             " text TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active')")
-                conn.execute("INSERT INTO objectives_new(uuid, text, status)"
-                             " SELECT uuid, text, status FROM objectives")
-                conn.execute("DROP TABLE objectives")
-                conn.execute("ALTER TABLE objectives_new RENAME TO objectives")
-
-            # Enforce unique objective text: merge any duplicate-text objectives
-            # onto one survivor (repointing coverage + pool membership), then add
-            # the unique index. Idempotent -- a no-op once text is unique.
-            if "objectives" in {r[0] for r in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'")}:
-                for (text,) in conn.execute(
-                        "SELECT text FROM objectives GROUP BY text HAVING count(*)>1").fetchall():
-                    uuids = [u for (u,) in conn.execute(
-                        "SELECT uuid FROM objectives WHERE text=? ORDER BY uuid", (text,))]
-                    keep, drop = uuids[0], uuids[1:]
-                    for d in drop:
-                        conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id)"
-                                     " SELECT hierarchy, ?, node_id FROM coverage WHERE uuid=?",
-                                     (keep, d))
-                        conn.execute("DELETE FROM coverage WHERE uuid=?", (d,))
-                        conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid, position)"
-                                     " SELECT course, ?, position FROM course_objectives WHERE uuid=?",
-                                     (keep, d))
-                        conn.execute("DELETE FROM course_objectives WHERE uuid=?", (d,))
-                        conn.execute("DELETE FROM objectives WHERE uuid=?", (d,))
-                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS objectives_text_unique"
-                             " ON objectives(text)")
-
-            # The lesson plan is elevated to the course outline: rename the kind
-            # and title (idempotent -- a no-op once renamed).
-            conn.execute("UPDATE hierarchies SET kind='course-outline', title='Course outline'"
-                         " WHERE kind='lesson-plan'")
-            # kind is now the hierarchy's purpose, decoupled from flavor; the IB
-            # syllabus kind drops its redundant 'ib-' prefix (flavor carries it).
-            conn.execute("UPDATE hierarchies SET kind='syllabus' WHERE kind='ib-syllabus'")
-
-            # The course's official outline is an explicit pointer (replacing the
-            # kind='course-outline' tiebreak). Add the column and backfill it.
-            ccols = [r[1] for r in conn.execute("PRAGMA table_info(courses)")]
-            if "primary_outline" not in ccols:
-                conn.execute("ALTER TABLE courses ADD COLUMN primary_outline TEXT")
-                conn.execute(
-                    "UPDATE courses SET primary_outline = (SELECT h.hierarchy FROM hierarchies h"
-                    " WHERE h.course=courses.course AND h.editable=1"
-                    " ORDER BY (h.kind='course-outline') DESC, h.hierarchy LIMIT 1)")
-            # The "primary reference" notion was removed; drop the dead column.
-            if "primary_reference" in ccols:
-                conn.execute("ALTER TABLE courses DROP COLUMN primary_reference")
-
-            # Per-node objective order: each coverage edge gets a `position` within
-            # its (hierarchy, node_id) -- independent of the master pool order. On
-            # first add, backfill it from the existing de-facto order (the objective's
-            # master pool position, which is what render used to sort by).
-            if "position" not in [r[1] for r in conn.execute("PRAGMA table_info(coverage)")]:
-                conn.execute("ALTER TABLE coverage ADD COLUMN position INTEGER")
-                rows = conn.execute(
-                    "SELECT cv.hierarchy, cv.node_id, cv.uuid, co.position AS mpos "
-                    "FROM coverage cv JOIN hierarchies h ON h.hierarchy=cv.hierarchy "
-                    "LEFT JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=h.course"
-                ).fetchall()
-                groups = {}
-                for r in rows:
-                    groups.setdefault((r["hierarchy"], r["node_id"]), []).append(
-                        (r["mpos"] if r["mpos"] is not None else 1 << 30, r["uuid"]))
-                for (h, n), lst in groups.items():
-                    lst.sort()
-                    for pos, (_m, u) in enumerate(lst):
-                        conn.execute("UPDATE coverage SET position=? WHERE hierarchy=? "
-                                     "AND node_id=? AND uuid=?", (pos, h, n, u))
-
-            # Per-node durations (calendar view) + a course's calendar binding.
-            # Additive; create-if-absent.
-            conn.execute("CREATE TABLE IF NOT EXISTS node_duration (hierarchy TEXT NOT NULL,"
-                         " node_id TEXT NOT NULL, amount REAL NOT NULL, unit TEXT NOT NULL,"
-                         " PRIMARY KEY (hierarchy, node_id))")
-            ccols2 = [r[1] for r in conn.execute("PRAGMA table_info(courses)")]
-            if "calendar" not in ccols2:
-                conn.execute("ALTER TABLE courses ADD COLUMN calendar TEXT")
-            # start_date was redundant with the calendar's firstDay (full-year
-            # courses); drop it if an earlier build added it.
-            if "start_date" in ccols2:
-                conn.execute("ALTER TABLE courses DROP COLUMN start_date")
-            # A reference now stashes its verbatim source markdown, replayed by
-            # write_course instead of reconstructing markdown from nodes. Existing
-            # references backfill on their next load (db is a cache).
-            if "source_md" not in [r[1] for r in conn.execute(
-                    "PRAGMA table_info(hierarchies)")]:
-                conn.execute("ALTER TABLE hierarchies ADD COLUMN source_md TEXT")
+    with db() as conn:
+        if "courses" not in {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}:
+            conn.executescript(open(SCHEMA_PATH).read())
             conn.commit()
-    except sqlite3.OperationalError:
-        pass  # tables not created yet (unseeded db)
 
 
 def courses(conn):
@@ -329,14 +116,16 @@ def reference_hierarchy(conn, course):
 
 
 def outline_hierarchy(conn, course):
-    """The slug of the course's official outline hierarchy, or None."""
+    """The bare slug of the course's official outline hierarchy, or None.
+    `courses.primary_outline` is the sole authority; the editable fallback only
+    matters for a half-built course with no pointer set yet."""
     row = conn.execute("SELECT primary_outline FROM courses WHERE course=?",
                        (course,)).fetchone()
     if row and row[0]:
         return row[0]
     row = conn.execute(
         "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
-        "ORDER BY (kind='course-outline') DESC, hierarchy LIMIT 1", (course,)).fetchone()
+        "ORDER BY hierarchy LIMIT 1", (course,)).fetchone()
     return row[0] if row else None
 
 
@@ -344,20 +133,34 @@ def ensure_outline(conn, course):
     """The course's outline hierarchy slug, creating + registering it if needed."""
     O = outline_hierarchy(conn, course)
     if not O:
-        O = course + "-plan"  # a readable handle; the columns below carry the meaning
+        O = "plan"  # course-relative slug; identity is (course, 'plan')
         conn.execute("INSERT OR IGNORE INTO courses(course, title) VALUES (?, ?)",
                      (course, course.upper()))
-        conn.execute("INSERT OR IGNORE INTO hierarchies(hierarchy, course, kind, editable, title,"
+        conn.execute("INSERT OR IGNORE INTO hierarchies(course, hierarchy, kind, editable, title,"
                      " source) VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)",
-                     (O, course))
+                     (course, O))
         # Measure the plan against each of the course's references.
-        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
-                     " SELECT ?, hierarchy FROM hierarchies WHERE course=? AND editable=0",
-                     (O, course))
+        conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
+                     " SELECT ?, ?, hierarchy FROM hierarchies WHERE course=? AND editable=0",
+                     (course, O, course))
     # Make it the course's official outline if one isn't set yet.
     conn.execute("UPDATE courses SET primary_outline=? WHERE course=? AND primary_outline IS NULL",
                  (O, course))
     return O
+
+
+def _pin_slug(text, slug):
+    """Return `text` with its front matter's `slug:` set to `slug` (the bare,
+    course-relative identity). Replaces any existing slug line; inserts one right
+    after the opening `---`. Leaves text without front matter untouched."""
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return text
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    if end is None:
+        return text
+    body = [l for l in lines[1:end] if l.split(":", 1)[0].strip() != "slug"]
+    return "".join([lines[0], f"slug: {slug}\n"] + body + lines[end:])
 
 
 @app.context_processor
@@ -384,8 +187,7 @@ def inject_nav():
             for c in cs:
                 hs = by_course.get(c["course"], [])
                 outline = c["primary_outline"] or next(
-                    (h["hierarchy"] for h in hs
-                     if h["editable"] and h["kind"] == "course-outline"), None)
+                    (h["hierarchy"] for h in hs if h["editable"]), None)
                 refs = [h for h in hs if h["hierarchy"] != outline]
                 # Does the on-disk corpus need a (re)export? Drives the save icon;
                 # has_corpus drives whether Refresh (pull from disk) is available.
@@ -592,9 +394,9 @@ def course_new():
 def hierarchy_load_course(course):
     """Load an uploaded hierarchy MARKDOWN file as a reference of THIS course, and
     persist it into the course's corpus directory so the on-disk corpus stays
-    complete. The course is fixed by context; flavor/kind/title come from the
-    markdown (front matter); the slug defaults to <course>-<kind>. Optional form
-    fields override kind / slug / title."""
+    complete. The course is fixed by context; title/kind come from the markdown;
+    the bare slug defaults to the file's `slug:`/filename stem (pinned into the
+    saved front matter). Optional form fields override kind / hierarchy / title."""
     with db() as conn:
         crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
         if not crow:
@@ -611,12 +413,19 @@ def hierarchy_load_course(course):
         flash(f"Could not load {f.filename!r}: {e}")
         return redirect(back)
     over = lambda k: (request.form.get(k) or "").strip() or None
-    # Course is fixed by context; kind/title come from the markdown unless the form
-    # overrides; the slug defaults to <course>-<kind>.
-    kind = over("kind") or doc["kind"]
-    slug = over("hierarchy") or f"{course}-{kind}"
+    # Course is fixed by context; kind/title come from the markdown. The slug is the
+    # bare, course-relative id: the form override, else the file's own `slug:`, else
+    # its filename stem -- never derived from kind (so two same-kind references in a
+    # course don't collide). It is pinned into the saved markdown's front matter.
+    kind = over("kind") or doc.get("kind")
+    stem = os.path.splitext(os.path.basename(f.filename))[0]
+    slug = (over("hierarchy") or doc.get("slug") or stem).strip().lower()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
+        flash(f"Invalid slug {slug!r}: use lowercase letters, digits, and hyphens.")
+        return redirect(back)
     title = over("title") or doc.get("title")
-    rows = load_nodes.build_rows(slug, doc["nodes"])
+    text = _pin_slug(text, slug)   # author the bare slug into the front matter
+    rows = load_nodes.build_rows(course, slug, doc["nodes"])
     # Persist the markdown into the corpus as <slug>.md (the load source of truth).
     course_dir = os.path.join(CORPUS_DIR, course)
     os.makedirs(course_dir, exist_ok=True)
@@ -624,10 +433,11 @@ def hierarchy_load_course(course):
         out.write(text if text.endswith("\n") else text + "\n")
     # Re-loading replaces this hierarchy's nodes; warn (don't drop) about coverage
     # edges into ids the new version no longer has (a renamed/removed id surfaces).
-    new_ids = {r[1] for r in rows}
+    new_ids = {r[2] for r in rows}
     with db() as conn:
         existing = {r[0] for r in conn.execute(
-            "SELECT DISTINCT node_id FROM coverage WHERE hierarchy=?", (slug,))}
+            "SELECT DISTINCT node_id FROM coverage WHERE course=? AND hierarchy=?",
+            (course, slug))}
     orphaned = sorted(existing - new_ids)
     load_nodes.load(DB_PATH, slug, course, kind, crow["title"],
                     rows, source=f.filename, title=title, source_md=text)
@@ -636,8 +446,8 @@ def hierarchy_load_course(course):
     with db() as conn:
         O = outline_hierarchy(conn, course)
         if O:
-            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(outline, reference)"
-                         " VALUES (?, ?)", (O, slug))
+            conn.execute("INSERT OR IGNORE INTO hierarchy_targets(course, outline, reference)"
+                         " VALUES (?, ?, ?)", (course, O, slug))
     # The loaded hierarchy shows up in the setup table, so only surface the
     # non-obvious case: coverage edges now pointing at ids the new version dropped.
     if orphaned:
@@ -662,14 +472,14 @@ def hierarchy_delete(course, hierarchy):
         if row["editable"]:
             flash("The course outline can't be deleted here.")
             return redirect(url_for("tree", course=course))
-        n = conn.execute("SELECT count(*) FROM coverage WHERE hierarchy=?",
-                         (hierarchy,)).fetchone()[0]
-        conn.execute("DELETE FROM coverage WHERE hierarchy=?", (hierarchy,))
-        conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (hierarchy,))
-        conn.execute("DELETE FROM hierarchy_targets WHERE outline=? OR reference=?",
-                     (hierarchy, hierarchy))
-        conn.execute("DELETE FROM nodes WHERE hierarchy=?", (hierarchy,))
-        conn.execute("DELETE FROM hierarchies WHERE hierarchy=?", (hierarchy,))
+        n = conn.execute("SELECT count(*) FROM coverage WHERE course=? AND hierarchy=?",
+                         (course, hierarchy)).fetchone()[0]
+        conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=?", (course, hierarchy))
+        conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=?", (course, hierarchy))
+        conn.execute("DELETE FROM hierarchy_targets WHERE course=? AND (outline=? OR reference=?)",
+                     (course, hierarchy, hierarchy))
+        conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=?", (course, hierarchy))
+        conn.execute("DELETE FROM hierarchies WHERE course=? AND hierarchy=?", (course, hierarchy))
     flash(f"Deleted hierarchy {hierarchy!r} ({n} coverage edge(s) removed).")
     return redirect(url_for("tree", course=course))
 
@@ -697,15 +507,9 @@ def course_delete(course):
     with db() as conn:
         if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
-        hs = [r[0] for r in conn.execute(
-            "SELECT hierarchy FROM hierarchies WHERE course=?", (course,))]
-        for h in hs:
-            conn.execute("DELETE FROM coverage WHERE hierarchy=?", (h,))
-            conn.execute("DELETE FROM node_attr WHERE hierarchy=?", (h,))
-            conn.execute("DELETE FROM nodes WHERE hierarchy=?", (h,))
-            conn.execute("DELETE FROM hierarchy_targets WHERE outline=? OR reference=?", (h, h))
-        conn.execute("DELETE FROM hierarchies WHERE course=?", (course,))
-        conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
+        for tbl in ("coverage", "node_attr", "node_duration", "nodes",
+                    "hierarchy_targets", "hierarchies", "course_objectives"):
+            conn.execute(f"DELETE FROM {tbl} WHERE course=?", (course,))
         conn.execute("DELETE FROM courses WHERE course=?", (course,))
         # Objectives are course-agnostic (interned by text); drop only those now
         # belonging to no course at all.
@@ -762,9 +566,8 @@ def workspace_data(conn, course, H):
                 "JOIN course_objectives co ON co.uuid=o.uuid AND co.course=? "
                 "WHERE o.status='active'", (course,))}
     for r in conn.execute(
-        "SELECT cv.uuid, cv.node_id, cv.position FROM coverage cv "
-        "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=? "
-        "WHERE cv.hierarchy=?", (course, H)):
+        "SELECT uuid, node_id, position FROM coverage "
+        "WHERE course=? AND hierarchy=?", (course, H)):
         o = objs.get(r["uuid"])
         if o:
             o["node"] = r["node_id"]
@@ -789,7 +592,8 @@ def workspace_data(conn, course, H):
                   key=lambda o: (0, o["position"]) if o["position"] is not None
                   else (1, o["text"].lower()))
 
-    nodes = conn.execute("SELECT * FROM nodes WHERE hierarchy=? ORDER BY ordinal", (H,)).fetchall()
+    nodes = conn.execute("SELECT * FROM nodes WHERE course=? AND hierarchy=? ORDER BY ordinal",
+                         (course, H)).fetchall()
     return nodes, by_node, pool
 
 
@@ -817,7 +621,7 @@ def level_counts(nodes):
     """Per-level node tallies for the stat bar, shallowest-first
     (e.g. [{count: 4, label: 'units'}, {count: 123, label: 'pages'}]).
 
-    A tag maps 1:1 to a depth in the flavor, so order the tags by the depth of any
+    A tag maps 1:1 to a heading depth, so order the tags by the depth of any
     node carrying them."""
     parent_of = {n["node_id"]: n["parent_id"] for n in nodes}
 
@@ -868,15 +672,15 @@ def hierarchy_view(course, hierarchy):
         nodes, by_node, pool = workspace_data(conn, course, hierarchy)
         los = {r["node_id"]: r["value"] for r in conn.execute(
             "SELECT node_id, value FROM node_attr "
-            "WHERE hierarchy=? AND name='learning_objective'", (hierarchy,))} \
-            if h["editable"] else {}
+            "WHERE course=? AND hierarchy=? AND name='learning_objective'",
+            (course, hierarchy))} if h["editable"] else {}
         # node_id -> amount (the duration's number; the unit is implied by the
         # node's level -- weeks on units, days on lessons). Drives the inline
         # duration fields on the editable outline.
         durations = {r["node_id"]: (int(r["amount"]) if float(r["amount"]).is_integer()
                                     else r["amount"])
                      for r in conn.execute("SELECT node_id, amount FROM node_duration"
-                                           " WHERE hierarchy=?", (hierarchy,))}
+                                           " WHERE course=? AND hierarchy=?", (course, hierarchy))}
     # The outline's stored title is the generic "Course outline"; qualify it with
     # the course (like the objectives page) so the page title isn't ambiguous.
     # Reference titles already include the course (e.g. "WIDGETS CED").
@@ -913,15 +717,16 @@ def place(course, hierarchy):
         if not conn.execute("SELECT 1 FROM hierarchies WHERE hierarchy=? AND course=?",
                             (hierarchy, course)).fetchone():
             abort(409, "hierarchy no longer exists -- reload the page")
-        conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, uuid))
+        conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND uuid=?",
+                     (course, hierarchy, uuid))
         if node:
-            conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position) "
-                         "VALUES (?, ?, ?, 0)", (hierarchy, uuid, node))
+            conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position) "
+                         "VALUES (?, ?, ?, ?, 0)", (course, hierarchy, uuid, node))
             # Renumber the destination node by the zone's order (the dropped item
             # included). ids not in this node (defensive) simply match nothing.
             for i, u in enumerate(_id_list("ids")):
-                conn.execute("UPDATE coverage SET position=? WHERE hierarchy=? "
-                             "AND node_id=? AND uuid=?", (i, hierarchy, node, u))
+                conn.execute("UPDATE coverage SET position=? WHERE course=? AND hierarchy=? "
+                             "AND node_id=? AND uuid=?", (i, course, hierarchy, node, u))
         if to == "pool":
             for i, u in enumerate(_id_list("ids")):
                 conn.execute("UPDATE course_objectives SET position=? "
@@ -969,8 +774,8 @@ def node_objectives_bulk(course, hierarchy, node_id):
                             (hierarchy, course)).fetchone():
             abort(409, "hierarchy no longer exists -- reload the page")
         before = {r["uuid"] for r in conn.execute(
-            "SELECT uuid FROM coverage WHERE hierarchy=? AND node_id=?",
-            (hierarchy, node_id))}
+            "SELECT uuid FROM coverage WHERE course=? AND hierarchy=? AND node_id=?",
+            (course, hierarchy, node_id))}
         # Resolve tokens against the course's existing pool (its objective registry).
         known = [r["uuid"] for r in conn.execute(
             "SELECT uuid FROM course_objectives WHERE course=?", (course,))]
@@ -992,14 +797,15 @@ def node_objectives_bulk(course, hierarchy, node_id):
             conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid) VALUES (?, ?)",
                          (course, uuid))
             # Single placement per hierarchy: clear any prior home, then place here.
-            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, uuid))
-            conn.execute("INSERT INTO coverage(hierarchy, uuid, node_id, position) "
-                         "VALUES (?, ?, ?, ?)", (hierarchy, uuid, node_id, len(objs)))
+            conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND uuid=?",
+                         (course, hierarchy, uuid))
+            conn.execute("INSERT INTO coverage(course, hierarchy, uuid, node_id, position) "
+                         "VALUES (?, ?, ?, ?, ?)", (course, hierarchy, uuid, node_id, len(objs)))
             objs.append({"uuid": uuid, "text": text})
         # Objectives dropped from the list go back to the pool (coverage removed).
         for u in before - seen:
-            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND node_id=? AND uuid=?",
-                         (hierarchy, node_id, u))
+            conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND node_id=? AND uuid=?",
+                         (course, hierarchy, node_id, u))
         conn.commit()
         # Re-tokenize against the (now-updated) pool so the editor's buffer reflects
         # tokens minted this save -- a second save then keeps those identities.
@@ -1068,13 +874,14 @@ def objectives(course):
         node_meta = {}
         for h in cols:
             ns = conn.execute(
-                "SELECT node_id, parent_id, ordinal, text FROM nodes WHERE hierarchy=?",
-                (h["hierarchy"],)).fetchall()
+                "SELECT node_id, parent_id, ordinal, text FROM nodes WHERE course=? AND hierarchy=?",
+                (course, h["hierarchy"])).fetchall()
             firstline = lambda t: re.sub(r"[`*]", "", (t or "").split("\n", 1)[0])
             if h["editable"]:
                 los = {r["node_id"]: r["value"] for r in conn.execute(
                     "SELECT node_id, value FROM node_attr "
-                    "WHERE hierarchy=? AND name='learning_objective'", (h["hierarchy"],))}
+                    "WHERE course=? AND hierarchy=? AND name='learning_objective'",
+                    (course, h["hierarchy"]))}
                 sids = synthetic_ids(ns)
                 for n in ns:
                     disp, seq = sids[n["node_id"]]
@@ -1090,8 +897,7 @@ def objectives(course):
                     "SELECT o.uuid, o.text FROM objectives o JOIN course_objectives co "
                     "ON co.uuid=o.uuid AND co.course=? WHERE o.status='active'", (course,))}
         for r in conn.execute(
-            "SELECT cv.uuid, cv.hierarchy, cv.node_id FROM coverage cv "
-            "JOIN course_objectives co ON co.uuid=cv.uuid AND co.course=?", (course,)):
+            "SELECT uuid, hierarchy, node_id FROM coverage WHERE course=?", (course,)):
             o = objs.get(r["uuid"])
             if not o or r["hierarchy"] not in slugs:
                 continue
@@ -1220,11 +1026,11 @@ def _outline_ctx(conn, course):
     nodes, by_node, _pool = workspace_data(conn, course, O)
     los = {r["node_id"]: r["value"] for r in conn.execute(
         "SELECT node_id, value FROM node_attr "
-        "WHERE hierarchy=? AND name='learning_objective'", (O,))}
+        "WHERE course=? AND hierarchy=? AND name='learning_objective'", (course, O))}
     durations = {r["node_id"]: (int(r["amount"]) if float(r["amount"]).is_integer()
                                 else r["amount"])
                  for r in conn.execute("SELECT node_id, amount FROM node_duration"
-                                       " WHERE hierarchy=?", (O,))}
+                                       " WHERE course=? AND hierarchy=?", (course, O))}
     return dict(course=course, ref=O, editable=True, los=los, durations=durations,
                 tree=build_tree(nodes, by_node, set()))
 
@@ -1264,9 +1070,10 @@ def objective_new(course):
                          (course, u))
             if node:
                 nxt = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM coverage "
-                                   "WHERE hierarchy=? AND node_id=?", (R, node)).fetchone()[0]
-                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position) "
-                             "VALUES (?, ?, ?, ?)", (R, u, node, nxt))
+                                   "WHERE course=? AND hierarchy=? AND node_id=?",
+                                   (course, R, node)).fetchone()[0]
+                conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position) "
+                             "VALUES (?, ?, ?, ?, ?)", (course, R, u, node, nxt))
             conn.commit()
     # Workspace (htmx): return just the new raw item to drop into the target zone.
     if request.form.get("as") == "item":
@@ -1387,9 +1194,10 @@ def _outline_units(conn, course):
     if not O:
         return []
     durs = {nid: (amt, unit) for nid, amt, unit in conn.execute(
-        "SELECT node_id, amount, unit FROM node_duration WHERE hierarchy=?", (O,))}
+        "SELECT node_id, amount, unit FROM node_duration WHERE course=? AND hierarchy=?",
+        (course, O))}
     nodes = conn.execute("SELECT node_id, parent_id, level, text FROM nodes "
-                         "WHERE hierarchy=? ORDER BY ordinal", (O,)).fetchall()
+                         "WHERE course=? AND hierarchy=? ORDER BY ordinal", (course, O)).fetchall()
     lessons_by_unit = {}
     for n in nodes:
         if n["level"] == "lesson":
@@ -1451,7 +1259,7 @@ def outline_import(course):
                 (reference, course)).fetchone():
             abort(404, f"no reference {reference!r} for course {course!r}")
         O = ensure_outline(conn, course)
-        nu, nl, npl = plan_io.import_structure(conn, O, reference)
+        nu, nl, npl = plan_io.import_structure(conn, course, O, reference)
         conn.commit()
     flash(f"Built the outline from {reference}: {nu} unit(s), {nl} lesson(s), "
           f"{npl} objective placement(s).")
@@ -1468,10 +1276,10 @@ def unit_new(course):
     with db() as conn:
         O = ensure_outline(conn, course)
         nxt = conn.execute("SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
-                           "WHERE hierarchy=? AND level='unit'", (O,)).fetchone()[0]
-        conn.execute("INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf,"
-                     " ordinal, text) VALUES (?, ?, NULL, 'unit', 0, ?, ?)",
-                     (O, str(uuidlib.uuid4()), nxt, title))
+                           "WHERE course=? AND hierarchy=? AND level='unit'", (course, O)).fetchone()[0]
+        conn.execute("INSERT INTO nodes(course, hierarchy, node_id, parent_id, level, is_leaf,"
+                     " ordinal, text) VALUES (?, ?, ?, NULL, 'unit', 0, ?, ?)",
+                     (course, O, str(uuidlib.uuid4()), nxt, title))
         conn.commit()
         if request.headers.get("HX-Request"):
             return _outline_swap(conn, course)
@@ -1484,8 +1292,8 @@ def unit_rename(course, unit_id):
     if title:
         with db() as conn:
             O = outline_hierarchy(conn, course)
-            conn.execute("UPDATE nodes SET text=? WHERE hierarchy=? AND node_id=? "
-                         "AND level='unit'", (title, O, unit_id))
+            conn.execute("UPDATE nodes SET text=? WHERE course=? AND hierarchy=? AND node_id=? "
+                         "AND level='unit'", (title, course, O, unit_id))
             conn.commit()
     if request.headers.get("HX-Request"):
         return ("", 204)
@@ -1497,11 +1305,11 @@ def unit_delete(course, unit_id):
     with db() as conn:
         O = outline_hierarchy(conn, course)
         # Unassign its lessons; return its rough raws to the pool; drop the unit.
-        conn.execute("UPDATE nodes SET parent_id=NULL WHERE hierarchy=? AND parent_id=?",
-                     (O, unit_id))
-        conn.execute("DELETE FROM coverage WHERE hierarchy=? AND node_id=?", (O, unit_id))
-        conn.execute("DELETE FROM node_attr WHERE hierarchy=? AND node_id=?", (O, unit_id))
-        conn.execute("DELETE FROM nodes WHERE hierarchy=? AND node_id=?", (O, unit_id))
+        conn.execute("UPDATE nodes SET parent_id=NULL WHERE course=? AND hierarchy=? AND parent_id=?",
+                     (course, O, unit_id))
+        conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND node_id=?", (course, O, unit_id))
+        conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=? AND node_id=?", (course, O, unit_id))
+        conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=? AND node_id=?", (course, O, unit_id))
         conn.commit()
         msg = "Deleted unit; lessons moved to Unassigned, rough raws back in the pool."
         if request.headers.get("HX-Request"):
@@ -1516,16 +1324,16 @@ def unit_move(course, unit_id):
     with db() as conn:
         O = outline_hierarchy(conn, course)
         ids = [r["node_id"] for r in conn.execute(
-            "SELECT node_id FROM nodes WHERE hierarchy=? AND level='unit' "
-            "ORDER BY ordinal, node_id", (O,))]
+            "SELECT node_id FROM nodes WHERE course=? AND hierarchy=? AND level='unit' "
+            "ORDER BY ordinal, node_id", (course, O))]
         if unit_id in ids:
             i = ids.index(unit_id)
             j = i - 1 if direction == "up" else i + 1
             if 0 <= j < len(ids):
                 ids[i], ids[j] = ids[j], ids[i]
                 for pos, uid in enumerate(ids):
-                    conn.execute("UPDATE nodes SET ordinal=? WHERE hierarchy=? AND node_id=?",
-                                 (pos, O, uid))
+                    conn.execute("UPDATE nodes SET ordinal=? WHERE course=? AND hierarchy=? AND node_id=?",
+                                 (pos, course, O, uid))
                 conn.commit()
         if request.headers.get("HX-Request"):
             return _outline_swap(conn, course)
@@ -1543,15 +1351,17 @@ def lesson_new(course):
         # Only attach to a unit that actually exists in this outline; otherwise
         # leave the lesson unassigned rather than orphaning it under a bad id.
         if unit and not conn.execute(
-                "SELECT 1 FROM nodes WHERE hierarchy=? AND node_id=? AND level='unit'",
-                (O, unit)).fetchone():
+                "SELECT 1 FROM nodes WHERE course=? AND hierarchy=? AND node_id=? AND level='unit'",
+                (course, O, unit)).fetchone():
             unit = None
         nxt = conn.execute(
             "SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
-            "WHERE hierarchy=? AND level='lesson' AND parent_id IS ?", (O, unit)).fetchone()[0]
+            "WHERE course=? AND hierarchy=? AND level='lesson' AND parent_id IS ?",
+            (course, O, unit)).fetchone()[0]
         conn.execute(
-            "INSERT INTO nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) "
-            "VALUES (?, ?, ?, 'lesson', 1, ?, ?)", (O, str(uuidlib.uuid4()), unit, nxt, title))
+            "INSERT INTO nodes(course, hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) "
+            "VALUES (?, ?, ?, ?, 'lesson', 1, ?, ?)",
+            (course, O, str(uuidlib.uuid4()), unit, nxt, title))
         conn.commit()
         if request.headers.get("HX-Request"):
             return _outline_swap(conn, course)
@@ -1565,20 +1375,20 @@ def lesson_edit(course, lesson_id):
     with db() as conn:
         O = outline_hierarchy(conn, course)
         if "title" in request.form:
-            conn.execute("UPDATE nodes SET text=? WHERE hierarchy=? AND node_id=? "
+            conn.execute("UPDATE nodes SET text=? WHERE course=? AND hierarchy=? AND node_id=? "
                          "AND level='lesson'",
-                         ((request.form.get("title") or "").strip(), O, lesson_id))
+                         ((request.form.get("title") or "").strip(), course, O, lesson_id))
         if "learning_objective" in request.form:
             lo = (request.form.get("learning_objective") or "").strip()
             if lo:
                 conn.execute(
-                    "INSERT INTO node_attr(hierarchy, node_id, name, value) "
-                    "VALUES (?, ?, 'learning_objective', ?) "
-                    "ON CONFLICT(hierarchy, node_id, name) DO UPDATE SET value=excluded.value",
-                    (O, lesson_id, lo))
+                    "INSERT INTO node_attr(course, hierarchy, node_id, name, value) "
+                    "VALUES (?, ?, ?, 'learning_objective', ?) "
+                    "ON CONFLICT(course, hierarchy, node_id, name) DO UPDATE SET value=excluded.value",
+                    (course, O, lesson_id, lo))
             else:
-                conn.execute("DELETE FROM node_attr WHERE hierarchy=? AND node_id=? "
-                             "AND name='learning_objective'", (O, lesson_id))
+                conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=? AND node_id=? "
+                             "AND name='learning_objective'", (course, O, lesson_id))
         conn.commit()
     if request.headers.get("HX-Request"):
         return ("", 204)
@@ -1590,9 +1400,9 @@ def lesson_delete(course, lesson_id):
     with db() as conn:
         O = outline_hierarchy(conn, course)
         # Return its raws to the pool, then drop the lesson.
-        conn.execute("DELETE FROM coverage WHERE hierarchy=? AND node_id=?", (O, lesson_id))
-        conn.execute("DELETE FROM node_attr WHERE hierarchy=? AND node_id=?", (O, lesson_id))
-        conn.execute("DELETE FROM nodes WHERE hierarchy=? AND node_id=?", (O, lesson_id))
+        conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND node_id=?", (course, O, lesson_id))
+        conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=? AND node_id=?", (course, O, lesson_id))
+        conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=? AND node_id=?", (course, O, lesson_id))
         conn.commit()
         msg = "Deleted lesson; its raws returned to the pool."
         if request.headers.get("HX-Request"):
@@ -1609,8 +1419,8 @@ def lesson_arrange(course):
     with db() as conn:
         O = outline_hierarchy(conn, course)
         for pos, lid in enumerate(_id_list("ids")):
-            conn.execute("UPDATE nodes SET parent_id=?, ordinal=? WHERE hierarchy=? "
-                         "AND node_id=? AND level='lesson'", (unit_id, pos, O, lid))
+            conn.execute("UPDATE nodes SET parent_id=?, ordinal=? WHERE course=? AND hierarchy=? "
+                         "AND node_id=? AND level='lesson'", (unit_id, pos, course, O, lid))
         conn.commit()
     return ("", 204)
 
@@ -1624,8 +1434,8 @@ def node_duration_set(course, node_id):
     raw = (request.form.get("amount") or "").strip()
     with db() as conn:
         O = outline_hierarchy(conn, course)
-        row = conn.execute("SELECT level FROM nodes WHERE hierarchy=? AND node_id=?",
-                           (O, node_id)).fetchone()
+        row = conn.execute("SELECT level FROM nodes WHERE course=? AND hierarchy=? AND node_id=?",
+                           (course, O, node_id)).fetchone()
         if not row:
             abort(404)
         unit = "week" if row["level"] == "unit" else "day"
@@ -1634,13 +1444,13 @@ def node_duration_set(course, node_id):
         except ValueError:
             amount = None
         if amount is None or amount <= 0 or (unit == "day" and amount == 1):
-            conn.execute("DELETE FROM node_duration WHERE hierarchy=? AND node_id=?",
-                         (O, node_id))
+            conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=? AND node_id=?",
+                         (course, O, node_id))
         else:
-            conn.execute("INSERT INTO node_duration(hierarchy, node_id, amount, unit)"
-                         " VALUES (?, ?, ?, ?) ON CONFLICT(hierarchy, node_id)"
+            conn.execute("INSERT INTO node_duration(course, hierarchy, node_id, amount, unit)"
+                         " VALUES (?, ?, ?, ?, ?) ON CONFLICT(course, hierarchy, node_id)"
                          " DO UPDATE SET amount=excluded.amount, unit=excluded.unit",
-                         (O, node_id, amount, unit))
+                         (course, O, node_id, amount, unit))
         conn.commit()
         # From the calendar's weeks pill: return the re-laid-out calendar content
         # so htmx swaps it in place (no full reload, scroll preserved).

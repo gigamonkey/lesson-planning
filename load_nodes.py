@@ -33,27 +33,12 @@ import sqlite3
 
 import hierarchy
 
-DDL = """
-CREATE TABLE IF NOT EXISTS nodes (
-  hierarchy TEXT    NOT NULL,
-  node_id   TEXT    NOT NULL,
-  parent_id TEXT,
-  level     TEXT    NOT NULL,
-  is_leaf   INTEGER NOT NULL,
-  ordinal   INTEGER NOT NULL,
-  text      TEXT    NOT NULL,
-  PRIMARY KEY (hierarchy, node_id)
-)
-"""
+SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
 
-COURSES_DDL = ("CREATE TABLE IF NOT EXISTS courses (course TEXT PRIMARY KEY,"
-               " title TEXT NOT NULL, primary_outline TEXT)")
-HIERARCHIES_DDL = ("CREATE TABLE IF NOT EXISTS hierarchies (hierarchy TEXT PRIMARY KEY,"
-                   " course TEXT NOT NULL, kind TEXT NOT NULL, editable INTEGER NOT NULL,"
-                   " title TEXT NOT NULL, source TEXT, source_md TEXT)")
-NODE_DURATION_DDL = ("CREATE TABLE IF NOT EXISTS node_duration (hierarchy TEXT NOT NULL,"
-                     " node_id TEXT NOT NULL, amount REAL NOT NULL, unit TEXT NOT NULL,"
-                     " PRIMARY KEY (hierarchy, node_id))")
+
+def apply_schema(conn):
+    """Create every table from the canonical schema (idempotent)."""
+    conn.executescript(open(SCHEMA_PATH).read())
 
 # Major version of the hierarchy-document format this loader understands (the dict
 # hierarchy.to_nodes emits). Semver; only the major is checked. See FORMAT.md.
@@ -78,10 +63,11 @@ def hierarchy_title(course, kind):
 def parse(text):
     """Parse hierarchy markdown into a node-list document (hierarchy.to_nodes).
 
-    Returns {version, flavor, title, kind, levels, nodes:[...]} -- the same shape
-    `build_rows`/`load` consume. Title and kind come from the markdown's front
-    matter (`kind:` is required). Raises SystemExit on unparseable markdown or
-    missing required front matter (propagated from hierarchy.py).
+    Returns {version, slug, title, kind, levels, nodes:[...]} -- the same shape
+    `build_rows`/`load` consume. slug/title/kind come from the front matter
+    (`slug:` bare id optional, `title:` required, `kind:` optional provenance).
+    Raises SystemExit on unparseable markdown or missing required front matter
+    (propagated from hierarchy.py).
     """
     return load_doc(hierarchy.to_nodes(text))
 
@@ -101,26 +87,25 @@ def load_doc(doc):
     return doc
 
 
-def build_rows(hierarchy, nodes):
+def build_rows(course, hierarchy, nodes):
     """Map a parsed hierarchy document's `nodes` to `nodes`-table rows, in order.
 
-    Returns (hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) rows.
-    The node list already carries each node's tag (-> level), parent, leaf flag,
-    and text; `ordinal` here is the node's 0-based position in document order (the
-    list is pre-order DFS) -- what the table has always stored, NOT the document's
-    per-parent `ordinal`.
+    Returns (course, hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)
+    rows. The node list already carries each node's tag (-> level), parent, leaf
+    flag, and text; `ordinal` here is the node's 0-based position in document order
+    (the list is pre-order DFS), NOT the document's per-parent `ordinal`.
     """
     return [
-        (hierarchy, n["id"], n["parent"], n["tag"], int(n["is_leaf"]), i, n["text"])
+        (course, hierarchy, n["id"], n["parent"], n["tag"], int(n["is_leaf"]), i, n["text"])
         for i, n in enumerate(nodes)
     ]
 
 
-def build_durations(hierarchy, nodes):
+def build_durations(course, hierarchy, nodes):
     """`node_duration` rows for the nodes that carry a duration tag:
-    (hierarchy, node_id, amount, unit)."""
+    (course, hierarchy, node_id, amount, unit)."""
     return [
-        (hierarchy, n["id"], n["duration"]["amount"], n["duration"]["unit"])
+        (course, hierarchy, n["id"], n["duration"]["amount"], n["duration"]["unit"])
         for n in nodes if n.get("duration")
     ]
 
@@ -129,31 +114,28 @@ def load_into(conn, slug, course, kind, course_title, rows, source=None, title=N
               durations=None, source_md=None):
     """Replace one reference hierarchy's nodes + register it, on a caller's conn.
 
-    `durations` are node_duration rows (hierarchy, node_id, amount, unit); the
-    hierarchy's durations are cleared and replaced (None == none). `source_md` is
-    the verbatim source markdown, stored so write_course can replay it (keeps the
-    corpus self-contained without reconstructing markdown from nodes). Does not
-    commit (the caller owns the transaction). See `load` for the wrapper.
+    Assumes the schema is already applied (the caller -- plan_io / `load` --
+    applies it). `rows`/`durations` carry (course, hierarchy, ...) keys. The
+    hierarchy's nodes and durations are cleared and replaced. `source_md` is the
+    verbatim source markdown, stored so write_course can replay it. `kind` may be
+    None (optional provenance). Does not commit (the caller owns the transaction).
     """
-    conn.execute(COURSES_DDL)
-    conn.execute(HIERARCHIES_DDL)
-    conn.execute(DDL)
-    conn.execute(NODE_DURATION_DDL)
     conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)"
                  " ON CONFLICT(course) DO NOTHING",
                  (course, course_title))
-    conn.execute("DELETE FROM nodes WHERE hierarchy = ?", (slug,))
-    conn.executemany("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
-    conn.execute("DELETE FROM node_duration WHERE hierarchy = ?", (slug,))
-    conn.executemany("INSERT INTO node_duration VALUES (?, ?, ?, ?)", durations or [])
-    title = title or hierarchy_title(course, kind)
+    conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=?", (course, slug))
+    conn.executemany("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=?", (course, slug))
+    conn.executemany("INSERT INTO node_duration VALUES (?, ?, ?, ?, ?)", durations or [])
+    if not title:   # title is required in the markdown; this is a last-ditch default
+        title = hierarchy_title(course, kind) if kind else slug
     conn.execute(
-        "INSERT INTO hierarchies(hierarchy, course, kind, editable, title, source, source_md)"
+        "INSERT INTO hierarchies(course, hierarchy, kind, editable, title, source, source_md)"
         " VALUES (?, ?, ?, 0, ?, ?, ?)"
-        " ON CONFLICT(hierarchy) DO UPDATE SET course=excluded.course, kind=excluded.kind,"
+        " ON CONFLICT(course, hierarchy) DO UPDATE SET kind=excluded.kind,"
         " editable=0, title=excluded.title, source=excluded.source,"
         " source_md=excluded.source_md",
-        (slug, course, kind, title, source, source_md))
+        (course, slug, kind, title, source, source_md))
 
 
 def load(db_path, slug, course, kind, course_title, rows, source=None, title=None,
@@ -168,6 +150,7 @@ def load(db_path, slug, course, kind, course_title, rows, source=None, title=Non
     """
     conn = sqlite3.connect(db_path)
     try:
+        apply_schema(conn)
         load_into(conn, slug, course, kind, course_title, rows, source, title, durations,
                   source_md)
         conn.commit()
@@ -189,17 +172,18 @@ def main():
     with open(args.input) as f:
         text = f.read()
     doc = parse(text)
-    slug = args.hierarchy or os.path.splitext(os.path.basename(args.input))[0]
+    stem = os.path.splitext(os.path.basename(args.input))[0]
+    slug = args.hierarchy or doc.get("slug") or stem
     course = args.course or slug
-    kind = args.kind or doc["kind"]
+    kind = args.kind or doc.get("kind")
     course_title = args.course_title or course.upper()
-    rows = build_rows(slug, doc["nodes"])
-    durations = build_durations(slug, doc["nodes"])
+    rows = build_rows(course, slug, doc["nodes"])
+    durations = build_durations(course, slug, doc["nodes"])
     load(args.database, slug, course, kind, course_title,
          rows, source=args.input, title=doc.get("title"), durations=durations,
          source_md=text)
 
-    leaves = sum(1 for r in rows if r[4])
+    leaves = sum(1 for r in rows if r[5])
     print(
         f"loaded {len(rows)} nodes for hierarchy {slug!r} "
         f"(course {course!r}, kind {kind!r}, {leaves} leaves) into {args.database}"

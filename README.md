@@ -64,16 +64,17 @@ upload a hierarchy markdown file with the **+** in its sidebar header.
 ## The format
 
 A course is a directory of markdown + two TSVs; the corpus is a directory of
-those. The full spec — reference hierarchy markdown (the `csa`/`csp`/`ib`/`book`
-flavors), the `plan.md` outline profile, and the two TSVs — is in
-[`FORMAT.md`](FORMAT.md). A reference hierarchy declares its level names in a
-required `levels:` front-matter key; its level-1 heading names the top level and
-the flavor (the heading shape), and deeper headings carry a verbatim id as their
-first token:
+those. The full spec — reference hierarchy markdown, the `plan.md` outline
+profile, and the two TSVs — is in [`FORMAT.md`](FORMAT.md). A reference hierarchy
+declares its identity (`slug:`), level names (`levels:`), and `title:` in front
+matter; heading depth encodes tree depth and each heading carries a verbatim id as
+its first token (the level-1 id via a small pattern list + a generic fallback):
 
 ```markdown
 ---
+slug: ced
 levels: unit, topic, learning-objective, essential-knowledge
+title: Intro to Widgets — Reference
 ---
 # Unit 1: Widget Basics
 ## 1.1 What Is a Widget

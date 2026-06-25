@@ -33,29 +33,16 @@ ones are reported -- still inserted, but flag a mislabeled objective or a change
 import argparse
 import csv
 import io
+import os
 import sqlite3
 import uuid as uuidlib
 
-DDL = [
-    """CREATE TABLE IF NOT EXISTS objectives (
-         uuid TEXT PRIMARY KEY,
-         text TEXT NOT NULL UNIQUE,
-         status TEXT NOT NULL DEFAULT 'active'
-       )""",
-    """CREATE TABLE IF NOT EXISTS course_objectives (
-         course TEXT NOT NULL,
-         uuid TEXT NOT NULL REFERENCES objectives(uuid),
-         position INTEGER,
-         PRIMARY KEY (course, uuid)
-       )""",
-    """CREATE TABLE IF NOT EXISTS coverage (
-         hierarchy TEXT NOT NULL,
-         uuid TEXT NOT NULL REFERENCES objectives(uuid),
-         node_id TEXT NOT NULL,
-         position INTEGER,
-         PRIMARY KEY (hierarchy, uuid, node_id)
-       )""",
-]
+SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+
+
+def apply_schema(conn):
+    """Create every table from the canonical schema (idempotent)."""
+    conn.executescript(open(SCHEMA_PATH).read())
 
 
 def parse_text(content):
@@ -142,21 +129,20 @@ def load(db_path, course, items, hierarchy=None, replace=False):
     """
     conn = sqlite3.connect(db_path)
     try:
-        for statement in DDL:
-            conn.execute(statement)
+        apply_schema(conn)
         ref = hierarchy or reference_slug(conn, course)
 
         if replace:
             old = [u for (u,) in conn.execute(
                 "SELECT uuid FROM course_objectives WHERE course=?", (course,))]
-            conn.executemany("DELETE FROM coverage WHERE hierarchy=? AND uuid=?",
-                             [(ref, u) for u in old])
+            conn.executemany("DELETE FROM coverage WHERE course=? AND hierarchy=? AND uuid=?",
+                             [(course, ref, u) for u in old])
             conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
 
         pos = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM course_objectives"
                            " WHERE course=?", (course,)).fetchone()[0]
         known = {n for (n,) in conn.execute(
-            "SELECT node_id FROM nodes WHERE hierarchy=?", (ref,))}
+            "SELECT node_id FROM nodes WHERE course=? AND hierarchy=?", (course, ref))}
         stats = {"read": 0, "objectives_new": 0, "pooled": 0, "coverage": 0}
         dangling = set()
 
@@ -173,9 +159,10 @@ def load(db_path, course, items, hierarchy=None, replace=False):
                 if known and node not in known:
                     dangling.add(node)
                 nxt = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM coverage"
-                                   " WHERE hierarchy=? AND node_id=?", (ref, node)).fetchone()[0]
-                cur = conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
-                                   " VALUES (?, ?, ?, ?)", (ref, uuid, node, nxt))
+                                   " WHERE course=? AND hierarchy=? AND node_id=?",
+                                   (course, ref, node)).fetchone()[0]
+                cur = conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"
+                                   " VALUES (?, ?, ?, ?, ?)", (course, ref, uuid, node, nxt))
                 stats["coverage"] += cur.rowcount
         conn.commit()
     finally:
@@ -257,8 +244,7 @@ def upsert(db_path, course, rows):
     """
     conn = sqlite3.connect(db_path)
     try:
-        for statement in DDL:
-            conn.execute(statement)
+        apply_schema(conn)
         stats = {"read": 0, "objectives_new": 0, "text_updated": 0, "text_conflicts": 0,
                  "pooled": 0, "placed": 0}
         pos = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM course_objectives"
@@ -276,7 +262,7 @@ def upsert(db_path, course, rows):
             if hierarchy and node:
                 if hierarchy not in known_cache:
                     known_cache[hierarchy] = {n for (n,) in conn.execute(
-                        "SELECT node_id FROM nodes WHERE hierarchy=?", (hierarchy,))}
+                        "SELECT node_id FROM nodes WHERE course=? AND hierarchy=?", (course, hierarchy))}
                 if known_cache[hierarchy] and node not in known_cache[hierarchy]:
                     dangling.setdefault(hierarchy, set()).add(node)
                 else:
@@ -284,12 +270,14 @@ def upsert(db_path, course, rows):
         # Replace placement: only for (hierarchy, uuid) named with valid nodes here.
         # New edges append after the node's existing objectives (coverage.position).
         for (hierarchy, uuid), nodes in placements.items():
-            conn.execute("DELETE FROM coverage WHERE hierarchy=? AND uuid=?", (hierarchy, uuid))
+            conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND uuid=?",
+                         (course, hierarchy, uuid))
             for node in nodes:
                 nxt = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM coverage"
-                                   " WHERE hierarchy=? AND node_id=?", (hierarchy, node)).fetchone()[0]
-                conn.execute("INSERT OR IGNORE INTO coverage(hierarchy, uuid, node_id, position)"
-                             " VALUES (?, ?, ?, ?)", (hierarchy, uuid, node, nxt))
+                                   " WHERE course=? AND hierarchy=? AND node_id=?",
+                                   (course, hierarchy, node)).fetchone()[0]
+                conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"
+                             " VALUES (?, ?, ?, ?, ?)", (course, hierarchy, uuid, node, nxt))
                 stats["placed"] += 1
         conn.commit()
     finally:

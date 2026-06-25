@@ -1,5 +1,12 @@
 # Hierarchy identity, title, and kind
 
+> **Status: implemented.** Bare course-relative slugs (pinned in `slug:` front
+> matter, file named `{slug}.md`), composite `(course, slug)` db keys across all
+> hierarchy-scoped tables, `title:` required, `kind:` optional free-form
+> provenance, `primary_outline` as the sole outline identity, and the slug
+> mismatch/collision warnings all landed. See `test_schema_load.py`.
+
+
 `kind` is doing too much. It is, today, simultaneously: a human-readable
 provenance label, an *identity* ingredient (the app derives a reference's slug as
 `{course}-{kind}`), a fallback source for the display *title*, the

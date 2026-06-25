@@ -1,12 +1,13 @@
 ---
-title: Computer science guide (HL)
+slug: syllabus
 levels: theme, topic, subtopic, learning-statement, content
+title: Computer science guide (SL)
 kind: syllabus
 ---
 
 # Theme A: Concepts of computer science
 
-## A1 Computer fundamentals (18 hours)
+## A1 Computer fundamentals (11 hours)
 
 ### A1.1 Computer hardware and operation
 
@@ -28,14 +29,6 @@ kind: syllabus
 
 ##### A1.1.2.2 Real-world scenarios may include video games, artificial intelligence (AI), large simulations and other applications that require graphics rendering and machine learning.
 
-#### A1.1.3 Explain the differences between the CPU and the GPU. (HL only)
-
-##### A1.1.3.1 Differences in their design philosophies, usage scenarios
-
-##### A1.1.3.2 Differences in their core architecture, processing power, memory access, power efficiency
-
-##### A1.1.3.3 CPUs and GPUs working together: task division, data sharing, coordinating execution
-
 #### A1.1.4 Explain the purposes of different types of primary memory.
 
 ##### A1.1.4.1 Random-access memory (RAM), read only memory (ROM), cache (L1, L2, L3), registers
@@ -49,14 +42,6 @@ kind: syllabus
 ##### A1.1.5.1 The basic operations a CPU performs to execute a single instruction in machine language
 
 ##### A1.1.5.2 The interaction between memory and registers via the three buses: address, data, control
-
-#### A1.1.6 Describe the process of pipelining in multi-core architectures. (HL only)
-
-##### A1.1.6.1 The instructions fetch, decode, execute
-
-##### A1.1.6.2 Write-back stages to improve the overall system performance in multi-core architectures
-
-##### A1.1.6.3 Overview of how cores in multi-core processors work independently and in parallel
 
 #### A1.1.7 Describe internal and external types of secondary memory storage.
 
@@ -152,31 +137,7 @@ kind: syllabus
 
 ##### A1.3.4.2 Real-world scenarios may include keyboard and mouse inputs, network communications, disk input/output operations, embedded systems, real-time systems.
 
-#### A1.3.5 Explain the role of the operating system in managing multitasking and resource allocation. (HL only)
-
-##### A1.3.5.1 The challenges of multitasking and resource allocation, including task scheduling, resource contention and deadlock
-
-#### A1.3.6 Describe the use of the control system components. (HL only)
-
-##### A1.3.6.1 The input, process, output, and feedback mechanism (open-loop, closed-loop)
-
-##### A1.3.6.2 Controller, sensors, actuators, transducers and control algorithm
-
-#### A1.3.7 Explain the use of control systems in a range of real-world applications. (HL only)
-
-##### A1.3.7.1 Examples may include autonomous vehicles, home thermostats, automatic elevator controllers, automatic washing machines, traffic signal control systems, irrigation control systems, home security systems, automatic doors.
-
-### A1.4 Translation (HL only)
-
-#### A1.4.1 Evaluate the translation processes of interpreters and compilers.
-
-##### A1.4.1.1 The mechanics and use-cases of each translation approach
-
-##### A1.4.1.2 The difference in error detection, translation time, portability and applicability for different translation processes, including just-in-time compilation (JIT) and bytecode interpreters
-
-##### A1.4.1.3 Example scenarios where the translation method should be considered must include rapid development and testing, performance-critical applications and cross-platform development.
-
-## A2 Networks (18 hours)
+## A2 Networks (11 hours)
 
 ### A2.1 Network fundamentals
 
@@ -200,12 +161,6 @@ kind: syllabus
 
 ##### A2.1.4.1 Protocols: transmission control protocol (TCP), user datagram protocol (UDP), hypertext transfer protocol (HTTP), hypertext transfer protocol secure (HTTPS), dynamic host configuration protocol (DHCP)
 
-#### A2.1.5 Describe the function of the TCP/IP model. (HL only)
-
-##### A2.1.5.1 Application, transport, internet, network interface
-
-##### A2.1.5.2 The role of each layer and the interaction between these layers to ensure reliable data transmission over a network
-
 ### A2.2 Network architecture
 
 #### A2.2.1 Describe the functions and practical applications of network topologies.
@@ -215,12 +170,6 @@ kind: syllabus
 ##### A2.2.1.2 Factors to consider must include reliability, transmission speed, scalability, data collisions, cost.
 
 ##### A2.2.1.3 Examples may include home and small office settings, where reliability is paramount, and the use of networks in larger settings (e.g. corporations, government departments, college campuses).
-
-#### A2.2.2 Describe the function of servers. (HL only)
-
-##### A2.2.2.1 Types of servers: domain name server (DNS), dynamic host configuration protocol (DHCP), file server, mail server, proxy server, web server
-
-##### A2.2.2.2 Factors to consider must include function, scalability, reliability and security.
 
 #### A2.2.3 Compare and contrast networking models.
 
@@ -260,14 +209,6 @@ kind: syllabus
 
 ##### A2.3.3.2 The role that switches and routers play in packet switching
 
-#### A2.3.4 Explain how static routing and dynamic routing move data across local area networks. (HL only)
-
-##### A2.3.4.1 The process of static routing, and its advantages and disadvantages
-
-##### A2.3.4.2 The process of dynamic routing, and its advantages and disadvantages (explanation of a specific routing protocol is not required)
-
-##### A2.3.4.3 Factors to consider must include configuration, maintenance, complexity, resource usage, convergence, scalability, network size.
-
 ### A2.4 Network security
 
 #### A2.4.1 Discuss the effectiveness of firewalls at protecting a network.
@@ -277,18 +218,6 @@ kind: syllabus
 ##### A2.4.1.2 The strengths and limitations of firewalls
 
 ##### A2.4.1.3 The role of NAT to enhance network security
-
-#### A2.4.2 Describe common network vulnerabilities. (HL only)
-
-##### A2.4.2.1 Distributed denial of service (DDoS), insecure network protocols, malware, man-in-the-middle (MitM) attacks, phishing attacks, SQL injection, cross-site scripting (XSS), unpatched software, weak authentication, zero-day exploits
-
-#### A2.4.3 Describe common network countermeasures. (HL only)
-
-##### A2.4.3.1 Content security policies, complex password policies, DDoS mitigation tools, email filtering solutions, encrypted protocols, input validation (filtering, whitelisting), intrusion detection systems (IDS), intrusion prevention systems (IPS), multifactor authentication (MFA), secure socket layer (SSL) certificate, transport layer security (TLS) certificate, update software, VPNs
-
-##### A2.4.3.2 The importance of regular security testing and employee training
-
-##### A2.4.3.3 Wireless security measures may include media access controllers (MAC), whitelists and blacklists.
 
 #### A2.4.4 Describe the process of encryption and digital certificates.
 
@@ -300,7 +229,7 @@ kind: syllabus
 
 ##### A2.4.4.4 The significance of encryption key management
 
-## A3 Databases (18 hours)
+## A3 Databases (11 hours)
 
 ### A3.1 Database fundamentals
 
@@ -380,51 +309,7 @@ kind: syllabus
 
 ##### A3.3.3.2 The performance implications of updating data in indexed columns, and how indexes might need to be rebuilt or reorganized following significant data modifications
 
-#### A3.3.4 Construct calculations within a database using SQL’s aggregate functions. (HL only)
-
-##### A3.3.4.1 Aggregate functions on grouped data to aid reporting and decision-making
-
-##### A3.3.4.2 Aggregate commands: AVERAGE, COUNT, MAX, MIN, SUM
-
-#### A3.3.5 Describe different database views. (HL only)
-
-##### A3.3.5.1 Virtual views and materialized (snapshot) views
-
-##### A3.3.5.2 Hiding data complexity, data consistency, independence, performance, query simplification, read-only data or updatable data, security
-
-#### A3.3.6 Describe how transactions maintain data integrity in a database. (HL only)
-
-##### A3.3.6.1 The role of atomicity, consistency, isolation and durability (ACID) to ensure reliable processing of transactions
-
-##### A3.3.6.2 Transaction control language (TCL) commands: BEGIN TRANSACTION, COMMIT, ROLLBACK
-
-### A3.4 Alternative databases and data warehouses (HL only)
-
-#### A3.4.1 Outline the different types of databases as approaches to storing data.
-
-##### A3.4.1.1 Databases models: NoSQL, cloud, spatial, in-memory
-
-##### A3.4.1.2 Examples of the use of the database model in real-world scenarios may include e-commerce platforms, geographic information systems (GIS), managed services, real-time analytics, social media platforms, SaaS.
-
-#### A3.4.2 Explain the primary objectives of data warehouses in data management and business intelligence.
-
-##### A3.4.2.1 The roles of append-only data, subject-oriented data, integrated data, time-variant data, non-volatile data and data optimized for query performance, to ensure efficient data storage and analysis
-
-#### A3.4.3 Explain the role of online analytical processing (OLAP) and data mining for business intelligence.
-
-##### A3.4.3.1 Data mining techniques must include classification, clustering, regression, association rule discovery, sequential pattern discovery, anomaly detection (note: This links to “A4 Machine learning”).
-
-##### A3.4.3.2 The uses of the techniques in extracting meaningful information from large data sets
-
-#### A3.4.4 Describe the features of distributed databases.
-
-##### A3.4.4.1 The need to maintain data consistency in a distributed database
-
-##### A3.4.4.2 The role of ACID to ensure reliable processing of transactions in distributed databases
-
-##### A3.4.4.3 Features of distributed databases: concurrency control, data consistency, data partitioning, data security, distribution transparency, fault tolerance, global query processing, location transparency, replication, scalability
-
-## A4 Machine learning (18 hours)
+## A4 Machine learning (5 hours)
 
 ### A4.1 Machine learning fundamentals
 
@@ -443,100 +328,6 @@ kind: syllabus
 ##### A4.1.2.2 Hardware configurations for machine learning ranging from standard laptops to advanced infrastructure
 
 ##### A4.1.2.3 Advanced infrastructure must include application-specific integrated circuits (ASICs), edge devices, field-programmable gate arrays (FPGAs), GPUs, tensor processing units (TPUs), cloud-based platforms, high-performance computing (HPC) centres.
-
-### A4.2 Data preprocessing (HL only)
-
-#### A4.2.1 Describe the significance of data cleaning.
-
-##### A4.2.1.1 The impact of data quality on model performance
-
-##### A4.2.1.2 Techniques for handling outliers, removing or consolidating duplicate data, identifying incorrect data, filtering irrelevant data, transforming improperly formatted data, and imputation, deletion or predictive modelling for missing data
-
-##### A4.2.1.3 Normalization and standardization as crucial preprocessing steps
-
-#### A4.2.2 Describe the role of feature selection.
-
-##### A4.2.2.1 Feature selection to identify and retain the most informative attributes of the data set
-
-##### A4.2.2.2 Feature selection strategies: filter methods, wrapper methods, embedded methods
-
-#### A4.2.3 Describe the importance of dimensionality reduction.
-
-##### A4.2.3.1 The curse of dimensionality considerations may include overfitting, computational complexity, data sparsity, the effectiveness of distance metrics, data visualization, sample size increases, memory usage.
-
-##### A4.2.3.2 Dimensionality reduction of variables, while preserving the relevant aspects of the data
-
-##### A4.2.3.3 Note: Statistical techniques such as principal component analysis (PCA) and linear discriminant analysis (LDA) are beyond the scope of this course.
-
-### A4.3 Machine learning approaches (HL only)
-
-#### A4.3.1 Explain how linear regression is used to predict continuous outcomes.
-
-##### A4.3.1.1 The relationship between the independent (predictor) and dependent (response) variables
-
-##### A4.3.1.2 The significance of the slope and intercept in the regression equation
-
-##### A4.3.1.3 How well the model fits the data—often assessed using measures like r2.
-
-#### A4.3.2 Explain how classifications techniques in supervised learning are used to predict discrete categorical outcomes.
-
-##### A4.3.2.1 K-Nearest Neighbours (K-NN) and decision trees algorithms to categorize new data points, based on patterns learned from existing labelled data
-
-##### A4.3.2.2 Real-world applications of K-NN may include collaborative filtering recommendation systems.
-
-##### A4.3.2.3 Real-world applications of decision trees may include medical diagnosis based on a patient’s symptoms.
-
-#### A4.3.3 Explain the role of hyperparameter tuning when evaluating supervised learning algorithms.
-
-##### A4.3.3.1 Accuracy, precision, recall and F1 score as evaluation metrics
-
-##### A4.3.3.2 The role of hyperparameter tuning on model performance
-
-##### A4.3.3.3 Overfitting and underfitting when training algorithms
-
-#### A4.3.4 Describe how clustering techniques in unsupervised learning are used to group data based on similarities in features.
-
-##### A4.3.4.1 Clustering techniques in unsupervised learning group data based on feature similarities
-
-##### A4.3.4.2 Real-world applications of clustering may include using purchasing data to segment a customer base.
-
-#### A4.3.5 Describe how learning techniques using the association rule are used to uncover relations between different attributes in large data sets.
-
-##### A4.3.5.1 Mining techniques using the association rule and interpretation of the results for a given scenario For example, in crime analysis, the techniques may reveal that areas with high rates of vandalism also often experience incidents of theft, assisting law enforcement in predictive policing and resource allocation.
-
-#### A4.3.6 Describe how an agent learns to make decisions by interacting with its environment in reinforcement learning.
-
-##### A4.3.6.1 The principle of cumulative reward and the foundational concepts of agent–environment interaction, encompassing actions, states, rewards and policies
-
-##### A4.3.6.2 The exploration versus exploitation trade-off as a core concept in reinforcement learning
-
-#### A4.3.7 Describe the application of genetic algorithms in various real-world situations.
-
-##### A4.3.7.1 For example: population, fitness function, selection, crossover, mutation, evaluation, termination
-
-##### A4.3.7.2 A real-world application of genetic algorithms is seen in optimization problems, such as route planning (e.g. the “travelling salesperson problem”).
-
-#### A4.3.8 Outline the structure and function of ANNs and how multi-layer networks are used to model complex patterns in data sets.
-
-##### A4.3.8.1 An artificial neural network (ANN) to simulate interconnected nodes or “neurons” to process and learn from input data, enabling tasks such as classification, regression and pattern recognition
-
-##### A4.3.8.2 Sketch of a single perceptron, highlighting its input, weights, bias, activation function and output
-
-##### A4.3.8.3 Sketch of a multi-layer perceptron (MLP) encompassing the input layer, one or more hidden layers and the output layer.
-
-#### A4.3.9 Describe how CNNs are designed to adaptively learn spatial hierarchies of features in images.
-
-##### A4.3.9.1 Convolutional neural network (CNN) basic architecture: input layer, convolutional layers, activation functions, pooling layers, fully connected layers, output layer
-
-##### A4.3.9.2 The effect of the number of layers, kernel size and stride, activation function selection, and the loss function on how CNNs process input data and classify images
-
-#### A4.3.10 Explain the importance of model selection and comparison in machine learning.
-
-##### A4.3.10.1 How different algorithms can yield different results depending on the data and type of problem
-
-##### A4.3.10.2 The reasons for selecting specific machine learning models over others, considering factors like the nature of the problem, its complexity and desired outcomes
-
-##### A4.3.10.3 The variability in algorithm performance based on the data’s characteristics
 
 ### A4.4 Ethical considerations
 
@@ -582,7 +373,7 @@ kind: syllabus
 
 ##### B1.1.4.3 Flowcharts for execution flow, to track changes in variables and to determine output
 
-## B2 Programming (42 hours)
+## B2 Programming (40 hours)
 
 ### B2.1 Programming fundamentals
 
@@ -688,22 +479,6 @@ kind: syllabus
 
 ##### B2.4.3.2 The advantages and disadvantages of each algorithm in terms of efficiency across various data sets
 
-#### B2.4.4 Explain the fundamental concept of recursion and its applications in programming. (HL only)
-
-##### B2.4.4.1 The fundamentals of recursion and its advantages and limitations
-
-##### B2.4.4.2 The utility of recursion in solving problems that can be broken down into smaller, similar sub-problems
-
-##### B2.4.4.3 Recursive algorithms, including but not limited to quicksort
-
-##### B2.4.4.4 The limitations of recursion, including complexity and memory usage
-
-##### B2.4.4.5 Situations that best suit the use of recursion, including fractal image creation, traversing binary trees, sorting algorithms
-
-#### B2.4.5 Construct and trace recursive algorithms in a programming language. (HL only)
-
-##### B2.4.5.1 Simple, non-branching recursive algorithms in programming only
-
 ### B2.5 File processing
 
 #### B2.5.1 Construct code to perform file-processing operations.
@@ -718,7 +493,7 @@ kind: syllabus
 
 ##### B2.5.1.5 Functions for Python users may include open(), read(), readline(), write(), close().
 
-## B3 Object-oriented programming (23 hours)
+## B3 Object-oriented programming (7 hours)
 
 ### B3.1 Fundamentals of OOP for a single class
 
@@ -755,85 +530,3 @@ kind: syllabus
 ##### B3.1.5.3 Controlling access to class members
 
 ##### B3.1.5.4 The importance of limiting access to maintain the integrity and security of an object's state
-
-### B3.2 Fundamentals of OOP for multiple classes (HL only)
-
-#### B3.2.1 Explain and apply the concept of inheritance in OOP to promote code reusability.
-
-##### B3.2.1.1 How inheritance enables a hierarchical relationship between parent and child classes
-
-##### B3.2.1.2 Extending existing classes, utilizing inheritance to reuse and extend functionalities
-
-##### B3.2.1.3 The impact of inheritance on access to parent class members with different access modifiers (private, public, protected, default)
-
-#### B3.2.2 Construct code to model polymorphism and its various forms, such as method overriding.
-
-##### B3.2.2.1 The principle of polymorphism and how it contributes to code flexibility and reusability
-
-##### B3.2.2.2 How to implement dynamic polymorphic behaviour through mechanisms like method overriding
-
-##### B3.2.2.3 How to apply static polymorphic behaviour to maximize code efficiency
-
-#### B3.2.3 Explain the concept of abstraction in OOP.
-
-##### B3.2.3.1 The significance of abstraction in the development of modular code fragments
-
-##### B3.2.3.2 The use of abstract classes to establish common interfaces for sub-classes
-
-#### B3.2.4 Explain the role of composition and aggregation in class relationships.
-
-##### B3.2.4.1 How to design objects by leveraging smaller component objects through composition and aggregation
-
-##### B3.2.4.2 That aggregation implies that the subcomponents can function independently of the aggregating class, while in composition, the subcomponents are tightly coupled and cannot exist outside the aggregating class
-
-#### B3.2.5 Explain commonly used design patterns in OOP.
-
-##### B3.2.5.1 The key design patterns such as singleton, factory and observer
-
-##### B3.2.5.2 The application of design patterns in solving recurring programming challenges
-
-## B4 Abstract data types (HL only) (23 hours)
-
-### B4.1 Fundamentals of ADTs
-
-#### B4.1.1 Explain the properties and purpose of ADTs in programming.
-
-##### B4.1.1.1 The core principles of ADTs, including their purpose in providing a high-level description of data structures and their associated operations
-
-#### B4.1.2 Evaluate linked lists.
-
-##### B4.1.2.1 Lists must include singly, doubly, circular
-
-##### B4.1.2.2 Sketch of linked lists and implementation of basic operations diagrammatically, such as insertion, deletion, traversal, search
-
-##### B4.1.2.3 The advantages and disadvantages of using linked lists over other data structures like arrays, particularly in terms of memory utilization and performance
-
-#### B4.1.3 Construct and apply linked lists: singly, doubly and circular.
-
-##### B4.1.3.1 The basic operations on a linked list, such as insertion, deletion, traversal, search
-
-#### B4.1.4 Explain the structures and properties of BSTs.
-
-##### B4.1.4.1 How binary search trees (BSTs) are used for data organization
-
-##### B4.1.4.2 Insert, delete, traverse and searching nodes in a BST
-
-##### B4.1.4.3 Sketching a BST as a tree diagram
-
-#### B4.1.5 Construct and apply sets as an ADT.
-
-##### B4.1.5.1 The fundamental characteristics of sets, including their unordered nature and the uniqueness of elements
-
-##### B4.1.5.2 Operations: union, intersection and difference
-
-##### B4.1.5.3 Code to check if an element is in a set, to add an element to a set, to remove an element, and to check whether one set is a subset/superset of another set
-
-#### B4.1.6 Explain the core principles of ADTs.
-
-##### B4.1.6.1 High-level description of data structures and their associated operations and purpose
-
-##### B4.1.6.2 The underlying mechanics of hash tables, including hashing functions, collision resolution strategies and load factors
-
-##### B4.1.6.3 The underlying mechanics of sets to store and manage data
-
-##### B4.1.6.4 HashMap and HashSet in Java; dict and set in Python
