@@ -7,3 +7,8 @@
 __pycache__/
 db-backups/
 node_modules/
+# Collaboration mode: the live config (holds the allowlist) and any local
+# deploy key are never committed. See collab.example.json + DEPLOY.md.
+collab.json
+deploy_key
+deploy_key.pub

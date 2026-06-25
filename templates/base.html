@@ -49,6 +49,28 @@
                padding: .8rem .9rem; position: sticky; top: 0; height: 100vh;
                overflow-y: auto; }
     .sidebar h1 { font-size: 1rem; margin: 0; font-weight: 700; }
+    /* Collaboration status bar (collab mode only): who you are + sync/logout. */
+    .collabbar { display: flex; align-items: center; justify-content: space-between;
+                gap: .5rem; margin: -.4rem 0 .9rem; padding: .35rem .5rem;
+                background: #f4f7fb; border: 1px solid #e1e8f0; border-radius: 6px; }
+    .collabwho { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+    .collabhandle { font-size: .82rem; font-weight: 600; color: #2b4a6b; overflow: hidden;
+                text-overflow: ellipsis; white-space: nowrap; }
+    .collabrole { font-size: .56rem; font-weight: 700; text-transform: uppercase;
+                letter-spacing: .03em; padding: .04rem .3rem; border-radius: 8px; flex: none; }
+    .collabrole-editor { background: #eafaf0; color: #2f855a; border: 1px solid #cdebd9; }
+    .collabrole-viewer { background: #eef1f4; color: #555; border: 1px solid #e0e4e8; }
+    .collabacts { display: flex; align-items: center; gap: .4rem; flex: none; }
+    .collabsync { margin: 0; }
+    .collabsync button { font-size: .74rem; padding: .15rem .45rem; color: #2b6cb0;
+                background: #fff; border: 1px solid #cfe0f5; border-radius: 4px; }
+    .collabsync button:hover { background: #eef3f8; }
+    .collablogout { color: #999; text-decoration: none; font-size: .9rem; }
+    .collablogout:hover { color: var(--gap); }
+    .collabpending { font-size: .74rem; color: #555; background: #fffbe6;
+                border: 1px solid #f0e0a0; border-radius: 6px; padding: .3rem .5rem;
+                margin: -.5rem 0 .9rem; }
+    .collabpending.err { color: #8a1f1a; background: #fdecea; border-color: #f5c2c0; }
     .brandrow { display: flex; align-items: center; justify-content: space-between;
                 gap: .5rem; margin-bottom: 1rem; }
     .brandrow .addcourse { font-size: 1.1rem; line-height: 1; padding: 0 .45rem;
@@ -453,8 +475,39 @@
     <aside class="sidebar">
       <div class="brandrow">
         <h1>Lesson Planning</h1>
+        {% if can_edit %}
         <button type="button" id="addcourse-btn" class="addcourse" title="New course">+</button>
+        {% endif %}
       </div>
+      {% if collab_enabled %}
+      <div class="collabbar">
+        <div class="collabwho">
+          <span class="collabhandle" title="{{ collab_role }}">
+            <i class="bi bi-person-circle"></i> {{ collab_user.handle }}</span>
+          <span class="collabrole collabrole-{{ collab_role }}">{{ collab_role }}</span>
+        </div>
+        <div class="collabacts">
+          {% if can_edit %}
+          <form method="post" action="{{ url_for('collab_sync') }}" class="collabsync">
+            <button type="submit" title="Pull the latest merged changes from main">
+              <i class="bi bi-arrow-repeat"></i> Sync</button>
+          </form>
+          {% endif %}
+          <a href="{{ url_for('collab_logout') }}" class="collablogout" title="Sign out">
+            <i class="bi bi-box-arrow-right"></i></a>
+        </div>
+      </div>
+      {% if can_edit and collab_pending %}
+        <div class="collabpending {{ 'err' if collab_push_error else '' }}">
+          {% if collab_push_error %}
+            <i class="bi bi-exclamation-triangle"></i> {{ collab_pending }} commit(s) not yet pushed to GitHub.
+          {% else %}
+            <i class="bi bi-cloud-arrow-up"></i> Pushing {{ collab_pending }} commit(s) to GitHub…
+          {% endif %}
+        </div>
+      {% endif %}
+      {% endif %}
+      {% if can_edit %}
       <div id="newcourse" class="newcourse" hidden>
         <form method="post" action="{{ url_for('course_new') }}" class="ncform">
           <input id="newcourse-id" type="text" name="course" placeholder="course id (e.g. csa)"
@@ -470,10 +523,12 @@
           </label>
         </form>
       </div>
+      {% endif %}
       {% for c in course_nav %}
         <div class="course {{ 'active' if c.course == nav_course else '' }}">
           <div class="coursehead">
             <span class="coursename">{{ c.course|upper }}</span>
+            {% if can_edit %}
             <span class="coursehead-actions">
               <form method="post" action="{{ url_for('hierarchy_prepare', course=c.course) }}"
                     enctype="multipart/form-data" class="addhier">
@@ -497,17 +552,22 @@
                 <button type="submit" class="gear" title="Delete course"><i class="bi bi-trash"></i></button>
               </form>
             </span>
+            {% endif %}
           </div>
+          {% if can_edit %}
           <form class="ctitle-form autosave" method="post"
                 action="{{ url_for('course_rename', course=c.course) }}"
                 hx-post="{{ url_for('course_rename', course=c.course) }}" hx-swap="none">
             <input class="ctitle-input" type="text" name="title" value="{{ c.title }}"
                    autocomplete="off" aria-label="Course title" placeholder="course title…">
           </form>
+          {% elif c.title %}
+          <span class="ctitle">{{ c.title }}</span>
+          {% endif %}
           <ul class="hiers" data-course="{{ c.course }}">
             <li class="outlineitem {{ 'active' if c.course == nav_course and c.outline and c.outline == active_hierarchy else '' }}">
               <a href="{{ url_for('plan', course=c.course) }}">Course outline</a>
-              {% if c.hierarchies %}
+              {% if can_edit and c.hierarchies %}
                 <button type="button" class="miniadd"
                         title="Build the outline from a reference hierarchy"
                         onclick="document.getElementById('oimport-{{ c.course }}').showModal()">
@@ -542,6 +602,7 @@
             </li>
             <li class="objitem {{ 'active' if request.endpoint == 'objectives' and c.course == nav_course else '' }}">
               <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
+              {% if can_edit %}
               <form method="post" class="objadd" enctype="multipart/form-data"
                     action="{{ url_for('objectives_upload', course=c.course) }}">
                 <label class="miniadd" title="Upload objectives — plain text (one per line), or a (uuid, text, hierarchy_id, node_id) TSV">
@@ -549,14 +610,18 @@
                   <input type="file" name="file" accept=".tsv,.txt,.csv" hidden onchange="this.form.submit()">
                 </label>
               </form>
+              {% endif %}
             </li>
             {% for h in c.hierarchies %}
               <li class="hieritem {{ 'active' if c.course == nav_course and h.hierarchy == active_hierarchy else '' }}"
                   data-hierarchy="{{ h.hierarchy }}">
+                {% if can_edit %}
                 <span class="draghandle" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
+                {% endif %}
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
                    title="{{ h.label }}">{{ h.label }}</a>
                 <span class="pill pill-{{ h.hierarchy }}">{{ h.hierarchy }}</span>
+                {% if can_edit %}
                 <form method="post" class="objadd" enctype="multipart/form-data"
                       action="{{ url_for('hierarchy_upload', course=c.course, hierarchy=h.hierarchy) }}">
                   <label class="miniadd" title="Upload an objectives TSV (uuid, text, node_id) into this hierarchy">
@@ -569,6 +634,7 @@
                       onsubmit="return confirm('Delete {{ h.hierarchy }} and its coverage edges?');">
                   <button type="submit" title="Delete hierarchy"><i class="bi bi-trash"></i></button>
                 </form>
+                {% endif %}
               </li>
             {% endfor %}
           </ul>

@@ -1,0 +1,35 @@
+# fly.io config for the git-backed collaboration deployment. See DEPLOY.md.
+#
+# Single machine only: the SQLite caches, the git clone, and the in-process push
+# queue / action buffers all live on one machine's volume and memory. Do NOT
+# scale to >1 machine.
+
+app = "lesson-planning"          # change to your fly app name
+primary_region = "sea"           # change to your nearest region
+
+[build]
+  # Build context is the parent dir so the sibling `bells` checkout is included.
+  dockerfile = "Dockerfile"
+  # NOTE: run `fly deploy` from the PARENT directory with
+  #   fly deploy -c lesson-planning/fly.toml --dockerfile lesson-planning/Dockerfile .
+  # (see DEPLOY.md) so both repos are in the build context.
+
+[env]
+  LESSON_DATA_DIR = "/data"
+  LESSON_COLLAB_CONFIG = "/data/collab.json"
+
+[[mounts]]
+  source = "lesson_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  # One shared CPU is plenty for a handful of teachers.
+  size = "shared-cpu-1x"
+  memory = "512mb"

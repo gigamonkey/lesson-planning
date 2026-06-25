@@ -39,7 +39,7 @@
 {% endmacro %}
 
 {% block titlebtn %}
-  {% if editable %}
+  {% if editable and can_edit %}
     <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addunit-form"
           hx-post="{{ url_for('unit_new', course=course) }}"
           hx-target="#outline-units" hx-swap="innerHTML"

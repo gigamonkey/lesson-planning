@@ -19,12 +19,13 @@ import io
 import json
 import os
 import re
+import secrets
 import sqlite3
 import sys
 import uuid as uuidlib
 
-from flask import (Flask, Response, abort, flash, jsonify, make_response,
-                   redirect, render_template, request, url_for)
+from flask import (Flask, Response, abort, flash, g, jsonify, make_response,
+                   redirect, render_template, request, session, url_for)
 from markupsafe import Markup
 
 # Import sibling repo-root modules (the lesson-planning scripts). The app wires
@@ -33,6 +34,7 @@ from markupsafe import Markup
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO_ROOT)
 import calendar_view  # noqa: E402
+import collab  # noqa: E402
 import course_bundle  # noqa: E402
 import hierarchy  # noqa: E402
 import seed as seed_module  # noqa: E402
@@ -65,13 +67,244 @@ CALENDAR_EXTRAS_DIR = os.environ.get(
 )
 
 app = Flask(__name__)
-app.secret_key = "lesson-planning-dev"  # local single-user app; not security-sensitive
+# In single-user (local) mode the secret isn't security-sensitive. In collab mode
+# it signs the session cookie that carries the logged-in identity, so it MUST be a
+# real secret (set FLASK_SECRET_KEY as a fly secret).
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or (
+    secrets.token_hex(32) if collab.enabled() else "lesson-planning-dev")
+
+
+def db_path():
+    """The SQLite cache for the current request: the logged-in user's per-user db
+    in collab mode (bound in `before_request`), else the single global db. Falls
+    back to the global outside any request context (boot, CLI)."""
+    try:
+        return g.db_path
+    except (RuntimeError, AttributeError):
+        return DB_PATH
+
+
+def corpus_dir():
+    """The corpus directory for the current request: the logged-in user's git
+    worktree in collab mode, else the single global corpus."""
+    try:
+        return g.corpus_dir
+    except (RuntimeError, AttributeError):
+        return CORPUS_DIR
 
 
 def db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(db_path())
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# --------------------------------------------------------------------------
+# Collaboration (git-backed multi-user mode). All of this is inert unless
+# collab.enabled() -- see collab.py and plans/git-collaboration.md.
+# --------------------------------------------------------------------------
+
+# Endpoints reachable without a logged-in session (the auth dance itself).
+_AUTH_EXEMPT = {"collab_login", "collab_callback", "collab_devlogin",
+                "collab_logout", "favicon", "static"}
+
+# Human phrases for the per-save commit message, keyed by mutating endpoint
+# (the route's function name). The acting course is appended where it helps.
+_ACTION_PHRASES = {
+    "place": "placed objectives in {course}",
+    "node_objectives_bulk": "edited node objectives in {course}",
+    "unit_new": "added a unit to {course}",
+    "unit_rename": "renamed a unit in {course}",
+    "unit_delete": "deleted a unit in {course}",
+    "unit_move": "moved a unit in {course}",
+    "lesson_new": "added a lesson to {course}",
+    "lesson_edit": "edited a lesson in {course}",
+    "lesson_delete": "deleted a lesson in {course}",
+    "lesson_arrange": "reordered lessons in {course}",
+    "node_duration_set": "set a duration in {course}",
+    "objective_new": "added an objective to {course}",
+    "objective_edit": "edited an objective in {course}",
+    "objectives_upload": "imported objectives into {course}",
+    "outline_import": "rebuilt the {course} outline from a reference",
+    "hierarchy_load_course": "uploaded a reference hierarchy to {course}",
+    "hierarchy_delete": "removed a reference hierarchy from {course}",
+    "references_reorder": "reordered references in {course}",
+    "course_rename": "renamed course {course}",
+    "course_new": "created a course",
+    "course_import": "imported a course bundle",
+    "course_delete": "deleted a course",
+}
+# Endpoints that themselves perform the commit -- don't double-record them.
+_SAVE_ENDPOINTS = {"export", "outline_source"}
+
+
+def current_user():
+    return session.get("user") if collab.enabled() else None
+
+
+def commit_after_save(course, fallback):
+    """After a save has written the corpus to the editor's worktree, commit it
+    (author = the teacher) and enqueue the push. No-op outside collab mode."""
+    if not collab.enabled() or not getattr(g, "editor", False):
+        return
+    u = g.user
+    try:
+        collab.commit_and_push(u["handle"], u.get("name"), u.get("email"),
+                               fallback)
+    except Exception as e:
+        flash(f"Saved locally, but git commit failed: {e}")
+
+
+@app.before_request
+def _collab_gate():
+    """In collab mode: require a session, bind the per-user (db, corpus), and
+    block writes from viewers. A no-op in single-user mode."""
+    if not collab.enabled():
+        return
+    ep = request.endpoint
+    if ep in _AUTH_EXEMPT:
+        return
+    user = current_user()
+    if not user:
+        if request.method != "GET":
+            abort(401, "sign in to continue")
+        return redirect(url_for("collab_login", next=request.url))
+    g.user = user
+    g.handle = user["handle"]
+    g.role = user["role"]
+    g.editor = (user["role"] == "editor")
+    try:
+        if g.editor:
+            g.db_path, g.corpus_dir = collab.editor_binding(
+                user["handle"], user.get("name"), user.get("email"))
+        else:
+            g.db_path, g.corpus_dir = collab.viewer_binding()
+    except Exception as e:
+        print(f"collab: binding failed for {user['handle']}: {e}", file=sys.stderr)
+        abort(500, "couldn't open your workspace")
+    # Viewers are strictly read-only: reject any mutating request.
+    if request.method not in ("GET", "HEAD", "OPTIONS") and not g.editor:
+        abort(403, "read-only access")
+
+
+@app.after_request
+def _collab_record(resp):
+    """Record a human phrase for each successful structured edit so the next save
+    can compose a descriptive commit message."""
+    if (collab.enabled() and getattr(g, "editor", False)
+            and request.method == "POST" and resp.status_code < 400):
+        ep = request.endpoint
+        if ep in _ACTION_PHRASES and ep not in _SAVE_ENDPOINTS:
+            course = (request.view_args or {}).get("course", "the course")
+            collab.record_action(g.handle, _ACTION_PHRASES[ep].format(course=course))
+    return resp
+
+
+@app.context_processor
+def inject_collab():
+    """Template flags: whether the current user may edit (always true in
+    single-user mode), their identity, and any pending-push state."""
+    if not collab.enabled():
+        return {"collab_enabled": False, "can_edit": True, "collab_user": None}
+    editor = getattr(g, "editor", False)
+    handle = getattr(g, "handle", None)
+    pending = collab.unpushed_count(handle) if editor and handle else 0
+    return {
+        "collab_enabled": True,
+        "can_edit": editor,
+        "collab_user": getattr(g, "user", None),
+        "collab_role": getattr(g, "role", None),
+        "collab_pending": pending,
+        "collab_push_error": collab.push_error(handle) if handle else None,
+    }
+
+
+# ---- Auth + sync routes (collab mode) ------------------------------------
+
+@app.route("/login")
+def collab_login():
+    if not collab.enabled():
+        return redirect(url_for("index"))
+    if current_user():
+        return redirect(url_for("index"))
+    session["next"] = request.args.get("next") or url_for("index")
+    return render_template("login.html", dev_login=collab.dev_login_enabled(),
+                           page_title="Sign in")
+
+
+@app.route("/login/start")
+def collab_oauth_start():
+    if not collab.enabled():
+        abort(404)
+    state = secrets.token_urlsafe(24)
+    session["oauth_state"] = state
+    redirect_uri = url_for("collab_callback", _external=True)
+    return redirect(collab.oauth_authorize_url(state, redirect_uri))
+
+
+@app.route("/oauth/callback")
+def collab_callback():
+    if not collab.enabled():
+        abort(404)
+    if request.args.get("state") != session.pop("oauth_state", None):
+        abort(400, "bad OAuth state")
+    code = request.args.get("code")
+    if not code:
+        abort(400, "no OAuth code")
+    redirect_uri = url_for("collab_callback", _external=True)
+    try:
+        token = collab.oauth_exchange(code, redirect_uri)
+        handle, name, email = collab.github_user(token)
+    except Exception as e:
+        abort(502, f"GitHub sign-in failed: {e}")
+    return _finish_login(handle, name, email)
+
+
+@app.route("/login/dev", methods=["POST"])
+def collab_devlogin():
+    if not collab.dev_login_enabled():
+        abort(404)
+    handle = (request.form.get("handle") or "").strip()
+    return _finish_login(handle, handle, collab._noreply(handle or "dev"))
+
+
+def _finish_login(handle, name, email):
+    role = collab.role_of(handle)
+    if not role:
+        return render_template("login.html", dev_login=collab.dev_login_enabled(),
+                               denied=handle, page_title="Sign in"), 403
+    session["user"] = {"handle": handle, "name": name, "email": email,
+                       "role": role}
+    nxt = session.pop("next", None) or url_for("index")
+    # Returning editors: make sure the sandbox exists, then pull in anything
+    # merged to main since last time. (Auth routes skip the before_request
+    # binding, so create it here before syncing.)
+    if role == "editor":
+        try:
+            collab.editor_binding(handle, name, email)
+            collab.sync(handle, name, email)
+        except Exception as e:
+            print(f"collab: login sync failed for {handle}: {e}", file=sys.stderr)
+    return redirect(nxt)
+
+
+@app.route("/logout")
+def collab_logout():
+    session.clear()
+    return redirect(url_for("collab_login"))
+
+
+@app.route("/sync", methods=["POST"])
+def collab_sync():
+    if not collab.enabled() or not getattr(g, "editor", False):
+        abort(403)
+    u = g.user
+    result = collab.sync(u["handle"], u.get("name"), u.get("email"))
+    if result.get("conflict"):
+        flash(f"{result['message']} Files: {', '.join(result.get('files', []))}")
+    else:
+        flash(result["message"])
+    return redirect(request.referrer or url_for("index"))
 
 
 def _schema_version():
@@ -197,7 +430,7 @@ def inject_nav():
                 refs = [h for h in hs if h["hierarchy"] != outline]
                 # Does the on-disk corpus need a (re)export? Drives the save icon;
                 # has_corpus drives whether Refresh (pull from disk) is available.
-                course_dir = os.path.join(CORPUS_DIR, c["course"])
+                course_dir = os.path.join(corpus_dir(), c["course"])
                 has_corpus = os.path.isdir(course_dir)
                 try:
                     dirty = plan_io.is_dirty(conn, c["course"], course_dir)
@@ -348,7 +581,7 @@ def data():
         cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
         n_obj = conn.execute("SELECT count(*) FROM objectives").fetchone()[0]
     return render_template("data.html", courses=cs, n_obj=n_obj,
-                           export_dir=os.path.relpath(CORPUS_DIR, REPO_ROOT),
+                           export_dir=os.path.relpath(corpus_dir(), REPO_ROOT),
                            page_title="Settings")
 
 
@@ -357,10 +590,10 @@ def data_restore():
     """Restore everything from version control: reload every course in the corpus
     directory from its markdown + TSVs (each read_course is a scoped replace, so
     un-exported in-db edits to those courses are overwritten)."""
-    dirs = seed_module.course_dirs(CORPUS_DIR)
-    seed_module.load_corpus(DB_PATH, CORPUS_DIR)
+    dirs = seed_module.course_dirs(corpus_dir())
+    seed_module.load_corpus(db_path(), corpus_dir())
     names = ", ".join(os.path.basename(d) for d in dirs) or "none"
-    flash(f"Restored from {os.path.relpath(CORPUS_DIR, REPO_ROOT)} · courses: {names}")
+    flash(f"Restored from {os.path.relpath(corpus_dir(), REPO_ROOT)} · courses: {names}")
     return redirect(url_for("data"))
 
 
@@ -474,7 +707,7 @@ def hierarchy_load_course(course):
     text = _pin_slug(text, slug)   # author the bare slug into the front matter
     rows = load_nodes.build_rows(course, slug, doc["nodes"])
     # Persist the markdown into the corpus as <slug>.md (the load source of truth).
-    course_dir = os.path.join(CORPUS_DIR, course)
+    course_dir = os.path.join(corpus_dir(), course)
     os.makedirs(course_dir, exist_ok=True)
     with open(os.path.join(course_dir, f"{slug}.md"), "w", encoding="utf-8") as out:
         out.write(text if text.endswith("\n") else text + "\n")
@@ -486,7 +719,7 @@ def hierarchy_load_course(course):
             "SELECT DISTINCT node_id FROM coverage WHERE course=? AND hierarchy=?",
             (course, slug))}
     orphaned = sorted(existing - new_ids)
-    load_nodes.load(DB_PATH, slug, course, crow["title"],
+    load_nodes.load(db_path(), slug, course, crow["title"],
                     rows, source=filename, title=title, source_md=text)
     # Measure the course outline against this new reference (the eager outline was
     # created before any reference existed, so link it here).
@@ -897,7 +1130,7 @@ def hierarchy_upload(course, hierarchy):
     except ValueError as e:
         flash(f"Upload failed: {e}")
         return back
-    stats, dangling = import_objectives.upsert(DB_PATH, course, rows)
+    stats, dangling = import_objectives.upsert(db_path(), course, rows)
     msg = _upsert_msg(f.filename, stats)
     unknown = dangling.get(hierarchy, [])
     if unknown:
@@ -1028,7 +1261,7 @@ def outline_source(course):
 
     text = request.form.get("text", "")
     try:
-        plan_io.load_plan_text(DB_PATH, course, text)
+        plan_io.load_plan_text(db_path(), course, text)
     except (ValueError, sqlite3.Error) as e:
         # Don't clobber: db and disk are untouched. Re-render with the user's buffer
         # intact so the failed edit isn't lost.
@@ -1036,8 +1269,9 @@ def outline_source(course):
         return render_template("outline_edit.html", course=course,
                                page_title=f"{course.upper()} outline source",
                                text=text, error=str(e))
-    course_dir = os.path.join(CORPUS_DIR, course)
-    _path, n_obj, n_cov = plan_io.write_course(DB_PATH, course, course_dir)
+    course_dir = os.path.join(corpus_dir(), course)
+    _path, n_obj, n_cov = plan_io.write_course(db_path(), course, course_dir)
+    commit_after_save(course, f"Edit {course.upper()} outline via Markdown")
     flash(f"Saved outline · {n_obj} objectives, {n_cov} coverage edges")
     # Back to the regular (non-markdown) outline workspace after a successful save.
     return redirect(url_for("plan", course=course))
@@ -1060,7 +1294,7 @@ def objectives_upload(course):
     except ValueError as e:
         flash(f"Upload failed: {e}")
         return back
-    stats, dangling = import_objectives.upsert(DB_PATH, course, rows)
+    stats, dangling = import_objectives.upsert(db_path(), course, rows)
     msg = _upsert_msg(f.filename, stats)
     if dangling:
         n = sum(len(v) for v in dangling.values())
@@ -1177,8 +1411,9 @@ def export(course):
     """Serialize this course back to its corpus directory: plan.md (the outline +
     course wiring) plus objectives.tsv / coverage.tsv. Reference markdown files are
     inputs and are left untouched."""
-    course_dir = os.path.join(CORPUS_DIR, course)
-    plan_path, n_obj, n_cov = plan_io.write_course(DB_PATH, course, course_dir)
+    course_dir = os.path.join(corpus_dir(), course)
+    plan_path, n_obj, n_cov = plan_io.write_course(db_path(), course, course_dir)
+    commit_after_save(course, f"Save {course.upper()}")
     rel = os.path.relpath(course_dir, REPO_ROOT)
     msg = f"Exported {course!r} to {rel}/ · {n_obj} objectives, {n_cov} coverage edges"
     # htmx (the sidebar save icon): no reload -- the save control re-fetches itself
@@ -1197,7 +1432,7 @@ def save_button(course):
     """The course's save control fragment with a fresh dirty state -- re-fetched by
     the sidebar after edits/drags (which don't re-render the page) so the save icon
     doesn't go stale."""
-    course_dir = os.path.join(CORPUS_DIR, course)
+    course_dir = os.path.join(corpus_dir(), course)
     with db() as conn:
         if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
@@ -1212,13 +1447,13 @@ def save_button(course):
 def course_refresh(course):
     """Reload a course from its corpus directory on disk, replacing the db's copy
     -- the inverse of export, for when the corpus was edited outside the app."""
-    course_dir = os.path.join(CORPUS_DIR, course)
+    course_dir = os.path.join(corpus_dir(), course)
     back = request.referrer or url_for("tree", course=course)
     if not os.path.isdir(course_dir):
         flash(f"No corpus for {course!r} yet (export it first).")
         return redirect(back)
     try:
-        _c, n_refs, n_obj = plan_io.read_course(DB_PATH, course_dir)
+        _c, n_refs, n_obj = plan_io.read_course(db_path(), course_dir)
     except (OSError, ValueError) as e:
         flash(f"Couldn't refresh {course!r} from disk: {e}")
         return redirect(back)
@@ -1532,15 +1767,19 @@ def node_duration_set(course, node_id):
     return _back(course)
 
 
-ensure_schema()
-
-# Unattended population: load any course in the corpus directory that doesn't
-# already exist (see seed.py). Safe to run every boot; never fatal.
-if os.path.isdir(CORPUS_DIR):
-    try:
-        seed_module.seed(DB_PATH, CORPUS_DIR)
-    except Exception as e:  # a broken corpus must not stop the app booting
-        print(f"seed: failed: {e}", file=sys.stderr)
+if collab.enabled():
+    # Multi-user git-backed mode: no single global db. Each user's db is built
+    # lazily from their worktree; bring up the clone, push worker, and main view.
+    collab.startup()
+else:
+    ensure_schema()
+    # Unattended population: load any course in the corpus directory that doesn't
+    # already exist (see seed.py). Safe to run every boot; never fatal.
+    if os.path.isdir(CORPUS_DIR):
+        try:
+            seed_module.seed(DB_PATH, CORPUS_DIR)
+        except Exception as e:  # a broken corpus must not stop the app booting
+            print(f"seed: failed: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -1550,5 +1789,10 @@ if __name__ == "__main__":
     # non-empty value ('cwd'/'worktree'/'1' across versions), so treat any value as
     # a yolo session. An explicit HOST env var always wins.
     default_host = "0.0.0.0" if os.environ.get("YOLO_SESSION") else "127.0.0.1"
-    app.run(debug=True, host=os.environ.get("HOST", default_host),
+    # Debug (with the auto-reloader) on by default for local dev; turn it OFF in
+    # production (FLASK_DEBUG=0). The reloader forks a second process, which in
+    # collab mode would double-run collab.startup() (a second clone + push worker
+    # + refresh timer), so production MUST keep it off.
+    debug = os.environ.get("FLASK_DEBUG", "1") != "0"
+    app.run(debug=debug, host=os.environ.get("HOST", default_host),
             port=int(os.environ.get("PORT", "5001")))

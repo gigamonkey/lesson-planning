@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy to collab.json to enable git-backed multi-user mode. See DEPLOY.md. The presence of collab.json is what turns collaboration ON; without it the app runs as the single-user local tool. Secrets (the OAuth client secret) come from the environment, not this file.",
+
+  "repo": "git@github.com:YOUR-USER/lesson-courses.git",
+  "data_dir": "/data",
+
+  "allowlist": {
+    "your-github-handle": "editor",
+    "a-colleague": "viewer"
+  },
+
+  "github_oauth": {
+    "client_id": "Iv1.xxxxxxxxxxxxxxxx"
+  },
+
+  "ssh_key_path": "/data/deploy_key",
+  "main_refresh_seconds": 300,
+  "dev_login": false
+}
