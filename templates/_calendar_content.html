@@ -81,7 +81,7 @@
                         hx-post="{{ url_for('node_duration_set', course=course, node_id=c.node_id) }}"
                         hx-target="#cal-content" hx-swap="innerHTML">
                     <input type="hidden" name="view" value="calendar">
-                    <label><input type="number" name="amount" min="1" step="1" value="{{ c.lesson_days }}"
+                    <label><input type="number" name="amount" min="0" step="1" value="{{ c.lesson_days }}"
                            title="Days this lesson takes" aria-label="Days"
                            ><span class="cal-lessondays-unit">{{ 'day' if c.lesson_days == 1 else 'days' }}</span></label>
                   </form>

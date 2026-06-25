@@ -245,7 +245,9 @@ def build_calendar(bs, data, units):
         sdays = [d for w in taken if not w["is_break"] for d in w["days"] if d not in labels]
         assign, overflow, i = {}, [], 0
         for L in unit["lessons"]:
-            need = max(1, int(L["days"]))
+            need = int(L["days"])
+            if need <= 0:
+                continue   # an explicit 0-day lesson is omitted from the calendar
             fit = min(need, len(sdays) - i)
             for k in range(fit):
                 assign[sdays[i + k]] = L
