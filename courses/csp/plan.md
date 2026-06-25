@@ -6,13 +6,15 @@ calendar: bhs-2026-2027
 targets: ced, course
 ---
 
-# Unit: Introduction to Programming (6 weeks)
+# Unit: BCJ Unit 1 - Introduction to Programming (6 weeks)
 
-## Lab 1: Click Alonzo Game
+## Lab 1: Click Alonzo Game (3 days)
 
-## Lab 2: Gossip
+## Lab 2: Gossip (2 days)
 
-## Lab 3: Modern Art with Polygons
+## Lab 3: Modern Art with Polygons (3 days)
+
+## Mini project (5 days)
 
 ## Lab 3.5: Row of Houses
 
@@ -20,29 +22,29 @@ targets: ced, course
 
 ## Lab 5: Follow the Leader
 
-## Project: eCard
+## Project: eCard (7 days)
 
 ## Optional Projects
 
-# Unit: Abstraction
+# Unit: BJC Unit 2 - Abstraction (9 weeks)
 
-## Lab 1: Games
+## Lab 1: Games (4 days)
 
-## Lab 2: Making Lists
+## Lab 2: Making Lists (5 days)
 
-## Lab 2.5: Flashcards
+## Lab 2.5: Flashcards (4 days)
 
-## Lab 3: Making Decisions
+## Lab 3: Making Decisions (4 days)
 
-## Lab 4: Making Computers Do Math
+## Lab 4: Making Computers Do Math (5 days)
 
-## Lab 5: Copyrights
+## Lab 5: Copyrights (2 days)
 
-## Project: Survey
+## Project: Survey (8 days)
 
 ## Optional Projects
 
-# Unit: Data Structures
+# Unit: BJC Unit 3 - Data Structures (8 weeks)
 
 ## Lab 1: Dealing with Complexity
 
@@ -56,7 +58,9 @@ targets: ced, course
 
 ## Optional Projects
 
-# Unit: How the Internet Works
+# Unit: Practice create task (2 weeks)
+
+# Unit: BJC Unit 4 - How the Internet Works (3 weeks)
 
 ## Lab 1: Computer Networks
 
@@ -68,7 +72,9 @@ targets: ced, course
 
 ## Unit 4 Project: Binary Converter
 
-# Unit: Algorithms and Simulations
+# Unit: Create task (2 weeks)
+
+# Unit: BJC Unit 5 - Algorithms and Simulations (3 weeks)
 
 ## Lab 1: Search Algorithms and Efficiency
 
@@ -82,7 +88,11 @@ targets: ced, course
 
 ## Lab 6: Tic-Tac-Toe with a Computer Player
 
-# Unit: How Computers Work
+# Unit: AP Prep (2 weeks)
+
+# Unit: Project (2 weeks)
+
+# Unit: BJC Unit 6 - How Computers Work
 
 ## Lab 1: Inside the Computer
 
