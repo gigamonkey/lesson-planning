@@ -86,7 +86,11 @@ school year (units→weeks, lessons→days; see `calendar_view.py` and the durat
 tags in `FORMAT.md`). It reads bells calendar JSONs from `LESSON_CALENDAR_DIR`
 (default the sibling `../bells/bhs-calendars`); a course binds to one via the
 `calendar:` key in its `plan.md` front matter (the year span comes from the
-calendar's `firstDay`..`lastDay`).
+calendar's `firstDay`..`lastDay`). Exam days come from the calendar's own
+`nonClassDays`; a per-calendar sidecar in `calendar-extras/<id>.json`
+(`LESSON_CALENDAR_EXTRAS_DIR`, this repo) adds the `apExams` window and
+`gradingPeriods` week numbers that bells doesn't carry — see `load_calendar` in
+`calendar_view.py`.
 
 ```bash
 # Rebuild the editor bundle after editing frontend/editor.js (needs Node/npm).

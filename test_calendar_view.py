@@ -119,6 +119,43 @@ def main():
     assert not any(r["kind"] == "break" for r in v5["units"][0]["rows"]), \
         "a lone mid-week day off should be a greyed cell, not a break box"
 
+    # Exam days, AP weeks, grading periods. Four clean Mon-Fri weeks (Sep 1-26);
+    # Wed-Fri of week 1 are exam days, week 3 is the AP window, week 2 closes Q1.
+    data6 = dict(DATA, lastDay="2025-09-26", holidays=[],
+                 nonClassDays={"2025-09-03": "exam", "2025-09-04": "exam", "2025-09-05": "exam"},
+                 apExams={"start": "2025-09-15", "end": "2025-09-19"},
+                 gradingPeriods={"2": "Q1"})
+    bs6 = bells.BellSchedule([data6], {"role": "student"})
+    # A 4-day lesson must flow AROUND the exam days: Mon/Tue of week 1, then
+    # Mon/Tue of week 2 -- never onto Wed-Fri of week 1.
+    v6 = cv.build_calendar(bs6, data6,
+                           [{"title": "U", "weeks": 4, "lessons": [{"title": "L", "days": 4}]}])
+    assert v6["teaching_weeks"] == 4, v6["teaching_weeks"]
+    wr6 = [r for r in v6["units"][0]["rows"] if r["kind"] == "week"]
+
+    # Week 1: a 2-day lesson block then a 3-day exam block.
+    w1 = wr6[0]["cells"]
+    assert w1[0] == {"title": "L", "days": 2, "kind": "lesson"}, w1
+    assert w1[1] == {"title": "exam", "days": 3, "kind": "exam"}, w1
+    assert [c["kind"] for c in w1] == ["lesson", "exam"], w1
+
+    # Week 2: the lesson continues onto its first two (non-exam) days.
+    w2 = wr6[1]["cells"]
+    assert w2[0] == {"title": "L", "days": 2, "kind": "lesson"}, w2
+    assert all(c["kind"] == "free" for c in w2[1:]), w2
+
+    # AP weeks and grading-period closes land on exactly their weeks.
+    assert [r["is_ap"] for r in wr6] == [False, False, True, False], wr6
+    assert [r["grading_close"] for r in wr6] == [None, "Q1", None, None], wr6
+    # AP days stay bookable (week 3 has its full five school days available).
+    assert wr6[2]["school_days"] == 5, wr6[2]
+
+    # No sidecar data -> no exam/AP/grading metadata, identical layout to before.
+    v7 = cv.build_calendar(bs, DATA, [{"title": "U", "weeks": 3, "lessons": []}])
+    plain = [r for r in v7["units"][0]["rows"] if r["kind"] == "week"]
+    assert all(not r["is_ap"] and r["grading_close"] is None for r in plain), plain
+    assert not any(c["kind"] in ("exam", "special") for r in plain for c in r["cells"]), plain
+
     print("ok - all calendar_view checks passed")
 
 

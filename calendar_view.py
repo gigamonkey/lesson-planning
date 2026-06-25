@@ -19,12 +19,26 @@ from datetime import date, timedelta
 import bells
 
 
-def load_calendar(calendar_id, calendar_dir):
+def load_calendar(calendar_id, calendar_dir, extras_dir=None):
     """Load a bells calendar by id from `calendar_dir`, returning
-    (BellSchedule, raw_data). Raises FileNotFoundError if the JSON is absent."""
+    (BellSchedule, raw_data). Raises FileNotFoundError if the JSON is absent.
+
+    Exam days come from the calendar's own `nonClassDays` (a bells field). If
+    `extras_dir` is given and `<extras_dir>/<calendar_id>.json` exists, its
+    `apExams` (a {start, end} window) and `gradingPeriods` (week-number -> name)
+    are copied onto the returned data -- these augment the bells calendar with
+    info the bells repo doesn't carry. The sidecar is optional."""
     path = os.path.join(calendar_dir, f"{calendar_id}.json")
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
+    if extras_dir:
+        extras_path = os.path.join(extras_dir, f"{calendar_id}.json")
+        if os.path.exists(extras_path):
+            with open(extras_path, encoding="utf-8") as f:
+                extras = json.load(f)
+            for key in ("apExams", "gradingPeriods"):
+                if key in extras:
+                    data[key] = extras[key]
     return bells.BellSchedule([data], {"role": "student"}), data
 
 
@@ -106,25 +120,32 @@ def _weeks(bs, data, start, end):
     return out
 
 
-def _week_cells(week, assign):
+def _week_cells(week, assign, labels):
     """The week's five weekday (Mon-Fri) columns as cells. A multi-day lesson on
     consecutive days is one block spanning those columns; free and 'off' days are
     one box per day (so unfilled days read individually). 'off' is a weekend/
     holiday/outside-the-term day, kept so every week aligns to its day-of-week
-    column. `days` is the column span."""
+    column. A school day carrying a non-class label (`labels[d]`) renders as an
+    'exam' cell (label 'exam') or a generic 'special' cell (any other label)
+    instead of a lesson/free slot; consecutive same-label days merge like a
+    lesson does. `days` is the column span."""
     schooldays = set(week["days"])
     slots = []
     for i in range(5):  # Monday .. Friday
         d = week["monday"] + timedelta(days=i)
         if d in schooldays:
-            title = assign.get(d)
-            slots.append(("lesson", title) if title else ("free", None))
+            label = labels.get(d)
+            if label:
+                slots.append(("exam" if label == "exam" else "special", label))
+            else:
+                title = assign.get(d)
+                slots.append(("lesson", title) if title else ("free", None))
         else:
             slots.append(("off", None))
     cells = []
     for kind, title in slots:
-        # Only contiguous days of the SAME lesson merge into one block.
-        if kind == "lesson" and cells and cells[-1]["kind"] == "lesson" \
+        # Only contiguous days of the SAME lesson (or same special label) merge.
+        if kind in ("lesson", "exam", "special") and cells and cells[-1]["kind"] == kind \
                 and cells[-1]["title"] == title:
             cells[-1]["days"] += 1
         else:
@@ -186,6 +207,17 @@ def build_calendar(bs, data, units):
     weeks = _weeks(bs, data, start, end)
     teaching_total = sum(1 for w in weeks if not w["is_break"])
 
+    # Exam days (and any other non-class label) come from the calendar's own
+    # nonClassDays. They stay in their teaching week but are NOT bookable lesson
+    # days -- lessons flow around them -- and render as their own cell kind.
+    labels = {_d(k): v for k, v in (data.get("nonClassDays") or {}).items() if v}
+    # AP exam window (a sidecar augmentation): any week it overlaps is badged.
+    ap = data.get("apExams") or None
+    ap_start = _d(ap["start"]) if ap else None
+    ap_end = _d(ap["end"]) if ap else None
+    # Grading periods (sidecar): teaching-week number -> name, labeled "<name> close".
+    grading = data.get("gradingPeriods") or {}
+
     out_units = []
     idx = [0]   # boxed so the nested helpers can advance it
 
@@ -201,7 +233,9 @@ def build_calendar(bs, data, units):
 
     def emit_unit(unit, unplanned=False):
         taken, idx[0], derived = _consume(weeks, idx[0], unit)
-        sdays = [d for w in taken if not w["is_break"] for d in w["days"]]
+        # Labeled days (exams etc.) aren't bookable -- exclude them so lessons
+        # flow onto the unit's plain school days only.
+        sdays = [d for w in taken if not w["is_break"] for d in w["days"] if d not in labels]
         assign, overflow, i = {}, [], 0
         for L in unit["lessons"]:
             need = max(1, int(L["days"]))
@@ -219,7 +253,10 @@ def build_calendar(bs, data, units):
                 rows.append({"kind": "week", "number": w["number"],
                              "range": _fmt_range(w["days"][0], w["days"][-1]),
                              "school_days": len(w["days"]),
-                             "cells": _week_cells(w, assign)})
+                             "is_ap": bool(ap_start and any(ap_start <= d <= ap_end
+                                                            for d in w["days"])),
+                             "grading_close": grading.get(str(w["number"])),
+                             "cells": _week_cells(w, assign, labels)})
         out_units.append({"break_section": False, "unplanned": unplanned,
                           "node_id": unit.get("node_id"), "title": unit["title"],
                           "weeks": unit["weeks"], "derived": derived, "overflow": overflow,

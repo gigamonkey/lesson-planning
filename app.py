@@ -56,6 +56,13 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 CALENDAR_DIR = os.environ.get(
     "LESSON_CALENDAR_DIR", os.path.normpath(os.path.join(REPO_ROOT, "..", "bells", "bhs-calendars"))
 )
+# Per-calendar sidecar augmenting bells data with info it doesn't carry: the AP
+# exam window and grading-period week numbers (e.g. 'bhs-2025-2026.json'). Lives
+# in this repo (the bells JSONs are owned upstream); override with
+# LESSON_CALENDAR_EXTRAS_DIR.
+CALENDAR_EXTRAS_DIR = os.environ.get(
+    "LESSON_CALENDAR_EXTRAS_DIR", os.path.join(os.path.dirname(__file__), "calendar-extras")
+)
 
 app = Flask(__name__)
 app.secret_key = "lesson-planning-dev"  # local single-user app; not security-sensitive
@@ -1338,7 +1345,7 @@ def _calendar_ctx(conn, course):
     if not cal_id:
         return {"calendar_id": None, "view": None, "error": None}
     try:
-        bs, data = calendar_view.load_calendar(cal_id, CALENDAR_DIR)
+        bs, data = calendar_view.load_calendar(cal_id, CALENDAR_DIR, CALENDAR_EXTRAS_DIR)
     except (OSError, ValueError) as e:
         return {"calendar_id": cal_id, "view": None,
                 "error": f"Couldn't load calendar {cal_id!r}: {e}"}

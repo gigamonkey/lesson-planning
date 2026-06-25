@@ -50,12 +50,16 @@
         <div class="cal-break"><b>{{ row.name }}</b><span class="when">{{ row.days }} days</span></div>
       {% else %}
         <div class="cal-week">
-          <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }}</div>
+          <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }}
+            {% if row.grading_close %}<br><span class="cal-gp">{{ row.grading_close }} close</span>{% endif %}
+            {% if row.is_ap %}<br><span class="cal-ap">AP exams</span>{% endif %}
+          </div>
           <div class="cal-days">
             {% for c in row.cells %}
+              {% set label = 'Exams' if c.kind == 'exam' else (c.title or 'unscheduled') %}
               <div class="cal-cell {{ c.kind }}" style="grid-column: span {{ c.days }}"
-                   title="{% if c.kind == 'off' %}No school{% else %}{{ c.title or 'unscheduled' }} ({{ c.days }} day{{ '' if c.days == 1 else 's' }}){% endif %}">
-                {{ c.title if c.kind == 'lesson' else '' }}</div>
+                   title="{% if c.kind == 'off' %}No school{% else %}{{ label }} ({{ c.days }} day{{ '' if c.days == 1 else 's' }}){% endif %}">
+                {% if c.kind == 'lesson' or c.kind == 'special' %}{{ c.title }}{% elif c.kind == 'exam' %}Exams{% endif %}</div>
             {% endfor %}
           </div>
         </div>

@@ -1,0 +1,13 @@
+{
+  "apExams": { "start": "2026-05-04", "end": "2026-05-15" },
+  "gradingPeriods": {
+    "5": "Q1 progress",
+    "9": "Q1",
+    "14": "S1 progress",
+    "18": "S1",
+    "23": "Q3 progress",
+    "28": "Q3",
+    "33": "S2 progress",
+    "39": "S2"
+  }
+}
