@@ -2,7 +2,6 @@
 slug: course
 title: JacketCS CSP
 levels: unit, lab, page
-kind: course
 ---
 
 # Unit 1: Introduction to Programming

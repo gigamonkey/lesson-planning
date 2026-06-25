@@ -45,7 +45,6 @@ TOKEN_FLOOR = 4   # shortest token length, to limit diff churn / accidental clas
 PLAN_FILE = "plan.md"
 OBJECTIVES_TSV = "objectives.tsv"
 COVERAGE_TSV = "coverage.tsv"
-OUTLINE_KIND = "course-outline"
 
 
 # --------------------------------------------------------------------------
@@ -304,17 +303,17 @@ def read_course(db_path, course_dir):
             seen[slug] = os.path.basename(path)
             rows = load_nodes.build_rows(course, slug, doc["nodes"])
             durations = load_nodes.build_durations(course, slug, doc["nodes"])
-            load_nodes.load_into(conn, slug, course, doc.get("kind"),
-                                 title, rows, source=os.path.basename(path),
+            load_nodes.load_into(conn, slug, course, title, rows,
+                                 source=os.path.basename(path),
                                  title=doc.get("title"), durations=durations,
                                  source_md=ref_text)
             n_refs += 1
 
         # Outline hierarchy (editable=1): units + lessons as positional nodes.
         conn.execute(
-            "INSERT INTO hierarchies(course, hierarchy, kind, editable, title, source)"
-            " VALUES (?, ?, ?, 1, ?, ?)",
-            (course, outline, OUTLINE_KIND, "Course outline", os.path.basename(plan_path)))
+            "INSERT INTO hierarchies(course, hierarchy, editable, title, source)"
+            " VALUES (?, ?, 1, ?, ?)",
+            (course, outline, "Course outline", os.path.basename(plan_path)))
         _rebuild_outline_nodes(conn, course, outline, units, lessons, los)
 
         # Objectives: seed the uuid<->text registry, then resolve each bullet's
@@ -404,9 +403,9 @@ def load_plan_text(db_path, course, text):
             (title, outline, meta.get("calendar"), course))
         # The outline hierarchy row normally already exists; ensure it does.
         conn.execute(
-            "INSERT OR IGNORE INTO hierarchies(course, hierarchy, kind, editable, title, source)"
-            " VALUES (?, ?, ?, 1, ?, ?)",
-            (course, outline, OUTLINE_KIND, "Course outline", PLAN_FILE))
+            "INSERT OR IGNORE INTO hierarchies(course, hierarchy, editable, title, source)"
+            " VALUES (?, ?, 1, ?, ?)",
+            (course, outline, "Course outline", PLAN_FILE))
 
         _rebuild_outline_nodes(conn, course, outline, units, lessons, los)
         n_place = _resolve_bullets(conn, course, outline, bullets, known_uuids)

@@ -6,25 +6,24 @@ already-tagged node list, then flattens that into one uniform table. Each node
 carries its declared level `tag` (from the markdown's required `levels:` front
 matter), structural `parent`, leaf flag, sibling ordinal, and text, so the app
 can run gap/coverage queries without caring about the level structure. No
-curriculum-flavor knowledge lives here anymore: kind comes from the markdown's
-required `kind:`, and the slug/course default from the input filename and flags.
+curriculum-flavor knowledge lives here: the slug/course default from the input
+filename and flags, the level names come from the markdown's `levels:`.
 
-    nodes(hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)
+    nodes(course, hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)
 
 `node_id` is the verbatim id (e.g. '1.1.A.1', 'CRD-1.A', 'A1.1.1.1'); `level` is
 the node's tag string ('unit', 'topic', 'essential-knowledge', ...); `is_leaf`
 marks nodes with no children (the unit of "coverage"); `ordinal` is document
-order. Keyed by hierarchy slug: re-running replaces only that hierarchy's rows so
-several hierarchies can share one database. The hierarchy is registered in
-`hierarchies` (editable=0, of a kind/type like 'ced' or 'syllabus') and its
-`course` is upserted into `courses`. The slug defaults to the input filename
-stem, the course to the slug; both (and the kind/title) take CLI overrides.
+order. Keyed by (course, hierarchy): re-running replaces only that hierarchy's
+rows so several hierarchies can share one database. The hierarchy is registered in
+`hierarchies` (editable=0) and its `course` is upserted into `courses`. The slug
+defaults to the input filename stem, the course to the slug; both (and the title)
+take CLI overrides.
 
     uv run load_nodes.py my-course-hierarchy.md db.db
     uv run load_nodes.py another-hierarchy.md db.db --course mycourse
 
-The title and kind come from the markdown's `---` front matter; `kind:` is
-required, `title:` optional.
+The title comes from the markdown's `---` front matter (`title:` required).
 """
 
 import argparse
@@ -44,30 +43,13 @@ def apply_schema(conn):
 # hierarchy.to_nodes emits). Semver; only the major is checked. See FORMAT.md.
 FORMAT_MAJOR = 2
 
-def kind_label(course, kind):
-    """Short, clean label for a hierarchy's kind. Drops a redundant leading course
-    id (legacy kind 'ib-syllabus' -> 'syllabus') then tidies ('ced' -> 'CED',
-    'course-outline' -> 'course outline', dashes -> spaces)."""
-    parts = kind.split("-")
-    if parts[0] == course:
-        parts = parts[1:]
-    k = "-".join(parts)
-    return {"ced": "CED", "course-outline": "course outline"}.get(k, k.replace("-", " "))
-
-
-def hierarchy_title(course, kind):
-    """Display title for a hierarchy, e.g. 'CSA CED', 'IB syllabus'."""
-    return f"{course.upper()} {kind_label(course, kind)}"
-
-
 def parse(text):
     """Parse hierarchy markdown into a node-list document (hierarchy.to_nodes).
 
-    Returns {version, slug, title, kind, levels, nodes:[...]} -- the same shape
-    `build_rows`/`load` consume. slug/title/kind come from the front matter
-    (`slug:` bare id optional, `title:` required, `kind:` optional provenance).
-    Raises SystemExit on unparseable markdown or missing required front matter
-    (propagated from hierarchy.py).
+    Returns {version, slug, title, levels, nodes:[...]} -- the same shape
+    `build_rows`/`load` consume. slug/title come from the front matter (`slug:`
+    bare id optional, `title:` required). Raises SystemExit on unparseable markdown
+    or missing required front matter (propagated from hierarchy.py).
     """
     return load_doc(hierarchy.to_nodes(text))
 
@@ -110,15 +92,15 @@ def build_durations(course, hierarchy, nodes):
     ]
 
 
-def load_into(conn, slug, course, kind, course_title, rows, source=None, title=None,
+def load_into(conn, slug, course, course_title, rows, source=None, title=None,
               durations=None, source_md=None):
     """Replace one reference hierarchy's nodes + register it, on a caller's conn.
 
     Assumes the schema is already applied (the caller -- plan_io / `load` --
     applies it). `rows`/`durations` carry (course, hierarchy, ...) keys. The
     hierarchy's nodes and durations are cleared and replaced. `source_md` is the
-    verbatim source markdown, stored so write_course can replay it. `kind` may be
-    None (optional provenance). Does not commit (the caller owns the transaction).
+    verbatim source markdown, stored so write_course can replay it. Does not commit
+    (the caller owns the transaction).
     """
     conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)"
                  " ON CONFLICT(course) DO NOTHING",
@@ -127,31 +109,30 @@ def load_into(conn, slug, course, kind, course_title, rows, source=None, title=N
     conn.executemany("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
     conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=?", (course, slug))
     conn.executemany("INSERT INTO node_duration VALUES (?, ?, ?, ?, ?)", durations or [])
-    if not title:   # title is required in the markdown; this is a last-ditch default
-        title = hierarchy_title(course, kind) if kind else slug
+    title = title or slug   # title is required in the markdown; last-ditch default
     conn.execute(
-        "INSERT INTO hierarchies(course, hierarchy, kind, editable, title, source, source_md)"
-        " VALUES (?, ?, ?, 0, ?, ?, ?)"
-        " ON CONFLICT(course, hierarchy) DO UPDATE SET kind=excluded.kind,"
+        "INSERT INTO hierarchies(course, hierarchy, editable, title, source, source_md)"
+        " VALUES (?, ?, 0, ?, ?, ?)"
+        " ON CONFLICT(course, hierarchy) DO UPDATE SET"
         " editable=0, title=excluded.title, source=excluded.source,"
         " source_md=excluded.source_md",
-        (course, slug, kind, title, source, source_md))
+        (course, slug, title, source, source_md))
 
 
-def load(db_path, slug, course, kind, course_title, rows, source=None, title=None,
+def load(db_path, slug, course, course_title, rows, source=None, title=None,
          durations=None, source_md=None):
     """Replace one reference hierarchy's nodes and register its course/hierarchy.
 
     `rows` carry `slug` as their hierarchy column. The course is created if new but
     its title is NOT changed by loading a hierarchy (a course is named when it's
-    created). The hierarchy is registered as a reference (editable=0) of the given
-    kind; its display title is `title` if given, else derived from course+kind.
-    `durations` are node_duration rows for this hierarchy (replaced wholesale).
+    created). The hierarchy is registered as a reference (editable=0); its display
+    title is `title` if given, else the slug. `durations` are node_duration rows
+    for this hierarchy (replaced wholesale).
     """
     conn = sqlite3.connect(db_path)
     try:
         apply_schema(conn)
-        load_into(conn, slug, course, kind, course_title, rows, source, title, durations,
+        load_into(conn, slug, course, course_title, rows, source, title, durations,
                   source_md)
         conn.commit()
     finally:
@@ -164,7 +145,6 @@ def main():
     parser.add_argument("database", help="SQLite database file")
     parser.add_argument("--hierarchy", help="hierarchy slug (default: input filename stem)")
     parser.add_argument("--course", help="course id (default: the slug)")
-    parser.add_argument("--kind", help="hierarchy kind/type (default: front-matter kind:)")
     parser.add_argument("--course-title", dest="course_title",
                         help="course title (default: course id, upper-cased)")
     args = parser.parse_args()
@@ -175,18 +155,17 @@ def main():
     stem = os.path.splitext(os.path.basename(args.input))[0]
     slug = args.hierarchy or doc.get("slug") or stem
     course = args.course or slug
-    kind = args.kind or doc.get("kind")
     course_title = args.course_title or course.upper()
     rows = build_rows(course, slug, doc["nodes"])
     durations = build_durations(course, slug, doc["nodes"])
-    load(args.database, slug, course, kind, course_title,
+    load(args.database, slug, course, course_title,
          rows, source=args.input, title=doc.get("title"), durations=durations,
          source_md=text)
 
     leaves = sum(1 for r in rows if r[5])
     print(
         f"loaded {len(rows)} nodes for hierarchy {slug!r} "
-        f"(course {course!r}, kind {kind!r}, {leaves} leaves) into {args.database}"
+        f"(course {course!r}, {leaves} leaves) into {args.database}"
     )
 
 

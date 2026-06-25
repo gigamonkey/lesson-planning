@@ -2,7 +2,6 @@
 slug: book
 levels: chapter, section, subsection
 title: BHSawesome - AP CSA
-kind: book
 ---
 
 # Chapter 1: Introduction

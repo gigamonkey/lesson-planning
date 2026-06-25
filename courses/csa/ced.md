@@ -2,7 +2,6 @@
 slug: ced
 levels: unit, topic, learning-objective, essential-knowledge
 title: AP Computer Science A — 2025 CED
-kind: ced
 ---
 
 # Unit 1: Using Objects and Methods

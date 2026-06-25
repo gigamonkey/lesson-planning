@@ -67,10 +67,6 @@ CALENDAR_EXTRAS_DIR = os.environ.get(
 app = Flask(__name__)
 app.secret_key = "lesson-planning-dev"  # local single-user app; not security-sensitive
 
-# kind_label / hierarchy_title (the page/sidebar titles) live in load_nodes.py so
-# load_nodes stores the same clean titles. page_title is an alias for clarity.
-page_title = load_nodes.hierarchy_title
-
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -126,8 +122,8 @@ def ensure_outline(conn, course):
         O = "plan"  # course-relative slug; identity is (course, 'plan')
         conn.execute("INSERT OR IGNORE INTO courses(course, title) VALUES (?, ?)",
                      (course, course.upper()))
-        conn.execute("INSERT OR IGNORE INTO hierarchies(course, hierarchy, kind, editable, title,"
-                     " source) VALUES (?, ?, 'course-outline', 1, 'Course outline', NULL)",
+        conn.execute("INSERT OR IGNORE INTO hierarchies(course, hierarchy, editable, title,"
+                     " source) VALUES (?, ?, 1, 'Course outline', NULL)",
                      (course, O))
         # Measure the plan against each of the course's references (ordered).
         conn.execute(
@@ -382,11 +378,11 @@ def course_new():
     return redirect(url_for("tree", course=course))
 
 
-def _hierarchy_confirm(course, text, filename, slug=None, title=None, kind=None,
+def _hierarchy_confirm(course, text, filename, slug=None, title=None,
                        mode=None, error=None):
     """Render the upload confirmation page: the parsed summary plus the editable
-    slug / title / kind, so the user fixes the bare slug before it's committed.
-    Re-used for the validation/collision error re-render. Returns a redirect if the
+    slug / title, so the user fixes the bare slug before it's committed. Re-used
+    for the validation/collision error re-render. Returns a redirect if the
     markdown won't parse at all."""
     stem = os.path.splitext(os.path.basename(filename))[0]
     try:
@@ -402,7 +398,6 @@ def _hierarchy_confirm(course, text, filename, slug=None, title=None, kind=None,
     return render_template(
         "hierarchy_confirm.html", course=course, filename=filename, text=text,
         slug=slug, title=title if title is not None else doc.get("title"),
-        kind=kind if kind is not None else doc.get("kind"),
         levels=doc.get("levels"), node_count=len(doc["nodes"]),
         root=(doc["nodes"][0]["id"] if doc["nodes"] else None),
         existing=existing, outline=outline, mode=mode, error=error,
@@ -412,7 +407,7 @@ def _hierarchy_confirm(course, text, filename, slug=None, title=None, kind=None,
 @app.route("/<course>/hierarchy/prepare", methods=["POST"])
 def hierarchy_prepare(course):
     """Step 1 of a reference upload: parse the chosen .md and show the confirm page
-    (editable bare slug / title / kind) rather than committing immediately."""
+    (editable bare slug / title) rather than committing immediately."""
     with db() as conn:
         if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
@@ -428,7 +423,7 @@ def hierarchy_prepare(course):
 def hierarchy_load_course(course):
     """Step 2 (commit): load the confirmed reference markdown into THIS course and
     persist it to the corpus as `{slug}.md` with the bare slug pinned in the front
-    matter. The slug/title/kind come from the confirm form; `mode` ('add'|'replace')
+    matter. The slug/title come from the confirm form; `mode` ('add'|'replace')
     resolves a slug that already names a reference in the course."""
     with db() as conn:
         crow = conn.execute("SELECT title FROM courses WHERE course=?", (course,)).fetchone()
@@ -443,12 +438,11 @@ def hierarchy_load_course(course):
     except (Exception, SystemExit) as e:
         flash(f"Could not load {filename!r}: {e}")
         return redirect(url_for("tree", course=course))
-    kind = over("kind") or doc.get("kind")
     title = over("title") or doc.get("title")
     stem = os.path.splitext(os.path.basename(filename))[0]
     slug = (over("hierarchy") or doc.get("slug") or stem).strip().lower()
     confirm = lambda err: _hierarchy_confirm(course, text, filename, over("hierarchy") or slug,
-                                             title, kind, mode, err)
+                                             title, mode, err)
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
         return confirm(f"Invalid slug {slug!r}: use lowercase letters, digits, and hyphens.")
     with db() as conn:
@@ -474,7 +468,7 @@ def hierarchy_load_course(course):
             "SELECT DISTINCT node_id FROM coverage WHERE course=? AND hierarchy=?",
             (course, slug))}
     orphaned = sorted(existing - new_ids)
-    load_nodes.load(DB_PATH, slug, course, kind, crow["title"],
+    load_nodes.load(DB_PATH, slug, course, crow["title"],
                     rows, source=filename, title=title, source_md=text)
     # Measure the course outline against this new reference (the eager outline was
     # created before any reference existed, so link it here).
@@ -727,7 +721,7 @@ def hierarchy_view(course, hierarchy):
     return render_template(
         "workspace.html", course=course, ref=hierarchy,
         page_title=title,
-        kind=h["kind"], editable=bool(h["editable"]), los=los, pool=pool,
+        editable=bool(h["editable"]), los=los, pool=pool,
         durations=durations,
         tree=build_tree(nodes, by_node, set()),
         stats=workspace_stats(nodes, by_node, pool))
@@ -899,7 +893,7 @@ def _upsert_msg(filename, stats):
 @app.route("/<course>/objectives")
 def objectives(course):
     """A compact table of the course's objectives: a text column plus one column
-    per reference hierarchy, each cell holding the (kind-colored) node ids the
+    per reference hierarchy, each cell holding the (slug-colored) node ids the
     objective covers there. Headers sort -- text lexically, a hierarchy column by
     document order (node ordinal; lexical-by-id does NOT match it)."""
     BIG = 10 ** 9

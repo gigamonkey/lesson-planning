@@ -2,7 +2,6 @@
 slug: syllabus
 title: Computer science guide (HL)
 levels: theme, topic, subtopic, learning-statement, content
-kind: syllabus
 ---
 
 # Theme A: Concepts of computer science

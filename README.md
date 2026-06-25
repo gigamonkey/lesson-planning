@@ -76,7 +76,6 @@ on upload and pins it into the stored copy:
 ---
 levels: unit, topic, learning-objective, essential-knowledge
 title: Intro to Widgets — Reference
-kind: ced
 ---
 # Unit 1: Widget Basics
 ## 1.1 What Is a Widget

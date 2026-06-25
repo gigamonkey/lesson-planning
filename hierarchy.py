@@ -75,11 +75,11 @@ def format_duration(duration):
 # 1.2.0 added the (nullable) per-node "duration" field.
 # 1.3.0 sources "levels" (and each node's tag) from a now-required `levels:`
 #       front-matter key instead of the detected flavor.
-# 2.0.0 makes the format metadata-driven and removes the "flavor" concept. The
-#       output drops "flavor" and adds "slug" (the front matter's bare id). The
-#       required `levels:` front matter carries level names; `kind:` and `slug:`
-#       are optional. Level-1 ids come from a small pattern list + a generic
-#       `# ID TEXT` fallback (no flavor). Breaking: no `flavor`; `levels:` required.
+# 2.0.0 makes the format metadata-driven and removes the "flavor" and "kind"
+#       concepts. The output drops "flavor"/"kind" and adds "slug" (the front
+#       matter's bare id, optional). The required `levels:` front matter carries
+#       level names; `title:` required. Level-1 ids come from a small pattern list
+#       + a generic `# ID TEXT` fallback (no flavor). Breaking: `levels:` required.
 FORMAT_VERSION = "2.0.0"
 
 
@@ -195,7 +195,7 @@ def to_nodes(md, title=None):
     given the emitted title is null.
 
     Returns a JSON-serializable dict {"version": ..., "slug": ..., "title": ...,
-    "kind": ..., "levels": [...], "nodes": [...]}:
+    "levels": [...], "nodes": [...]}:
 
         version - the FORMAT_VERSION of this contract (semver string)
         slug    - the front matter's `slug:` (the bare, course-relative id), or
@@ -204,7 +204,6 @@ def to_nodes(md, title=None):
                   None the consumer falls back to the filename stem. See FORMAT.md.
         title   - a human title for the hierarchy, or None if unknown (from the
                   `title` argument, else the front matter's `title:`)
-        kind    - the front matter's `kind:` provenance label, or None (optional)
         levels  - the declared level tags in order (levels[i] tags heading depth
                   i+1), from the required `levels:` front matter
         nodes   - the flattened hierarchy; each node is a plain dict:
@@ -271,7 +270,6 @@ def to_nodes(md, title=None):
         "version": FORMAT_VERSION,
         "slug": meta.get("slug"),
         "title": title,
-        "kind": meta.get("kind"),
         "levels": level_names,
         "nodes": nodes,
     }

@@ -33,7 +33,7 @@ def export_course(conn, course):
 
     hierarchies = []
     for h in conn.execute(
-        "SELECT hierarchy, kind, editable, title, source, source_md FROM hierarchies "
+        "SELECT hierarchy, editable, title, source, source_md FROM hierarchies "
         "WHERE course=? ORDER BY editable, hierarchy", (course,)):
         nodes = [dict(r) for r in conn.execute(
             "SELECT node_id, parent_id, level, is_leaf, ordinal, text FROM nodes "
@@ -44,7 +44,7 @@ def export_course(conn, course):
         durations = [dict(r) for r in conn.execute(
             "SELECT node_id, amount, unit FROM node_duration "
             "WHERE course=? AND hierarchy=? ORDER BY node_id", (course, h["hierarchy"]))]
-        hierarchies.append({"hierarchy": h["hierarchy"], "kind": h["kind"],
+        hierarchies.append({"hierarchy": h["hierarchy"],
                             "editable": h["editable"], "title": h["title"],
                             "source": h["source"], "source_md": h["source_md"],
                             "nodes": nodes, "node_attr": attrs,
@@ -91,9 +91,9 @@ def import_course(conn, doc, course=None):
     conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)",
                  (cid, doc["course"]["title"]))
     for h in doc["hierarchies"]:
-        conn.execute("INSERT INTO hierarchies(course, hierarchy, kind, editable, title,"
-                     " source, source_md) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                     (cid, h["hierarchy"], h["kind"], h["editable"], h["title"],
+        conn.execute("INSERT INTO hierarchies(course, hierarchy, editable, title,"
+                     " source, source_md) VALUES (?, ?, ?, ?, ?, ?)",
+                     (cid, h["hierarchy"], h["editable"], h["title"],
                       h.get("source"), h.get("source_md")))
         conn.executemany(
             "INSERT INTO nodes(course, hierarchy, node_id, parent_id, level, is_leaf, ordinal, text)"

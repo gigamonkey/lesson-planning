@@ -57,10 +57,10 @@ course.
 A reference exists in **two forms** that differ by exactly one field — the `slug:`:
 
 - **Source form** — what an extractor produces or you hand-author *for upload*. It
-  declares content and content metadata (`levels:`, `title:`, `kind:`) but **no
-  `slug:`**: a hierarchy's identity within a course is assigned when the file is
-  placed into one, so a source file is course-agnostic and portable. This is the
-  form `hierarchy-extractors` emits.
+  declares content and content metadata (`levels:`, `title:`) but **no `slug:`**: a
+  hierarchy's identity within a course is assigned when the file is placed into
+  one, so a source file is course-agnostic and portable. This is the form
+  `hierarchy-extractors` emits.
 - **Stored (corpus) form** — what the app writes into a course directory after an
   upload, and reloads on startup. It is the source form **plus a pinned `slug:`**
   (the bare, course-relative identity), with the file named `{slug}.md`.
@@ -94,7 +94,6 @@ no `slug:`):
 ---
 levels: unit, topic, learning-objective, essential-knowledge
 title: AP Computer Science A — 2025 CED
-kind: ced
 ---
 ```
 
@@ -105,7 +104,6 @@ kind: ced
 slug: ced
 levels: unit, topic, learning-objective, essential-knowledge
 title: AP Computer Science A — 2025 CED
-kind: ced
 ---
 ```
 
@@ -115,18 +113,15 @@ kind: ced
   stored as its `level`. The producer knows its own vocabulary, so it states it
   here. A heading nested deeper than the declared levels is an error.
 - `title:` — **required**. The hierarchy's human label, shown in the sidebar.
-- `kind:` — optional, free-form **provenance** (`ced`, `syllabus`, a textbook
-  name, `BJC`, …). A display label only; nothing branches on it, and a course may
-  hold two hierarchies of the same kind.
 - `slug:` — **stored form only**. The bare, course-relative identity (see Slugs
-  above), assigned and pinned by the app on upload; the filename matches
-  (`{slug}.md`). A source file should omit it. If present in an uploaded file the
-  app treats it as the default slug suggestion (still editable on the confirm
-  screen).
+  above) — also the only label a reference carries (shown as a pill). Assigned and
+  pinned by the app on upload; the filename matches (`{slug}.md`). A source file
+  should omit it; if present, the app treats it as the default slug suggestion
+  (still editable on the confirm screen).
 
 Ids are kept verbatim and treated as opaque. (The outline `plan.md` is parsed
-separately and does **not** take a `levels:`/`kind:` key — its levels are always
-unit / lesson.)
+separately and does **not** take a `levels:` key — its levels are always unit /
+lesson.)
 
 ## The outline: `plan.md`
 

@@ -37,12 +37,10 @@ CREATE TABLE IF NOT EXISTS courses (
 -- Registry of every hierarchy (a tree of nodes): the CED/IB/book references and
 -- authored outlines like a course lesson plan. `hierarchy` is the bare,
 -- course-relative slug (e.g. 'ced', 'book', 'plan'); identity is (course,
--- hierarchy). `kind` is optional free-form provenance (College Board CED, a
--- textbook, BJC, ...) -- a display label only; nothing branches on it.
+-- hierarchy). The slug is the only label -- references carry no separate "kind".
 CREATE TABLE IF NOT EXISTS hierarchies (
   course    TEXT NOT NULL REFERENCES courses(course),
   hierarchy TEXT NOT NULL,             -- bare slug: 'ced', 'book', 'plan'
-  kind      TEXT,                      -- provenance label (optional, free-form)
   editable  INTEGER NOT NULL,          -- 0 = reference (external, read-only) | 1 = authored
   title     TEXT NOT NULL,
   source    TEXT,                      -- reference: the markdown filename; authored: NULL

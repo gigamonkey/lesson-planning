@@ -2,7 +2,6 @@
 slug: ced
 title: AP Computer Science Principles  — 2023 CED
 levels: big-idea, essential-understanding, learning-objective, essential-knowledge
-kind: ced
 ---
 
 # Big Idea 1: Creative Development (CRD)
