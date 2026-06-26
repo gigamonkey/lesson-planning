@@ -12,3 +12,7 @@ node_modules/
 collab.json
 deploy_key
 deploy_key.pub
+# Real secrets for `make deploy`; template.env (the documented stub) stays tracked.
+.env
+*.env
+!template.env

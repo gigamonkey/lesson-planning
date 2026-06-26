@@ -148,25 +148,40 @@ There are two kinds of configuration:
 - **`collab.json`** — non-secret settings (repo URL, allowlist, OAuth client id).
   It lives on the **volume** at `/data/collab.json` (so it's easy to edit without
   redeploying), and it holds the **allowlist**.
-- **fly secrets** — the OAuth client secret and the Flask session key.
+- **fly secrets** — the OAuth client secret, the Flask session key, and the SSH
+  deploy key. These come from a local **`.env`** (+ the `deploy_key` file) and are
+  pushed by `set-secrets.sh`, which `make deploy` runs for you — no `fly secrets
+  set` by hand.
 
-### 5a. fly secrets
+### 5a. fly secrets (from `.env`)
+
+`template.env` documents every secret the app depends on. Copy it to a gitignored
+`.env` and fill in real values:
 
 ```bash
-fly secrets set \
-  GITHUB_CLIENT_SECRET="the-oauth-client-secret-from-step-2" \
-  FLASK_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+cp template.env .env
+# Edit .env: set GITHUB_CLIENT_SECRET (from step 2) and FLASK_SECRET_KEY, e.g.
+#   python3 -c 'import secrets; print(secrets.token_hex(32))'
 ```
 
 `FLASK_SECRET_KEY` signs the login cookie — make it long and random, and don't
-change it casually (changing it logs everyone out).
+change it casually (changing it logs everyone out). You can also move the
+non-secret `GITHUB_CLIENT_ID` / `LESSON_COURSES_REPO` into `.env` instead of
+`collab.json` if you prefer one place for everything (see the comments in
+`template.env`).
 
-### 5b. The deploy key and collab.json on the volume
+`set-secrets.sh` (run by `make deploy`, or on its own to rotate secrets) stages
+these on fly: `fly secrets import` for the `.env` values, plus a `fly secrets set`
+for the multi-line **deploy key** read from the `deploy_key` file minted in step
+3. The app writes that key onto the volume at startup, so there's no manual
+`sftp` step.
+
+### 5b. collab.json on the volume
 
 The volume isn't mounted until a machine is running, so deploy once (step 6)
-**without** `collab.json` present and the app will boot in single-user mode — or
-simply create the files via an SSH session after the first deploy. Easiest order:
-do the first `fly deploy` (step 6), then:
+**without** `collab.json` present and the app will boot in single-user mode, then
+create the file via an SSH session. Easiest order: do the first `make deploy`
+(step 6), then:
 
 ```bash
 # Open a shell on the running machine (mounts /data).
@@ -190,17 +205,9 @@ JSON
 exit
 ```
 
-Then copy the private deploy key onto the volume (from your laptop):
-
-```bash
-fly ssh sftp shell
-# at the prompt:
-put deploy_key /data/deploy_key
-exit
-
-# Lock down its permissions (ssh refuses world-readable keys):
-fly ssh console -C "chmod 600 /data/deploy_key"
-```
+The deploy key itself doesn't need copying — `set-secrets.sh` sends it as the
+`LESSON_DEPLOY_KEY` secret (step 5a) and the app writes it to
+`ssh_key_path` (`/data/deploy_key`) with the right permissions on startup.
 
 `collab.example.json` in this repo is a template for `/data/collab.json`. The
 allowlist maps **GitHub handle → role** (`editor` or `viewer`). Edit this file on
@@ -217,18 +224,21 @@ machine (`fly apps restart YOUR-APP`) to pick up allowlist changes.
 
 The calendar library (`bell-schedule`) and its bundled data (`bhs-calendars`)
 are PyPI dependencies now, so the build context is just this repo — no sibling
-checkout needed. Deploy from this directory:
+checkout needed. `make deploy` stages the secrets from `.env` (step 5a) and then
+ships the app:
 
 ```bash
 # From the lesson-planning repo:
-fly deploy
+make deploy
 ```
 
-After the first deploy, do step 5b (write `/data/collab.json` + the deploy key),
-then restart:
+(That's `./set-secrets.sh && fly deploy`. Use plain `fly deploy` to ship without
+re-staging secrets, or `make secrets` to stage them without deploying.)
+
+After the first deploy, do step 5b (write `/data/collab.json`), then restart:
 
 ```bash
-fly apps restart YOUR-APP
+make restart        # fly apps restart <app from fly.toml>
 ```
 
 Visit `https://YOUR-APP.fly.dev` — you should be redirected to a sign-in page.

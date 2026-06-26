@@ -536,11 +536,33 @@ def github_user(token):
 # Startup
 # --------------------------------------------------------------------------
 
+def _materialize_ssh_key():
+    """If the deploy key is supplied as a secret (LESSON_DEPLOY_KEY -- the key's
+    *contents*, not a path), write it to the volume so git can use it, removing
+    the need to copy the key onto the machine by hand. Writes to the configured
+    `ssh_key_path` (default <data_dir>/deploy_key) with 0600 perms (ssh refuses
+    looser ones) and points the config at it. Re-running with new contents
+    rotates the key; a key already on the volume with no secret set is untouched."""
+    contents = os.environ.get("LESSON_DEPLOY_KEY")
+    if not contents:
+        return
+    path = CONFIG.get("ssh_key_path") or os.path.join(data_dir(), "deploy_key")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    # ssh wants a trailing newline on the key file.
+    data = contents if contents.endswith("\n") else contents + "\n"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(data)
+    os.chmod(path, 0o600)   # in case the file pre-existed with looser perms
+    CONFIG["ssh_key_path"] = path
+
+
 def startup():
     """Bring the deployment up: ensure the clone, start the push worker and the
     main-refresh timer, build the viewers' db. Safe to call once at import."""
     if not enabled():
         return
+    _materialize_ssh_key()
     try:
         ensure_clone()
     except Exception as e:
