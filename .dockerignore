@@ -5,3 +5,12 @@ __pycache__
 node_modules
 # Local SQLite working copy -- the container builds its own from the corpus.
 db.db
+# Secrets / local-only config: delivered as fly secrets + the /data volume, never
+# baked into the image. (collab.json / the deploy key live on the volume.)
+.env
+*.env
+!template.env
+collab.json
+colab.json
+deploy_key
+deploy_key.pub
