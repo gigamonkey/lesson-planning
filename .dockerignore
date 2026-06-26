@@ -11,6 +11,5 @@ db.db
 *.env
 !template.env
 collab.json
-colab.json
 deploy_key
 deploy_key.pub
