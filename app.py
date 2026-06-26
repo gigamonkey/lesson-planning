@@ -368,12 +368,16 @@ def outline_hierarchy(conn, course):
 
 
 def ensure_outline(conn, course):
-    """The course's outline hierarchy slug, creating + registering it if needed."""
+    """The course's outline hierarchy slug, creating + registering it if needed.
+
+    Assumes the course already exists -- creating courses is `course_new`'s job
+    (it validates the id first). Callers operate on a course the request is
+    already scoped to; never call this for an unvalidated/unknown course, or it
+    would mint an outline (and previously a course) for junk like a browser's
+    /apple-touch-icon.png probe."""
     O = outline_hierarchy(conn, course)
     if not O:
         O = "plan"  # course-relative slug; identity is (course, 'plan')
-        conn.execute("INSERT OR IGNORE INTO courses(course, title) VALUES (?, ?)",
-                     (course, course.upper()))
         conn.execute("INSERT OR IGNORE INTO hierarchies(course, hierarchy, editable, title,"
                      " source) VALUES (?, ?, 1, 'Course outline', NULL)",
                      (course, O))
@@ -1482,6 +1486,10 @@ def _id_list(field="ids"):
 def plan(course):
     """Back-compat: the plan is now the outline hierarchy's workspace."""
     with db() as conn:
+        # Don't conjure a course from an unknown slug -- this GET is what browser
+        # probes (/apple-touch-icon.png -> /<course> -> /<course>/plan) land on.
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+            abort(404, f"no course {course!r}")
         O = outline_hierarchy(conn, course) or ensure_outline(conn, course)
         conn.commit()
     return redirect(url_for("hierarchy_view", course=course, hierarchy=O))
