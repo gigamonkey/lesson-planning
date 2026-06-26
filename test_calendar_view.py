@@ -29,8 +29,8 @@ def main():
     bs = bells.BellSchedule([DATA], {"role": "student"})
 
     units = [
-        {"title": "U1", "weeks": 2, "lessons": [{"title": "L1", "days": 3}]},
-        {"title": "U2", "weeks": None, "lessons": [{"title": "L2", "days": 1}]},
+        {"title": "U1", "weeks": 2, "lessons": [{"node_id": "l1", "title": "L1", "days": 3}]},
+        {"title": "U2", "weeks": None, "lessons": [{"node_id": "l2", "title": "L2", "days": 1}]},
     ]
     view = cv.build_calendar(bs, DATA, units)
 
@@ -46,7 +46,10 @@ def main():
     # L1 (3 days) is one block spanning three columns; the two remaining days of
     # week 1 are one free box each (unfilled days render per day).
     first = weekrows[0]["cells"]
-    assert first[0] == {"title": "L1", "days": 3, "kind": "lesson"}, first
+    # A lesson cell carries the lesson's node_id and its outline duration
+    # (lesson_days) so the view can edit it; `days` is the rendered column span.
+    assert first[0] == {"title": "L1", "days": 3, "kind": "lesson",
+                        "node_id": "l1", "lesson_days": 3}, first
     assert [c["kind"] for c in first] == ["lesson", "free", "free"], first
     assert all(c["days"] == 1 for c in first[1:]), first
 
@@ -61,7 +64,7 @@ def main():
 
     # Overflow: a unit asking for more lesson-days than its weeks hold.
     over = cv.build_calendar(bs, DATA, [
-        {"title": "Big", "weeks": 1, "lessons": [{"title": "X", "days": 9}]}])
+        {"title": "Big", "weeks": 1, "lessons": [{"node_id": "x", "title": "X", "days": 9}]}])
     assert over["units"][0]["overflow"], "a 9-day lesson in a 5-day week should overflow"
 
     # A full-week break (all of Sep 8-12 off) between two 1-week units becomes its
@@ -129,19 +132,22 @@ def main():
     # A 4-day lesson must flow AROUND the exam days: Mon/Tue of week 1, then
     # Mon/Tue of week 2 -- never onto Wed-Fri of week 1.
     v6 = cv.build_calendar(bs6, data6,
-                           [{"title": "U", "weeks": 4, "lessons": [{"title": "L", "days": 4}]}])
+                           [{"title": "U", "weeks": 4,
+                             "lessons": [{"node_id": "l", "title": "L", "days": 4}]}])
     assert v6["teaching_weeks"] == 4, v6["teaching_weeks"]
     wr6 = [r for r in v6["units"][0]["rows"] if r["kind"] == "week"]
 
     # Week 1: a 2-day lesson block then a 3-day exam block.
     w1 = wr6[0]["cells"]
-    assert w1[0] == {"title": "L", "days": 2, "kind": "lesson"}, w1
+    assert w1[0] == {"title": "L", "days": 2, "kind": "lesson",
+                     "node_id": "l", "lesson_days": 4}, w1
     assert w1[1] == {"title": "exam", "days": 3, "kind": "exam"}, w1
     assert [c["kind"] for c in w1] == ["lesson", "exam"], w1
 
     # Week 2: the lesson continues onto its first two (non-exam) days.
     w2 = wr6[1]["cells"]
-    assert w2[0] == {"title": "L", "days": 2, "kind": "lesson"}, w2
+    assert w2[0] == {"title": "L", "days": 2, "kind": "lesson",
+                     "node_id": "l", "lesson_days": 4}, w2
     assert all(c["kind"] == "free" for c in w2[1:]), w2
 
     # AP weeks and grading-period closes land on exactly their weeks.
