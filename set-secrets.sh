@@ -13,10 +13,10 @@ if [[ ! -f .env ]]; then
     exit 1
 fi
 
-# The simple KEY=VALUE secrets. Strip comments and blank lines so the documented
-# template.env format pipes cleanly into `fly secrets import`, which only wants
-# NAME=VALUE pairs. --stage defers the restart to the deploy that follows.
-grep -vE '^[[:space:]]*(#|$)' .env | fly secrets import --stage
+# The simple KEY=VALUE secrets. `fly secrets import` ignores comments and blank
+# lines, so the documented template.env format pipes in as-is. --stage defers the
+# restart to the deploy that follows.
+fly secrets import --stage < .env
 
 # The SSH deploy key is multi-line, which `secrets import` can't parse, so set it
 # from the gitignored key file (minted per DEPLOY.md step 3). The app writes this
