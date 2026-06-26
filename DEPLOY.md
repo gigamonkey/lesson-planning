@@ -215,19 +215,14 @@ machine (`fly apps restart YOUR-APP`) to pick up allowlist changes.
 
 ## 6. Deploy
 
-The build needs **both** this repo and its sibling `bells` checkout (the
-calendar library is a local path dependency, `../bells/libs/python`). So build
-with the **parent directory** as the context:
+The calendar library (`bell-schedule`) and its bundled data (`bhs-calendars`)
+are PyPI dependencies now, so the build context is just this repo — no sibling
+checkout needed. Deploy from this directory:
 
 ```bash
-# From the directory that contains BOTH `lesson-planning/` and `bells/`:
-fly deploy -c lesson-planning/fly.toml \
-           --dockerfile lesson-planning/Dockerfile \
-           .
+# From the lesson-planning repo:
+fly deploy
 ```
-
-(The `.` is the build context = the parent dir. The Dockerfile copies
-`bells/` and `lesson-planning/` so the path dependency resolves.)
 
 After the first deploy, do step 5b (write `/data/collab.json` + the deploy key),
 then restart:

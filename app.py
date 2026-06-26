@@ -23,6 +23,7 @@ import secrets
 import sqlite3
 import sys
 import uuid as uuidlib
+from importlib.resources import files as importlib_files
 
 from flask import (Flask, Response, abort, flash, g, jsonify, make_response,
                    redirect, render_template, request, session, url_for)
@@ -53,10 +54,10 @@ CORPUS_DIR = os.environ.get(
 )
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 # Where the calendar view reads bells calendar JSONs (e.g. 'bhs-2025-2026.json').
-# Defaults to the sibling bells checkout's bhs-calendars (matches the editable
-# `bells` path dependency); override with LESSON_CALENDAR_DIR.
+# Defaults to the data bundled in the `bhs-calendars` PyPI package (whose JSON
+# filenames match the calendar ids); override with LESSON_CALENDAR_DIR.
 CALENDAR_DIR = os.environ.get(
-    "LESSON_CALENDAR_DIR", os.path.normpath(os.path.join(REPO_ROOT, "..", "bells", "bhs-calendars"))
+    "LESSON_CALENDAR_DIR", os.fspath(importlib_files("bhs_calendars") / "data")
 )
 # Per-calendar sidecar augmenting bells data with info it doesn't carry: the AP
 # exam window and grading-period week numbers (e.g. 'bhs-2025-2026.json'). Lives

@@ -3,13 +3,22 @@ revision = 3
 requires-python = ">=3.13"
 
 [[package]]
-name = "bells"
+name = "bell-schedule"
 version = "0.7.0"
-source = { editable = "../bells/libs/python" }
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/f3/262d8c5bc335395311e996bd30d9253f461935c5c645007366d133583803/bell_schedule-0.7.0.tar.gz", hash = "sha256:8164836e08c64994efbb88112c5305ec32ee4afc96287df1192b0c115b7f79a6", size = 36002, upload-time = "2026-06-26T16:07:26.187Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/23/2e/f528ba2288149df4346f338032769ea6bd25c58be2690c69f852fe43c984/bell_schedule-0.7.0-py3-none-any.whl", hash = "sha256:d492856b0d276f68867a8bfea99fbadcf8d25480f2bf4f5f59bb5a387cae36cf", size = 26575, upload-time = "2026-06-26T16:07:25.087Z" },
+]
 
-[package.metadata]
-requires-dist = [{ name = "pytest", marker = "extra == 'test'" }]
-provides-extras = ["test"]
+[[package]]
+name = "bhs-calendars"
+version = "2.9.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/98/f03662ac787cd77ecceee0bd1b961a4ac4ce7ea47d25cfade0df6b500732/bhs_calendars-2.9.1.tar.gz", hash = "sha256:047ef7f3d83a4187bd399bc1c3fe7144110a79d4dfcfcba2820f33978328b08c", size = 11570, upload-time = "2026-06-26T16:41:35.955Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/e5/e9d79c22ef4ceca2bf1d6b3887fe5953bd22edae89cef8b3e6efe4e82c64/bhs_calendars-2.9.1-py3-none-any.whl", hash = "sha256:69d562440df9e87c7e843425e2f5941fb0a640485d6bbcb36e80731a6e7a8d77", size = 25513, upload-time = "2026-06-26T16:41:34.639Z" },
+]
 
 [[package]]
 name = "blinker"
@@ -84,13 +93,15 @@ name = "lesson-planning"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "bells" },
+    { name = "bell-schedule" },
+    { name = "bhs-calendars" },
     { name = "flask" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "bells", editable = "../bells/libs/python" },
+    { name = "bell-schedule", specifier = ">=0.7.0" },
+    { name = "bhs-calendars", specifier = ">=2.9.1" },
     { name = "flask" },
 ]
 

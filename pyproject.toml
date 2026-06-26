@@ -4,9 +4,10 @@ version = "0.1.0"
 description = "A course-agnostic lesson-planning tool: ingest a curriculum hierarchy, place objectives, and render a traceable lesson plan."
 requires-python = ">=3.13"
 dependencies = [
-    "bells",
+    # The school-calendar library (import name `bells`) and the bundled BHS-area
+    # calendar data, both published to PyPI. To develop the libraries alongside
+    # this app, add a `[tool.uv.sources]` path/editable source for either.
+    "bell-schedule>=0.7.0",
+    "bhs-calendars>=2.9.1",
     "flask",
 ]
-
-[tool.uv.sources]
-bells = { path = "../bells/libs/python", editable = true }

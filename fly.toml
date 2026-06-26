@@ -4,15 +4,13 @@
 # queue / action buffers all live on one machine's volume and memory. Do NOT
 # scale to >1 machine.
 
-app = "lesson-planning"          # change to your fly app name
-primary_region = "sea"           # change to your nearest region
+app = "bhs-cs-lesson-planning"
+primary_region = "sjc"
 
 [build]
-  # Build context is the parent dir so the sibling `bells` checkout is included.
+  # The bells / bhs-calendars libraries are PyPI deps now, so the build context
+  # is just this repo -- run `fly deploy` from here.
   dockerfile = "Dockerfile"
-  # NOTE: run `fly deploy` from the PARENT directory with
-  #   fly deploy -c lesson-planning/fly.toml --dockerfile lesson-planning/Dockerfile .
-  # (see DEPLOY.md) so both repos are in the build context.
 
 [env]
   LESSON_DATA_DIR = "/data"

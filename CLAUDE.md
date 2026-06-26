@@ -14,8 +14,10 @@ format and `plans/markdown-as-storage.md` for the design.
 
 ## Tech Stack
 
-- Python 3.13; third-party runtime deps: Flask, and `bells` (the school-calendar
-  library — a local editable path source now, PyPI later; see `[tool.uv.sources]`)
+- Python 3.13; third-party runtime deps: Flask, `bell-schedule` (the
+  school-calendar library, import name `bells`), and `bhs-calendars` (its bundled
+  calendar data) — both PyPI packages now. Add a `[tool.uv.sources]` path/editable
+  source for either to develop the library alongside this app.
 - SQLite as a cache; a git-tracked **corpus** of markdown + TSVs is the committed
   state
 - Package manager: `uv` (run scripts with `uv run <script>.py`)
@@ -84,7 +86,7 @@ round-trippable `plan.md`. Saving posts to `/<course>/outline/source`, which run
 The **Calendar** sidebar item (`/<course>/calendar`) lays the outline across the
 school year (units→weeks, lessons→days; see `calendar_view.py` and the duration
 tags in `FORMAT.md`). It reads bells calendar JSONs from `LESSON_CALENDAR_DIR`
-(default the sibling `../bells/bhs-calendars`); a course binds to one via the
+(default the data bundled in the `bhs-calendars` package); a course binds to one via the
 `calendar:` key in its `plan.md` front matter (the year span comes from the
 calendar's `firstDay`..`lastDay`). Exam days come from the calendar's own
 `nonClassDays`; a per-calendar sidecar in `calendar-extras/<id>.json`

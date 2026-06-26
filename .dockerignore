@@ -1,0 +1,7 @@
+.git
+.venv
+__pycache__
+*.pyc
+node_modules
+# Local SQLite working copy -- the container builds its own from the corpus.
+db.db

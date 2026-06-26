@@ -1,13 +1,13 @@
 # Image for the git-backed collaboration deployment (see DEPLOY.md).
 #
-# IMPORTANT: build with the *parent* directory as the context, so both this repo
-# and its sibling `bells` checkout are visible (pyproject.toml's bells path
-# source is `../bells/libs/python`). From the parent of this repo:
+# The build context is just this repo: the `bells` (bell-schedule) and
+# `bhs-calendars` libraries are now PyPI dependencies, so the sibling checkout no
+# longer needs to be in the build context. Build from this directory:
 #
-#     docker build -f lesson-planning/Dockerfile -t lesson-planning .
+#     docker build -t lesson-planning .
 #
-# fly.toml already sets this up (build context = "..", dockerfile = the path
-# below), so `fly deploy` from this repo does the right thing.
+# fly.toml points at this Dockerfile, so `fly deploy` from this repo does the
+# right thing.
 
 FROM python:3.13-slim
 
@@ -19,11 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # uv (the project's package manager).
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Lay the two repos out so the `../bells` path source resolves.
 WORKDIR /app
-COPY bells /app/bells
-COPY lesson-planning /app/lesson-planning
-WORKDIR /app/lesson-planning
+COPY . /app
 
 # Pre-build the virtualenv into the image.
 RUN uv sync --frozen || uv sync
