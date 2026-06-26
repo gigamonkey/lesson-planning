@@ -35,7 +35,9 @@ format and `plans/markdown-as-storage.md` for the design.
 - `hierarchy.py` — the curriculum-hierarchy markdown parser (this repo owns it);
   `FORMAT.md` — the on-disk format spec
 - `schema.sql` — canonical schema; `db.db` — live working copy (gitignored);
-  `courses/` — the default corpus directory (shipped empty)
+  `courses/` — the default corpus directory, holding the committed corpus (`csa`,
+  `csp`, `ib-eng`, `ib-sl`); loaded on startup in single-user mode (in collab mode
+  the corpus is the git clone on the volume instead, and `courses/` is ignored)
 - `examples/` — a corpus with one synthetic course, `examples/widgets/`:
   `widgets-ced.md` (reference hierarchy markdown), `plan.md` (the outline +
   course wiring), `objectives.tsv`, `coverage.tsv`
