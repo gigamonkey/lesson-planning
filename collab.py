@@ -263,12 +263,12 @@ def rebuild_db(handle):
 
 
 # --------------------------------------------------------------------------
-# Bindings: resolve (db_path, corpus_dir) for the acting user
+# Bindings: resolve (db_path, courses_root) for the acting user
 # --------------------------------------------------------------------------
 
 def editor_binding(handle, name, email):
     """Ensure an editor's sandbox (branch + worktree + db) exists, returning
-    (db_path, corpus_dir). No network unless the sandbox must be created."""
+    (db_path, courses_root). No network unless the sandbox must be created."""
     handle = _safe_handle(handle)
     wt = worktree_path(handle)
     db = db_path_for(handle)
@@ -297,7 +297,7 @@ _main_head = [None]   # the origin/main commit the _main db was last built from
 
 
 def viewer_binding():
-    """(db_path, corpus_dir) for the shared read-only main view, built lazily and
+    """(db_path, courses_root) for the shared read-only main view, built lazily and
     refreshed when origin/main advances."""
     with _main_lock:
         if not os.path.isdir(os.path.join(clone_dir(), ".git")):

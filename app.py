@@ -52,7 +52,7 @@ DB_PATH = os.environ.get(
 # The corpus: a directory of course directories that is BOTH the load source and
 # the export target (markdown hierarchies + objectives.tsv / coverage.tsv per
 # course). See FORMAT.md / plan_io.py. In single-user mode it must be a git repo (a
-# checkout of your courses repo) so edits autosave + commit there -- CORPUS_DIR is
+# checkout of your courses repo) so edits autosave + commit there -- COURSES_ROOT is
 # resolved below (a plain dir, like the bundled examples/ demo, is copied into a
 # throwaway repo). Collab mode manages its own clone, so LESSON_CORPUS_DIR is
 # single-user only.
@@ -114,14 +114,14 @@ def _ensure_git_corpus(d):
 
 
 if collab.enabled():
-    CORPUS_DIR, LOCAL_GIT, DEMO_CORPUS = None, False, False
+    COURSES_ROOT, LOCAL_GIT, DEMO_CORPUS = None, False, False
 else:
     _corpus = os.environ.get("LESSON_CORPUS_DIR")
     if not _corpus or not os.path.isdir(_corpus):
         sys.exit("LESSON_CORPUS_DIR must point at a courses git repo (or a plain "
                  "directory to run as a throwaway demo, e.g. "
                  "LESSON_CORPUS_DIR=examples). See README.")
-    CORPUS_DIR, DEMO_CORPUS = _ensure_git_corpus(os.path.abspath(_corpus))
+    COURSES_ROOT, DEMO_CORPUS = _ensure_git_corpus(os.path.abspath(_corpus))
     LOCAL_GIT = True
 LOCAL_AUTOSAVE_SECONDS = int(os.environ.get("LESSON_AUTOSAVE_SECONDS", "2"))
 
@@ -151,13 +151,13 @@ def db_path():
         return DB_PATH
 
 
-def corpus_dir():
-    """The corpus directory for the current request: the logged-in user's git
-    worktree in collab mode, else the single global corpus."""
+def courses_root():
+    """The courses repo directory for the current request: the logged-in user's git
+    worktree in collab mode, else the single global courses repo."""
     try:
-        return g.corpus_dir
+        return g.courses_root
     except (RuntimeError, AttributeError):
-        return CORPUS_DIR
+        return COURSES_ROOT
 
 
 def db():
@@ -228,12 +228,12 @@ def _git_target():
       - local-git:     the courses repo + main db, ambient author, no push."""
     if collab.enabled() and getattr(g, "editor", False):
         u = g.user or {}
-        return {"repo": g.corpus_dir, "db": g.db_path,
+        return {"repo": g.courses_root, "db": g.db_path,
                 "author": (u.get("name"), u.get("email")),
                 "push_key": g.handle, "key": g.handle,
                 "delay": collab.autosave_seconds()}
     if LOCAL_GIT:
-        return {"repo": CORPUS_DIR, "db": DB_PATH, "author": None,
+        return {"repo": COURSES_ROOT, "db": DB_PATH, "author": None,
                 "push_key": None, "key": "_local", "delay": LOCAL_AUTOSAVE_SECONDS}
     return None
 
@@ -302,10 +302,10 @@ def _collab_gate():
     g.editor = (user["role"] == "editor")
     try:
         if g.editor:
-            g.db_path, g.corpus_dir = collab.editor_binding(
+            g.db_path, g.courses_root = collab.editor_binding(
                 user["handle"], user.get("name"), user.get("email"))
         else:
-            g.db_path, g.corpus_dir = collab.viewer_binding()
+            g.db_path, g.courses_root = collab.viewer_binding()
     except Exception as e:
         print(f"collab: binding failed for {user['handle']}: {e}", file=sys.stderr)
         abort(500, "couldn't open your workspace")
@@ -484,8 +484,8 @@ def sync_courses():
                 courses = [r["course"] for r in
                            conn.execute("SELECT course FROM courses ORDER BY course")]
             for c in courses:
-                plan_io.write_course(g.db_path, c, os.path.join(g.corpus_dir, c))
-            collab.commit_repo(g.corpus_dir,
+                plan_io.write_course(g.db_path, c, os.path.join(g.courses_root, c))
+            collab.commit_repo(g.courses_root,
                                lambda: collab.compose_message(g.handle, "Save edits"),
                                author=(u.get("name"), u.get("email")), push_key=None)
             # 2) Merge origin/main and push -- synchronously.
@@ -499,8 +499,8 @@ def sync_courses():
             flash(result["message"])
         return back
     try:
-        dirs = seed_module.course_dirs(corpus_dir())
-        seed_module.load_corpus(db_path(), corpus_dir())
+        dirs = seed_module.course_dirs(courses_root())
+        seed_module.load_corpus(db_path(), courses_root())
     except (OSError, ValueError) as e:
         flash(f"Couldn't reload from git: {e}")
         return back
@@ -787,7 +787,7 @@ def data():
     with db() as conn:
         cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
     return render_template("data.html", courses=cs,
-                           export_dir=os.path.relpath(corpus_dir(), REPO_ROOT),
+                           export_dir=os.path.relpath(courses_root(), REPO_ROOT),
                            page_title="Settings")
 
 
@@ -902,7 +902,7 @@ def hierarchy_load_course(course):
     text = _pin_slug(text, slug)   # author the bare slug into the front matter
     rows = load_nodes.build_rows(course, slug, doc["nodes"])
     # Persist the markdown into the corpus as <slug>.md (the load source of truth).
-    course_dir = os.path.join(corpus_dir(), course)
+    course_dir = os.path.join(courses_root(), course)
     os.makedirs(course_dir, exist_ok=True)
     with open(os.path.join(course_dir, f"{slug}.md"), "w", encoding="utf-8") as out:
         out.write(text if text.endswith("\n") else text + "\n")
@@ -1526,7 +1526,7 @@ def outline_source(course):
         return render_template("outline_edit.html", course=course,
                                page_title=f"{course.upper()} outline source",
                                text=text, error=str(e))
-    course_dir = os.path.join(corpus_dir(), course)
+    course_dir = os.path.join(courses_root(), course)
     _path, n_obj, n_cov = plan_io.write_course(db_path(), course, course_dir)
     commit_after_save(course, f"Edit {course.upper()} outline via Markdown")
     flash(f"Saved outline · {n_obj} objectives, {n_cov} coverage edges")
@@ -2043,12 +2043,12 @@ else:
     ensure_schema()
     if DEMO_CORPUS:
         print(f"demo mode: edits autosave + commit to a throwaway git repo at "
-              f"{CORPUS_DIR} (not your original corpus)", file=sys.stderr)
+              f"{COURSES_ROOT} (not your original corpus)", file=sys.stderr)
     # Unattended population: load any course in the corpus directory that doesn't
     # already exist (see seed.py). Safe to run every boot; never fatal.
-    if os.path.isdir(CORPUS_DIR):
+    if os.path.isdir(COURSES_ROOT):
         try:
-            seed_module.seed(DB_PATH, CORPUS_DIR)
+            seed_module.seed(DB_PATH, COURSES_ROOT)
         except Exception as e:  # a broken corpus must not stop the app booting
             print(f"seed: failed: {e}", file=sys.stderr)
 
