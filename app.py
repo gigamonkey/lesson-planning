@@ -217,13 +217,14 @@ def inject_collab():
         return {"collab_enabled": False, "can_edit": True, "collab_user": None}
     editor = getattr(g, "editor", False)
     handle = getattr(g, "handle", None)
-    pending = collab.unpushed_count(handle) if editor and handle else 0
+    published, pending = collab.push_status(handle) if editor and handle else (True, 0)
     return {
         "collab_enabled": True,
         "can_edit": editor,
         "collab_user": getattr(g, "user", None),
         "collab_role": getattr(g, "role", None),
         "collab_pending": pending,
+        "collab_branch_published": published,
         "collab_push_error": collab.push_error(handle) if handle else None,
     }
 

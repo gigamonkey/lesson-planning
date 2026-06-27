@@ -258,13 +258,16 @@ def editor_binding(handle, name, email):
     if not os.path.isdir(wt):
         ensure_clone()
         # Base the branch on origin/<handle> if it already exists (returning
-        # teacher), else fork it from origin/main (new teacher).
+        # teacher) -- and let it track that. For a new teacher we fork from
+        # origin/main but pass --no-track: the branch must NOT track main (a bare
+        # push/pull would then hit main); the first `push -u` sets origin/<handle>
+        # as its upstream instead.
         if _ref_exists(f"origin/{handle}"):
-            start = f"origin/{handle}"
+            start, track = f"origin/{handle}", []
         else:
-            start = "origin/main"
+            start, track = "origin/main", ["--no-track"]
         if not _branch_exists_local(handle):
-            _git(["branch", handle, start], cwd=clone_dir(), check=True)
+            _git(["branch", *track, handle, start], cwd=clone_dir(), check=True)
         os.makedirs(os.path.dirname(wt), exist_ok=True)
         _git(["worktree", "add", wt, handle], cwd=clone_dir(), check=True)
     if not os.path.exists(db):
@@ -357,20 +360,26 @@ def _noreply(handle):
     return f"{_safe_handle(handle)}@users.noreply.github.com"
 
 
-def unpushed_count(handle):
-    """How many commits on <handle> aren't yet on origin/<handle> (drives the
-    'N commits pending' banner). Counts all commits if the remote ref is absent."""
+def push_status(handle):
+    """(published, pending): whether the editor's branch exists on the remote yet
+    (origin/<handle>), and how many local commits aren't on it. When the branch
+    isn't published, `pending` is the whole history (there's no remote ref to diff
+    against) -- callers should treat that as the 'establishing the branch' state
+    rather than a literal pending-edit count. Drives the sidebar push banner."""
     handle = _safe_handle(handle)
     wt = worktree_path(handle)
-    if _ref_exists(f"origin/{handle}"):
-        rng = f"origin/{handle}..{handle}"
-    else:
-        rng = handle
+    published = bool(_ref_exists(f"origin/{handle}"))
+    rng = f"origin/{handle}..{handle}" if published else handle
     code, out = _git(["rev-list", "--count", rng], cwd=wt)
     try:
-        return int(out) if code == 0 else 0
+        return published, (int(out) if code == 0 else 0)
     except ValueError:
-        return 0
+        return published, 0
+
+
+def unpushed_count(handle):
+    """How many commits on <handle> aren't yet on origin/<handle>. See push_status."""
+    return push_status(handle)[1]
 
 
 # Background push worker: a queue of handles to push. Pushes coalesce (a handle

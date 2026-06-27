@@ -501,6 +501,8 @@
         <div class="collabpending {{ 'err' if collab_push_error else '' }}">
           {% if collab_push_error %}
             <i class="bi bi-exclamation-triangle"></i> {{ collab_pending }} commit(s) not yet pushed to GitHub.
+          {% elif not collab_branch_published %}
+            <i class="bi bi-cloud-arrow-up"></i> Setting up your branch on GitHub…
           {% else %}
             <i class="bi bi-cloud-arrow-up"></i> Pushing {{ collab_pending }} commit(s) to GitHub…
           {% endif %}
