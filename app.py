@@ -141,8 +141,12 @@ def db():
 _AUTH_EXEMPT = {"collab_login", "collab_oauth_start", "collab_callback",
                 "collab_devlogin", "collab_logout", "favicon", "static"}
 
-# Human phrases for the per-save commit message, keyed by mutating endpoint
-# (the route's function name). The acting course is appended where it helps.
+# Human phrases for the debounced-autosave commit message, keyed by mutating
+# endpoint (the route's function name); the acting course is interpolated. Some
+# endpoints cover several actions and set g.action_phrase at runtime instead
+# (place, node_duration_set, lesson_arrange) -- the entry here is just a fallback.
+# The immediate structural ops (_IMMEDIATE_OPS) are NOT here: they commit
+# themselves with their own message via commit_structural.
 _ACTION_PHRASES = {
     "place": "placed objectives in {course}",
     "node_objectives_bulk": "edited node objectives in {course}",
@@ -158,13 +162,8 @@ _ACTION_PHRASES = {
     "objective_new": "added an objective to {course}",
     "objective_edit": "edited an objective in {course}",
     "outline_import": "rebuilt the {course} outline from a reference",
-    "hierarchy_load_course": "uploaded a reference hierarchy to {course}",
-    "hierarchy_delete": "removed a reference hierarchy from {course}",
     "references_reorder": "reordered references in {course}",
     "course_rename": "renamed course {course}",
-    "course_new": "created a course",
-    "course_import": "imported a course bundle",
-    "course_delete": "deleted a course",
 }
 # Endpoints that themselves perform the commit -- don't double-record them.
 _SAVE_ENDPOINTS = {"export", "outline_source"}
@@ -1895,12 +1894,20 @@ def lesson_arrange(course):
     """Drag lessons between units / reorder. Form: `unit` (uuid or ""/"none") + `ids`."""
     unit = (request.form.get("unit") or "").strip()
     unit_id = None if unit in ("", "none") else unit
+    ids = _id_list("ids")
     with db() as conn:
         O = outline_hierarchy(conn, course)
-        for pos, lid in enumerate(_id_list("ids")):
+        # Parents before the drop, to tell a reorder from a cross-unit move.
+        prev = {r["node_id"]: r["parent_id"] for r in conn.execute(
+            "SELECT node_id, parent_id FROM nodes WHERE course=? AND hierarchy=? AND level='lesson'",
+            (course, O))}
+        for pos, lid in enumerate(ids):
             conn.execute("UPDATE nodes SET parent_id=?, ordinal=? WHERE course=? AND hierarchy=? "
                          "AND node_id=? AND level='lesson'", (unit_id, pos, course, O, lid))
         conn.commit()
+    moved = any(prev.get(lid) != unit_id for lid in ids)
+    g.action_phrase = (f"moved lessons in {course}" if moved
+                       else f"reordered lessons in {course}")
     return ("", 204)
 
 
@@ -1935,6 +1942,8 @@ def node_duration_set(course, node_id):
                          " DO UPDATE SET amount=excluded.amount, unit=excluded.unit",
                          (course, O, node_id, amount, unit))
         conn.commit()
+        g.action_phrase = (f"cleared a duration in {course}" if clear
+                           else f"set a duration in {course}")
         # From the calendar's weeks pill: return the re-laid-out calendar content
         # so htmx swaps it in place (no full reload, scroll preserved).
         if request.form.get("view") == "calendar":
