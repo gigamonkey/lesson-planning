@@ -106,8 +106,8 @@ def db():
 # --------------------------------------------------------------------------
 
 # Endpoints reachable without a logged-in session (the auth dance itself).
-_AUTH_EXEMPT = {"collab_login", "collab_callback", "collab_devlogin",
-                "collab_logout", "favicon", "static"}
+_AUTH_EXEMPT = {"collab_login", "collab_oauth_start", "collab_callback",
+                "collab_devlogin", "collab_logout", "favicon", "static"}
 
 # Human phrases for the per-save commit message, keyed by mutating endpoint
 # (the route's function name). The acting course is appended where it helps.
