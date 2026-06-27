@@ -729,32 +729,15 @@ def help_page():
 
 @app.route("/data")
 def data():
-    """Settings page: the global version-control operations (restore + export).
-    Creating courses and loading hierarchies now live in the sidebar (+) and the
-    per-course setup page. Also the empty-db landing page (see `index`)."""
+    """Settings page: how the on-disk corpus relates to the app (export + the
+    sidebar Sync). Creating courses and loading hierarchies live in the sidebar
+    (+) and the per-course setup page. Also the empty-db landing page (see
+    `index`). Reloading from the corpus is the sidebar Sync button."""
     with db() as conn:
         cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
-        n_obj = conn.execute("SELECT count(*) FROM objectives").fetchone()[0]
-    return render_template("data.html", courses=cs, n_obj=n_obj,
+    return render_template("data.html", courses=cs,
                            export_dir=os.path.relpath(corpus_dir(), REPO_ROOT),
                            page_title="Settings")
-
-
-@app.route("/data/restore", methods=["POST"])
-def data_restore():
-    """Restore everything from version control: reload every course in the corpus
-    directory from its markdown + TSVs (each read_course is a scoped replace, so
-    un-exported in-db edits to those courses are overwritten)."""
-    if collab.enabled():
-        # Single-user op: the corpus is the git worktree in collab mode, kept in
-        # sync by autosave + Sync; a bulk reload would just discard recent edits.
-        flash("Use Sync to pull the latest from main.")
-        return redirect(url_for("data"))
-    dirs = seed_module.course_dirs(corpus_dir())
-    seed_module.load_corpus(db_path(), corpus_dir())
-    names = ", ".join(os.path.basename(d) for d in dirs) or "none"
-    flash(f"Restored from {os.path.relpath(corpus_dir(), REPO_ROOT)} · courses: {names}")
-    return redirect(url_for("data"))
 
 
 # --------------------------------------------------------------------------

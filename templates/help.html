@@ -85,9 +85,10 @@
         nodes to recategorize. The tree itself is fixed — it comes from the source.</dd>
   </dl>
   <p>And in the sidebar footer, two course-independent pages: <b>Help</b> (this
-     page) and <b><a href="{{ url_for('data') }}">Settings</a></b> (restore from
-     version control). Create a course with <b>+</b> next to the title; each course
-     in the sidebar has its own controls (see below).</p>
+     page) and <b><a href="{{ url_for('data') }}">Settings</a></b>. The sidebar
+     <b>Sync</b> button reloads every course from the corpus. Create a course with
+     <b>+</b> next to the title; each course in the sidebar has its own controls
+     (see below).</p>
 
   <h2>Adding material in the app</h2>
   <ol>
@@ -150,10 +151,9 @@
      directories, each holding its hierarchy markdown, <code>plan.md</code>, and
      <code>objectives.tsv</code> / <code>coverage.tsv</code>. The course's <b>save</b>
      icon writes it back to the corpus. Starting the app with no database creates an empty one and
-     loads any course already in the corpus; the
-     <b><a href="{{ url_for('data') }}">Settings</a></b> page's <b>Restore from
-     version control</b> reloads every course from disk — so the whole thing is
-     reproducible from version-controlled markdown.
+     loads any course already in the corpus; the sidebar <b>Sync</b> button reloads
+     every course from disk — so the whole thing is reproducible from
+     version-controlled markdown.
      (<code>uv run rebuild_db.py</code> does the same from a terminal, rebuilding
      from scratch.)</p>
 

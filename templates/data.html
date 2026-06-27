@@ -9,36 +9,27 @@
 
   {% if not courses %}
   <div class="note">This database is empty. Create a course with <b>+</b> in the
-     sidebar, or restore from the corpus below.</div>
+     sidebar, or click <b>Sync</b> to load every course from the corpus
+     (<code>{{ export_dir }}</code>).</div>
   {% endif %}
+
+  <h2>Sync</h2>
+  <p>The <b>Sync</b> button in the sidebar reloads every course from the corpus
+     (<code>{{ export_dir }}</code>) — its markdown + <code>.tsv</code> files on
+     disk. {% if collab_enabled %}On the collaborative server it instead merges the
+     latest from <code>main</code> into your sandbox.{% endif %}</p>
 
   {% if collab_enabled %}
   <div class="note">In collaboration mode edits autosave and commit to git
-     automatically — use <b>Sync</b> in the sidebar to pull the latest from main.
-     The manual restore/export below are only for the single-user tool.</div>
-  {% else %}
-  <h2>Restore from version control</h2>
-  <p>Reload every course in the corpus directory
-     (<code>{{ export_dir }}</code>) from its markdown + <code>.tsv</code> files.
-     Each course is replaced from disk; the database is not deleted.</p>
-  {% if n_obj %}
-  <div class="note">There are <b>{{ n_obj }}</b> objective(s) in the live database
-     already. Restoring overwrites each corpus course with what's on disk — any
-     un-exported edits are lost. Export first if you want to keep them.</div>
-  {% endif %}
-  <form method="post" action="{{ url_for('data_restore') }}"
-        onsubmit="return {{ 'confirm(\"Reload every course from the corpus? Un-exported edits will be lost.\")' if n_obj else 'true' }};">
-    <button type="submit" class="{{ 'danger' if n_obj else 'primary' }}">Restore from version control</button>
-  </form>
-
-  {% if courses %}
+     automatically; there's no manual Export.</div>
+  {% elif courses %}
   <h2>Export</h2>
   <p>Export is per course: click the <b>save</b> icon on the course in the sidebar
      (greyed when up to date) to write its <code>plan.md</code> +
      <code>objectives.tsv</code> / <code>coverage.tsv</code> into
      <code>{{ export_dir }}/&lt;course&gt;/</code> — the committable state.
-     Reference hierarchy markdown is a load-only input and is never rewritten.</p>
-  {% endif %}
+     Reference hierarchy markdown is a load-only input and is never rewritten.
+     (In local git mode this Save is automatic.)</p>
   {% endif %}
 </div>
 
