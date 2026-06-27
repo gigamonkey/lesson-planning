@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ course|upper }} settings — Lesson Planning{% endblock %}
+
+{% block body %}
+<div class="help csettings">
+  <p>Less-frequent actions for <b>{{ course|upper }}</b>. Everyday editing happens
+     on the outline, objectives, and reference pages in the sidebar.</p>
+
+  {% if can_edit %}
+  <h2>Add a reference hierarchy</h2>
+  <p>Upload a reference hierarchy markdown file (<code>.md</code>) to add it to this
+     course. You'll confirm its slug and title before it loads.</p>
+  <form method="post" action="{{ url_for('hierarchy_prepare', course=course) }}"
+        enctype="multipart/form-data" class="caction">
+    <label class="btn">
+      <i class="bi bi-plus-lg"></i> Choose a .md file…
+      <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
+    </label>
+  </form>
+
+  {% if not git_backed %}
+  <h2>Save</h2>
+  <p>Write this course back to the corpus — <code>plan.md</code> plus
+     <code>objectives.tsv</code> / <code>coverage.tsv</code>. Reference markdown is a
+     load-only input and is never rewritten.</p>
+  <form method="post" action="{{ url_for('export', course=course) }}" class="caction">
+    <button type="submit" class="btn" {{ '' if dirty else 'disabled' }}>
+      <i class="bi bi-{{ 'floppy' if dirty else 'check2' }}"></i>
+      {{ 'Save to corpus' if dirty else 'Saved — up to date' }}
+    </button>
+  </form>
+  {% endif %}
+
+  <h2>Rebuild the outline</h2>
+  {% if references %}
+  <p>Build this course's outline from a reference hierarchy: each top-level item
+     becomes a unit, each second-level item a lesson, and every objective is placed
+     into the lesson whose subtree covers it.
+     {% if not outline_empty %}<strong>This replaces the current outline</strong>
+     (its units, lessons, learning objectives, and placements).{% endif %}</p>
+  <form method="post" action="{{ url_for('outline_import', course=course) }}" class="caction"
+        {% if not outline_empty %}onsubmit="return confirm('Discard the current {{ course|upper }} outline and rebuild it from the chosen reference? This cannot be undone.');"{% endif %}>
+    <label>Reference:
+      <select name="reference" required>
+        {% for h in references %}
+          <option value="{{ h.hierarchy }}">{{ h.title or h.hierarchy }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn">
+      <i class="bi bi-diagram-3"></i> {{ 'Build outline' if outline_empty else 'Rebuild outline' }}
+    </button>
+  </form>
+  {% else %}
+  <p class="muted">Add a reference hierarchy above first — the outline is built from
+     one.</p>
+  {% endif %}
+  {% endif %}
+
+  <h2>Export a bundle</h2>
+  <p>Download the whole course as a single self-contained JSON bundle (hierarchies,
+     nodes, objectives, coverage, targets) — re-importable from the sidebar
+     <b>+ → import a course bundle</b>.</p>
+  <p class="caction">
+    <a class="btn" href="{{ url_for('course_bundle_download', course=course) }}" download>
+      <i class="bi bi-box-arrow-down"></i> Download {{ course|upper }} bundle (.json)
+    </a>
+  </p>
+
+  {% if can_edit %}
+  <h2 class="danger">Delete this course</h2>
+  <p>Permanently remove <b>{{ course|upper }}</b> and everything anchored to it — all
+     its hierarchies, objectives, coverage, and the plan. This cannot be undone.</p>
+  <form method="post" action="{{ url_for('course_delete', course=course) }}" class="caction"
+        onsubmit="return confirm('Delete the entire {{ course|upper }} course — all its hierarchies, objectives, and the plan? This cannot be undone.');">
+    <button type="submit" class="btn btn-danger">
+      <i class="bi bi-trash"></i> Delete {{ course|upper }}
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+<style>
+  .csettings .caction { margin: .3rem 0 1.2rem; display: flex; align-items: center;
+          gap: .5rem; flex-wrap: wrap; }
+  .csettings .btn { display: inline-flex; align-items: center; gap: .35rem;
+          font: inherit; font-size: .9rem; color: #2b6cb0; background: #eef3f8;
+          border: 1px solid #d6e2ee; border-radius: 5px; padding: .35rem .7rem;
+          cursor: pointer; text-decoration: none; }
+  .csettings .btn:hover { background: #e2ecf6; }
+  .csettings .btn:disabled, .csettings .btn:disabled:hover { color: #9aa; background: #f4f5f6;
+          border-color: #e3e5e8; cursor: default; }
+  .csettings select { font: inherit; padding: .25rem; }
+  .csettings h2.danger { color: var(--gap, #c05621); margin-top: 1.6rem; }
+  .csettings .btn-danger { color: var(--gap, #c05621); background: #fdeee7;
+          border-color: #f3d6c6; }
+  .csettings .btn-danger:hover { background: #fadfd2; }
+  .csettings .muted { color: var(--muted); }
+</style>
+{% endblock %}

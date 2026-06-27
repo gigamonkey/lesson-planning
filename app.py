@@ -599,6 +599,13 @@ def inject_nav():
                 outline = c["primary_outline"] or next(
                     (h["hierarchy"] for h in hs if h["editable"]), None)
                 refs = [h for h in hs if h["hierarchy"] != outline]
+                # Empty outline -> offer the build-from-hierarchy button in the
+                # sidebar; once it has content, that moves to the settings page.
+                outline_empty = True
+                if outline:
+                    outline_empty = conn.execute(
+                        "SELECT 1 FROM nodes WHERE course=? AND hierarchy=? LIMIT 1",
+                        (c["course"], outline)).fetchone() is None
                 # Does the on-disk corpus need a (re)export? Drives the save icon.
                 course_dir = os.path.join(corpus_dir(), c["course"])
                 try:
@@ -606,7 +613,8 @@ def inject_nav():
                 except Exception:
                     dirty = True
                 nav.append({"course": c["course"], "title": c["title"], "outline": outline,
-                            "hierarchies": refs, "dirty": dirty})
+                            "hierarchies": refs, "dirty": dirty,
+                            "outline_empty": outline_empty})
     except sqlite3.OperationalError:
         pass
     return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}
@@ -744,9 +752,10 @@ def help_page():
 @app.route("/data")
 def data():
     """Settings page: how the on-disk corpus relates to the app (export + the
-    sidebar Sync). Creating courses and loading hierarchies live in the sidebar
-    (+) and the per-course setup page. Also the empty-db landing page (see
-    `index`). Reloading from the corpus is the sidebar Sync button."""
+    sidebar Sync). Creating a course is the sidebar (+); adding a reference
+    hierarchy and exporting/deleting a course live on the per-course settings page
+    (the gear). Also the empty-db landing page (see `index`). Reloading from the
+    corpus is the sidebar Sync button."""
     with db() as conn:
         cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
     return render_template("data.html", courses=cs,
@@ -956,6 +965,42 @@ def course_rename(course):
     if request.headers.get("HX-Request"):
         return ("", 204)
     return redirect(request.referrer or url_for("tree", course=course))
+
+
+@app.route("/<course>/settings")
+def course_settings(course):
+    """Per-course settings: the less-frequent actions — add a reference hierarchy,
+    save/export (single-user mode), rebuild the outline from a reference, export a
+    bundle, delete the course."""
+    course_dir = os.path.join(corpus_dir(), course)
+    with db() as conn:
+        crow = conn.execute(
+            "SELECT title, primary_outline FROM courses WHERE course=?", (course,)).fetchone()
+        if not crow:
+            abort(404)
+        references = conn.execute(
+            "SELECT h.hierarchy, h.title FROM hierarchies h "
+            "LEFT JOIN hierarchy_targets t ON t.course=h.course AND t.reference=h.hierarchy "
+            "WHERE h.course=? AND h.editable=0 ORDER BY t.position, h.hierarchy",
+            (course,)).fetchall()
+        outline = crow["primary_outline"]
+        if not outline:
+            r = conn.execute(
+                "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=1 "
+                "ORDER BY hierarchy LIMIT 1", (course,)).fetchone()
+            outline = r["hierarchy"] if r else None
+        outline_empty = True
+        if outline:
+            outline_empty = conn.execute(
+                "SELECT 1 FROM nodes WHERE course=? AND hierarchy=? LIMIT 1",
+                (course, outline)).fetchone() is None
+        try:
+            dirty = plan_io.is_dirty(conn, course, course_dir)
+        except Exception:
+            dirty = True
+    return render_template("course_settings.html", course=course, title=crow["title"],
+                           references=references, outline_empty=outline_empty, dirty=dirty,
+                           page_title=f"{course.upper()} settings")
 
 
 @app.route("/<course>/delete", methods=["POST"])
@@ -1626,31 +1671,10 @@ def export(course):
     commit_after_save(course, f"Save {course.upper()}")
     rel = os.path.relpath(course_dir, REPO_ROOT)
     msg = f"Exported {course!r} to {rel}/ · {n_obj} objectives, {n_cov} coverage edges"
-    # htmx (the sidebar save icon): no reload -- the save control re-fetches itself
-    # via the body `save-refresh` event (now showing the clean state), and the flash
-    # rides an `HX-Trigger` event.
-    if request.headers.get("HX-Request"):
-        resp = make_response("", 204)
-        resp.headers["HX-Trigger"] = json.dumps({"flash": msg})
-        return resp
+    # Save now lives on the per-course settings page as a plain form, so this is a
+    # full-page POST -- flash and redirect back where the Save was clicked.
     flash(msg)
-    return redirect(request.referrer or url_for("objectives", course=course))
-
-
-@app.route("/<course>/savebtn")
-def save_button(course):
-    """The course's save control fragment with a fresh dirty state -- re-fetched by
-    the sidebar after edits/drags (which don't re-render the page) so the save icon
-    doesn't go stale."""
-    course_dir = os.path.join(corpus_dir(), course)
-    with db() as conn:
-        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
-            abort(404)
-        try:
-            dirty = plan_io.is_dirty(conn, course, course_dir)
-        except Exception:
-            dirty = True
-    return render_template("_savebtn.html", c={"course": course, "dirty": dirty})
+    return redirect(request.referrer or url_for("course_settings", course=course))
 
 
 # --------------------------------------------------------------------------

@@ -95,10 +95,13 @@
     .newcourse .importlink:hover { text-decoration: underline; }
     .coursehead { display: flex; align-items: center; justify-content: space-between; gap: .3rem; }
     .coursehead-actions { display: flex; align-items: center; gap: .25rem; flex: none; }
-    .coursehead-actions .addhier { margin: 0; display: inline-flex; }
     .coursehead .gear { color: #bbb; text-decoration: none; font-size: .82rem; flex: none;
-                cursor: pointer; line-height: 1; }
+                cursor: pointer; line-height: 1; position: relative; }
     .coursehead .gear:hover { color: #2b6cb0; }
+    /* Unsaved-changes dot — Save lives behind the gear in plain single-user mode. */
+    .coursehead .gear.dirty { color: #2b6cb0; }
+    .coursehead .gear.dirty::after { content: ""; position: absolute; top: -1px; right: -3px;
+                width: 5px; height: 5px; border-radius: 50%; background: var(--gap, #c05621); }
     /* Click-to-edit course title: looks like plain muted text until hover/focus. */
     .ctitle-form { margin: 0 0 .3rem; }
     .ctitle-input { width: 100%; box-sizing: border-box; font: inherit; font-size: .7rem;
@@ -106,11 +109,6 @@
                 border-radius: 3px; padding: .05rem .2rem; }
     .ctitle-input:hover { border-color: var(--line); }
     .ctitle-input:focus { border-color: #bcd; background: #fff; color: #222; outline: none; }
-    .coursehead-actions .cdel { margin: 0; display: inline-flex; }
-    .coursehead-actions .cdel button:hover { color: var(--gap); }
-    .coursehead-actions .csave { margin: 0; display: inline-flex; }
-    /* Save icon greys out (and stops reacting) when the corpus is up to date. */
-    .coursehead .gear:disabled, .coursehead .gear:disabled:hover { color: #d8d8d8; cursor: default; }
     /* Per-hierarchy row controls: an upload (+) and a hover trash. */
     .sidebar ul.hiers li.hieritem { gap: .25rem; }
     /* Drag handle to reorder references; revealed on row hover, like the trash. */
@@ -620,26 +618,15 @@
           <div class="coursehead">
             <span class="coursename">{{ c.course|upper }}</span>
             {% if can_edit %}
+            {# Less-frequent actions (add hierarchy, save/export, rebuild outline,
+               bundle export, delete) all live on the per-course settings page; the
+               header keeps just the gear. The dot flags unsaved changes in plain
+               single-user mode, where Save now lives behind the gear. #}
             <span class="coursehead-actions">
-              <form method="post" action="{{ url_for('hierarchy_prepare', course=c.course) }}"
-                    enctype="multipart/form-data" class="addhier">
-                <label class="gear" title="Add a reference hierarchy (upload .md)">
-                  <i class="bi bi-plus-lg"></i>
-                  <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
-                </label>
-              </form>
-              {# Git-backed (collab or local-git) autosaves + commits, so no manual
-                 Save. Plain single-user keeps a per-course Save (db -> disk);
-                 reloading from disk is the sidebar Sync button (all courses). #}
-              {% if not git_backed %}
-              {% include "_savebtn.html" %}
-              {% endif %}
-              <a class="gear" href="{{ url_for('course_bundle_download', course=c.course) }}" download
-                 title="Download {{ c.course|upper }} as a bundle (.json)"><i class="bi bi-box-arrow-down"></i></a>
-              <form method="post" action="{{ url_for('course_delete', course=c.course) }}" class="cdel"
-                    onsubmit="return confirm('Delete the entire {{ c.course|upper }} course — all its hierarchies, objectives, and the plan? This cannot be undone.');">
-                <button type="submit" class="gear" title="Delete course"><i class="bi bi-trash"></i></button>
-              </form>
+              <a class="gear {{ 'dirty' if not git_backed and c.dirty else '' }}"
+                 href="{{ url_for('course_settings', course=c.course) }}"
+                 title="{{ c.course|upper }} settings{{ ' · unsaved changes' if not git_backed and c.dirty else '' }}">
+                <i class="bi bi-gear"></i></a>
             </span>
             {% endif %}
           </div>
@@ -656,7 +643,7 @@
           <ul class="hiers" data-course="{{ c.course }}">
             <li class="outlineitem {{ 'active' if c.course == nav_course and c.outline and c.outline == active_hierarchy else '' }}">
               <a href="{{ url_for('plan', course=c.course) }}">Course outline</a>
-              {% if can_edit and c.hierarchies %}
+              {% if can_edit and c.hierarchies and c.outline_empty %}
                 <button type="button" class="miniadd"
                         title="Build the outline from a reference hierarchy"
                         onclick="document.getElementById('oimport-{{ c.course }}').showModal()">
@@ -866,19 +853,11 @@
     document.addEventListener('focusin', selectWeeksPill);
     document.addEventListener('click', selectWeeksPill);
 
-    // Keep the per-course save icons' dirty state live: after any htmx mutation
-    // (non-GET), and after the fetch-based drag saves (which call window.saveRefresh),
-    // fire `save-refresh` so each course's save control re-fetches itself.
-    window.saveRefresh = function () {
-      if (window.htmx) htmx.trigger(document.body, 'save-refresh');
-    };
-    document.body.addEventListener('htmx:afterRequest', function (e) {
-      const cfg = e.detail && e.detail.requestConfig;
-      if (e.detail && e.detail.successful && cfg && cfg.verb &&
-          cfg.verb.toLowerCase() !== 'get' && cfg.path && cfg.path.indexOf('/savebtn') === -1) {
-        window.saveRefresh();
-      }
-    });
+    // The per-course Save now lives behind the sidebar gear (settings page); its
+    // dirty dot is computed on each full page render. The workspace's drag/edit
+    // handlers still call window.saveRefresh() after a save — keep it as a no-op so
+    // those call sites don't need to know the control is gone.
+    window.saveRefresh = function () {};
   </script>
 </body>
 </html>
