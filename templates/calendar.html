@@ -219,12 +219,14 @@
       }, 0);
     });
     // Clicking an empty day adds a lesson and re-lays-out #cal-content; the new
-    // lesson cell is marked data-focus-title, so put the cursor in its title.
-    document.body.addEventListener('htmx:afterSwap', function (e) {
+    // lesson cell is marked data-focus-title, so put the cursor in its title. Target
+    // the title field by name -- the form's first input is a hidden `view` field,
+    // which isn't focusable (so a bare `input` selector silently no-ops).
+    document.body.addEventListener('htmx:afterSettle', function (e) {
       const cell = document.querySelector('#cal-content [data-focus-title]');
       if (!cell) return;
       cell.removeAttribute('data-focus-title');
-      const input = cell.querySelector('.cal-lessonname input');
+      const input = cell.querySelector('.cal-lessonname input[name="title"]');
       if (input) { input.focus(); input.select(); }
     });
     // Escape reverts the field to its last-rendered/saved value and exits editing.
