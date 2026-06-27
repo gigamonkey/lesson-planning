@@ -1874,11 +1874,17 @@ def lesson_new(course):
             "SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
             "WHERE course=? AND hierarchy=? AND level='lesson' AND parent_id IS ?",
             (course, O, unit)).fetchone()[0]
+        new_id = str(uuidlib.uuid4())
         conn.execute(
             "INSERT INTO nodes(course, hierarchy, node_id, parent_id, level, is_leaf, ordinal, text) "
             "VALUES (?, ?, ?, ?, 'lesson', 1, ?, ?)",
-            (course, O, str(uuidlib.uuid4()), unit, nxt, title))
+            (course, O, new_id, unit, nxt, title))
         conn.commit()
+        # From the calendar (clicking an empty day): re-lay-out and tell the view to
+        # open the new lesson with its title focused.
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   focus_lesson=new_id, **_calendar_ctx(conn, course))
         if request.headers.get("HX-Request"):
             return _outline_swap(conn, course)
     # The new lesson box appears on reload; no flash.

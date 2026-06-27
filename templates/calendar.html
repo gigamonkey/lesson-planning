@@ -91,8 +91,15 @@
   .cal-lessondays input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .cal-lessondays input:focus { outline: none; }
   .cal-lessondays-unit { color: #6aa885; }
-  .cal-cell.free { background: #f7f7f7; border: 1px dashed #e0e0e0; }
+  /* A free school day: click to add a lesson. A faint "+" appears on hover to
+     signal it's a drop target. */
+  .cal-cell.free { background: #f7f7f7; border: 1px dashed #e0e0e0; cursor: pointer;
+              color: transparent; font-size: 1.3rem; font-weight: 400; }
+  .cal-cell.free::before { content: "+"; }
+  .cal-cell.free:hover { background: #eef3fb; border-color: #cdd9eb; color: #9fb3cc; }
   .cal-cell.off { background: #e9e9e9; border: 1px solid #e0e0e0; }
+  /* "No school" label inside non-school-day boxes. */
+  .cal-noschool { color: #999; font-size: .72rem; }
   /* Exam days (from the calendar's nonClassDays) and any other labeled day. */
   .cal-cell.exam { background: #fdecea; border: 1px solid #f5c2c0; color: #b02a37; font-weight: 600; }
   .cal-cell.special { background: #f3eefc; border: 1px solid #ddd0f0; color: #6a4ea3; }
@@ -204,6 +211,15 @@
       setTimeout(function () {
         if (!cell.contains(document.activeElement)) cell.classList.remove('editing');
       }, 0);
+    });
+    // Clicking an empty day adds a lesson and re-lays-out #cal-content; the new
+    // lesson cell is marked data-focus-title, so put the cursor in its title.
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+      const cell = document.querySelector('#cal-content [data-focus-title]');
+      if (!cell) return;
+      cell.removeAttribute('data-focus-title');
+      const input = cell.querySelector('.cal-lessonname input');
+      if (input) { input.focus(); input.select(); }
     });
     // Escape reverts the field to its last-rendered/saved value and exits editing.
     // Restoring defaultValue means the autosave focusout sees no change and skips.
