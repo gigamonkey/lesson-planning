@@ -170,13 +170,15 @@
     The next time the course is loaded from the corpus — the sidebar
     <b>Sync</b> button, a course <b>refresh</b>, or an app restart /
     <code>rebuild_db</code> — the app <b>unifies</b> objectives that share the same
-    text onto one id and rewrites every placement and coverage link to it. Click a
-    course's <b>save</b> afterward to write the cleaned-up files back to the corpus.
+    text onto one id and rewrites every placement and coverage link to it. The
+    cleaned-up files are written back to the corpus the next time the course saves
+    (automatically in git-backed mode, or with the course's <b>save</b> icon
+    otherwise).
   </div>
   <p>The one thing the app <i>can't</i> decide for you: if the two people placed
      their copies in <b>different lessons</b>, the unified objective will show up in
      <b>both</b> lessons (the app has no way to know which is right). Just delete the
-     placement you don't want, then save.</p>
+     placement you don't want.</p>
 
   {% if course_rows %}
   <h2>Currently loaded</h2>
