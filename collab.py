@@ -136,6 +136,18 @@ def worktree_path(handle):
     return os.path.join(data_dir(), "worktrees", _safe_handle(handle))
 
 
+def _existing_handles():
+    """Handles with a materialized worktree on the volume. The directory name is
+    the safe handle, which is also the branch name (see editor_binding), so these
+    are ready to pass straight to enqueue_push. Empty if no worktrees yet."""
+    wt_root = os.path.join(data_dir(), "worktrees")
+    try:
+        return [name for name in os.listdir(wt_root)
+                if os.path.isdir(os.path.join(wt_root, name))]
+    except FileNotFoundError:
+        return []
+
+
 def db_path_for(handle):
     name = MAIN if handle == MAIN else _safe_handle(handle)
     return os.path.join(data_dir(), "db", f"{name}.sqlite")
@@ -665,6 +677,15 @@ def startup():
         print(f"collab: initial clone/fetch failed: {e}", file=sys.stderr)
     threading.Thread(target=_push_worker, daemon=True,
                      name="collab-push").start()
+    # Flush commits that didn't get pushed before the last shutdown. The push
+    # queue is in-memory, so a deploy/restart with pushes still pending would
+    # strand those commits on the volume (safe, just unpushed). Re-enqueue each
+    # existing worktree through the normal per-handle push path: non-force, with
+    # retry/backoff and the pending-push badge, and a no-op when nothing's
+    # pending. Non-blocking -- the worker drains it in the background, so a
+    # GitHub hiccup here just leaves the commits for the next save.
+    for handle in _existing_handles():
+        enqueue_push(handle)
     _start_main_timer()
     try:
         viewer_binding()       # warm the read-only main db
