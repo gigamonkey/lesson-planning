@@ -75,8 +75,14 @@ uv run python -c "import plan_io; plan_io.write_course('db.db', '<course>', '<co
 # markdown, the title is click-to-edit, per-reference star/trash set-primary/delete,
 # and the course header has bundle-export + delete; the Settings page does global
 # restore-from-corpus.
-uv run app.py
-LESSON_CORPUS_DIR=examples uv run app.py       # load the bundled widgets example
+#
+# ALWAYS run the server via serve.sh -d (detached, idempotent, listens on
+# 0.0.0.0). It defaults LESSON_CORPUS_DIR to the sibling ../bhs-cs-courses
+# checkout when present -- which enables Local git mode (below). A bare
+# `uv run app.py` skips that default and falls back to the in-repo courses/
+# (git mode off), so don't launch it that way.
+./serve.sh -d                                  # detached on 0.0.0.0:5001; log: /tmp/lesson-planning.log
+LESSON_CORPUS_DIR=examples uv run app.py       # load the bundled widgets example (no git mode)
 ```
 
 **Local git mode.** If `LESSON_CORPUS_DIR` is the top of its own git repo (a
@@ -86,7 +92,7 @@ ops), authored as the local git user, on the checked-out branch (main), with **n
 remote push** — so the Save button is hidden (Refresh stays, for picking up
 external edits / a `git pull`). Off when the corpus is a plain dir or a subdir of
 another repo (e.g. the in-repo `courses/`, which would otherwise commit into this
-repo). `serve.sh` defaults `LESSON_CORPUS_DIR` to a sibling `../lesson-courses`
+repo). `serve.sh` defaults `LESSON_CORPUS_DIR` to a sibling `../bhs-cs-courses`
 checkout when present. The commit/autosave core lives in `collab.py`
 (`commit_repo`, `schedule_autosave`) and is shared by both modes; `app.py`'s
 `_git_target()` picks per-mode (repo, db, author, push) and `git_backed()` gates
