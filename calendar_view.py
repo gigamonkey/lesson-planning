@@ -23,7 +23,9 @@ def load_calendar(calendar_id, calendar_dir, extras_dir=None):
     """Load a bells calendar by id from `calendar_dir`, returning
     (BellSchedule, raw_data). Raises FileNotFoundError if the JSON is absent.
 
-    Exam days come from the calendar's own `nonClassDays` (a bells field). If
+    Exam days come from the bells calendar itself, read via
+    `BellSchedule.non_class_label(date)` (bells normalizes both a named EXAMS bell
+    schedule and a raw `nonClassDays` entry to a label like "exam"). If
     `extras_dir` is given and `<extras_dir>/<calendar_id>.json` exists, its
     `apExams` (a {start, end} window) and `gradingPeriods` (week-number -> name)
     are copied onto the returned data -- these augment the bells calendar with
@@ -220,10 +222,18 @@ def build_calendar(bs, data, units):
     weeks = _weeks(bs, data, start, end)
     teaching_total = sum(1 for w in weeks if not w["is_break"])
 
-    # Exam days (and any other non-class label) come from the calendar's own
-    # nonClassDays. They stay in their teaching week but are NOT bookable lesson
-    # days -- lessons flow around them -- and render as their own cell kind.
-    labels = {_d(k): v for k, v in (data.get("nonClassDays") or {}).items() if v}
+    # Exam days (and any other non-class label) come from the bells calendar itself:
+    # bs.non_class_label(d) returns a label like "exam" for an in-session day that's
+    # reserved (e.g. finals -- whether the source marks it via a named EXAMS schedule
+    # or a raw nonClassDays entry; bells normalizes both). Such days stay in their
+    # teaching week but are NOT bookable -- lessons flow around them -- and render as
+    # their own cell kind ("exam" -> red, any other label -> a generic special cell).
+    labels = {}
+    for w in weeks:
+        for d in (w["days"] if not w["is_break"] else []):
+            lab = bs.non_class_label(d)
+            if lab:
+                labels[d] = lab
     # AP exam window (a sidecar augmentation): any week it overlaps is badged.
     ap = data.get("apExams") or None
     ap_start = _d(ap["start"]) if ap else None

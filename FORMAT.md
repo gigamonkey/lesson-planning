@@ -168,8 +168,9 @@ Course-level facts that live in no single hierarchy:
 - `calendar:` — (optional) the id of a bells calendar (a JSON file in the
   calendars directory, e.g. `bhs-2025-2026`) the calendar view lays the outline
   onto. The school-year span comes from that calendar (`firstDay`..`lastDay`),
-  and **exam days** come from its `nonClassDays` (rendered as exam cells, not
-  bookable lesson days). A matching sidecar in `calendar-extras/<id>.json` (this
+  and **exam days** come from the calendar itself (any in-session day bells gives
+  a non-class label, e.g. a named `EXAMS` schedule — rendered as red exam cells,
+  not bookable lesson days). A matching sidecar in `calendar-extras/<id>.json` (this
   repo, not the bells repo) can add what bells doesn't carry: `apExams`
   (a `{start, end}` window — weeks it overlaps are badged "AP exams") and
   `gradingPeriods` (a `{teaching-week-number: name}` map — that week is badged
