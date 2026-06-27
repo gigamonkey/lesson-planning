@@ -11,9 +11,11 @@
 
 FROM python:3.13-slim
 
-# git + ssh for the courses repo (clone/fetch/push over the deploy key).
+# git + ssh for the courses repo (clone/fetch/push over the deploy key); vim-tiny
+# provides `vi` for hand-editing files on the volume (e.g. /data/collab.json) over
+# `fly ssh console`.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git openssh-client ca-certificates \
+        git openssh-client ca-certificates vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
 # uv (the project's package manager).
