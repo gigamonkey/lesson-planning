@@ -203,9 +203,15 @@ def _collab_record(resp):
     if (collab.enabled() and getattr(g, "editor", False)
             and request.method == "POST" and resp.status_code < 400):
         ep = request.endpoint
-        if ep in _ACTION_PHRASES and ep not in _SAVE_ENDPOINTS:
-            course = (request.view_args or {}).get("course", "the course")
-            collab.record_action(g.handle, _ACTION_PHRASES[ep].format(course=course))
+        course = (request.view_args or {}).get("course", "the course")
+        # A handler may set g.action_phrase to describe what it actually did when
+        # one endpoint covers several actions (e.g. `place` maps vs. unmaps);
+        # otherwise fall back to the static per-endpoint phrase.
+        phrase = getattr(g, "action_phrase", None)
+        if phrase is None and ep in _ACTION_PHRASES and ep not in _SAVE_ENDPOINTS:
+            phrase = _ACTION_PHRASES[ep].format(course=course)
+        if phrase:
+            collab.record_action(g.handle, phrase)
     return resp
 
 
@@ -1050,6 +1056,9 @@ def place(course, hierarchy):
                 conn.execute("UPDATE course_objectives SET position=? "
                              "WHERE course=? AND uuid=?", (i, course, u))
         conn.commit()
+    # Distinguish the two things this one endpoint does, for the commit message.
+    g.action_phrase = (f"moved objectives to the {course} pool" if to == "pool"
+                       else f"placed objectives in {course}")
     return ("", 204)
 
 
