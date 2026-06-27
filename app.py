@@ -154,7 +154,7 @@ _ACTION_PHRASES = {
     "unit_new": "added a unit to {course}",
     "unit_rename": "renamed a unit in {course}",
     "unit_delete": "deleted a unit in {course}",
-    "unit_move": "moved a unit in {course}",
+    "unit_arrange": "reordered units in {course}",
     "lesson_new": "added a lesson to {course}",
     "lesson_edit": "edited a lesson in {course}",
     "lesson_delete": "deleted a lesson in {course}",
@@ -1816,26 +1816,20 @@ def unit_delete(course, unit_id):
     return _back(course)
 
 
-@app.route("/<course>/unit/<unit_id>/move", methods=["POST"])
-def unit_move(course, unit_id):
-    direction = request.form.get("dir")
+@app.route("/<course>/unit/arrange", methods=["POST"])
+def unit_arrange(course):
+    """Drag-reorder units. Form: `ids` (unit node_ids in their new order). Client-
+    driven like lesson_arrange -- the DOM already reflects the order, so just
+    persist the new ordinals and return 204 (no swap)."""
+    ids = _id_list("ids")
     with db() as conn:
         O = outline_hierarchy(conn, course)
-        ids = [r["node_id"] for r in conn.execute(
-            "SELECT node_id FROM nodes WHERE course=? AND hierarchy=? AND level='unit' "
-            "ORDER BY ordinal, node_id", (course, O))]
-        if unit_id in ids:
-            i = ids.index(unit_id)
-            j = i - 1 if direction == "up" else i + 1
-            if 0 <= j < len(ids):
-                ids[i], ids[j] = ids[j], ids[i]
-                for pos, uid in enumerate(ids):
-                    conn.execute("UPDATE nodes SET ordinal=? WHERE course=? AND hierarchy=? AND node_id=?",
-                                 (pos, course, O, uid))
-                conn.commit()
-        if request.headers.get("HX-Request"):
-            return _outline_swap(conn, course)
-    return _back(course)
+        for pos, uid in enumerate(ids):
+            conn.execute("UPDATE nodes SET ordinal=? WHERE course=? AND hierarchy=? "
+                         "AND node_id=? AND level='unit'", (pos, course, O, uid))
+        conn.commit()
+    g.action_phrase = f"reordered units in {course}"
+    return ("", 204)
 
 
 # --- Lessons ---

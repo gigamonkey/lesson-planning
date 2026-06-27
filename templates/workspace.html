@@ -251,19 +251,22 @@
     });
     }
 
-    // Outline only: drag lessons between units / reorder.
+    // Outline only: drag lessons between units / reorder. Grab by the grip handle
+    // in the lesson head (revealed on hover) -- so clicks in the card's fields and
+    // buttons never start a drag.
     function initLessonSortables(root) {
       if (!editable) return;
       root.querySelectorAll('.sortable.unitlessons').forEach(function (el) {
         if (el.dataset.sortInit) return;
         el.dataset.sortInit = '1';
         new Sortable(el, {
-          group: 'lessons', draggable: 'li.lessoncard',
-          filter: 'input, textarea, button, ul.rawzone', preventOnFilter: false,
+          group: 'lessons', draggable: 'li.lessoncard', handle: '.lessonhandle',
           animation: 120, ghostClass: 'sortable-ghost',
           forceFallback: true, fallbackOnBody: true,
           scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
+          onStart: function () { document.body.classList.add('dragging'); },
           onEnd: function (evt) {
+            document.body.classList.remove('dragging');
             const body = new URLSearchParams();
             body.set('unit', evt.to.dataset.unit || 'none');
             body.set('ids', Array.from(evt.to.children)
@@ -273,6 +276,38 @@
               .then(function () { if (window.saveRefresh) window.saveRefresh(); });
           }
         });
+      });
+    }
+
+    // Outline only: drag whole units to reorder them. The container (#outline-units)
+    // persists across the htmx innerHTML swaps that re-render the units on a
+    // structural edit, so this Sortable is created once and picks up fresh unit
+    // sections automatically. onMove keeps the dragged unit above the trailing
+    // "Unassigned lessons" section (which has no handle, so can't be dragged
+    // itself), so units stay grouped before it.
+    function initUnitSortables() {
+      if (!editable) return;
+      const el = document.getElementById('outline-units');
+      if (!el || el.dataset.unitSortInit) return;
+      el.dataset.unitSortInit = '1';
+      new Sortable(el, {
+        group: 'units', draggable: 'section.unit:not(.unassigned)', handle: '.unithandle',
+        animation: 120, ghostClass: 'sortable-ghost',
+        forceFallback: true, fallbackOnBody: true,
+        scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
+        onMove: function (evt) { return !evt.related || !evt.related.classList.contains('unassigned'); },
+        onStart: function () { document.body.classList.add('dragging'); },
+        onEnd: function (evt) {
+          document.body.classList.remove('dragging');
+          const ids = Array.from(el.children)
+            .filter(c => c.classList.contains('unit') && !c.classList.contains('unassigned'))
+            .map(s => s.dataset.unitId);
+          const body = new URLSearchParams();
+          body.set('ids', ids.join(','));
+          fetch('/' + course + '/unit/arrange', { method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
+            .then(function () { if (window.saveRefresh) window.saveRefresh(); });
+        }
       });
     }
 
@@ -377,6 +412,7 @@
     function initWorkspace(root) {
       initRawSortables(root);
       initLessonSortables(root);
+      initUnitSortables();
       initAddObj(root);
       initBulk(root);
       initCollapse(root);

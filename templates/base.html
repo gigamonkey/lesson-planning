@@ -113,6 +113,11 @@
     .draghandle { color: #ccc; cursor: grab; font-size: .8rem; line-height: 1; flex: none;
                   visibility: hidden; margin-left: -.15rem; }
     .sidebar ul.hiers li.hieritem:hover .draghandle { visibility: visible; }
+    /* The same grip reorders units/lessons, revealed on head hover -- but here it
+       takes no space until shown (display, not visibility), so collapsed heads
+       don't carry a permanent gap. */
+    .unithandle, .lessonhandle { display: none; visibility: visible; align-items: center; }
+    .unithead:hover .unithandle, .lessonhead:hover .lessonhandle { display: inline-flex; }
     .draghandle:active { cursor: grabbing; }
     .sortable-ghost { opacity: .4; }
     .objadd { margin: 0; display: inline-flex; flex: none; }
@@ -312,7 +317,7 @@
             border-color: var(--line); outline: none; }
     .lessonhead .edit input:focus, .lessonhead .edit textarea:focus {
             border-color: #bcd; background: #fff; outline: none; }
-    ul.unitlessons > li.lessoncard { margin: .35rem 0; cursor: grab; }
+    ul.unitlessons > li.lessoncard { margin: .35rem 0; }
     .lessoncard input, .lessoncard textarea { cursor: text; }
     /* Plan page: outline (left) + raw pool (right). */
     ul.rawzone { list-style: none; margin: .3rem 0 0; padding: .2rem; min-height: 2.2rem;
