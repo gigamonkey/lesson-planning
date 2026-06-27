@@ -157,6 +157,27 @@
      (<code>uv run rebuild_db.py</code> does the same from a terminal, rebuilding
      from scratch.)</p>
 
+  <h3>Merging a PR with duplicate objectives</h3>
+  <p>Every objective carries a hidden id (you'll see a short
+     <code>(#abcd)</code> tag on each bullet in <code>plan.md</code>). If two people
+     on separate branches each draft the <i>same</i> objective, they each get a
+     <b>different</b> id — so after you merge the branches you may see the same
+     objective text twice in <code>objectives.tsv</code> (two ids) and a duplicate
+     bullet in <code>plan.md</code>.</p>
+  <div class="note">
+    <b>Keep both, and let the app merge them.</b> Don't try to hand-pick a winning
+    id or hand-edit the files. Just resolve the git merge by keeping both copies.
+    The next time the course is loaded from the corpus — the sidebar
+    <b>Sync</b> button, a course <b>refresh</b>, or an app restart /
+    <code>rebuild_db</code> — the app <b>unifies</b> objectives that share the same
+    text onto one id and rewrites every placement and coverage link to it. Click a
+    course's <b>save</b> afterward to write the cleaned-up files back to the corpus.
+  </div>
+  <p>The one thing the app <i>can't</i> decide for you: if the two people placed
+     their copies in <b>different lessons</b>, the unified objective will show up in
+     <b>both</b> lessons (the app has no way to know which is right). Just delete the
+     placement you don't want, then save.</p>
+
   {% if course_rows %}
   <h2>Currently loaded</h2>
   <table class="report">
