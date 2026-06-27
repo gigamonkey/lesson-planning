@@ -97,18 +97,22 @@
     .coursehead-actions { display: flex; align-items: center; gap: .25rem; flex: none; }
     .coursehead .gear { color: #bbb; text-decoration: none; font-size: .82rem; flex: none;
                 cursor: pointer; line-height: 1; position: relative; }
-    .coursehead .gear:hover { color: #2b6cb0; }
+    .coursehead .gear:hover, .coursehead .gear.on { color: #2b6cb0; }
     /* Unsaved-changes dot — Save lives behind the gear in plain single-user mode. */
     .coursehead .gear.dirty { color: #2b6cb0; }
     .coursehead .gear.dirty::after { content: ""; position: absolute; top: -1px; right: -3px;
                 width: 5px; height: 5px; border-radius: 50%; background: var(--gap, #c05621); }
-    /* Click-to-edit course title: looks like plain muted text until hover/focus. */
-    .ctitle-form { margin: 0 0 .3rem; }
-    .ctitle-input { width: 100%; box-sizing: border-box; font: inherit; font-size: .7rem;
-                color: var(--muted); border: 1px solid transparent; background: transparent;
-                border-radius: 3px; padding: .05rem .2rem; }
+    /* Click-to-edit course title (the header line): looks like plain bold text
+       until hover/focus. Shares the row with the four course-view icons. */
+    .ctitle-form { margin: 0; flex: 1; min-width: 0; }
+    .ctitle-input { width: 100%; box-sizing: border-box; font: inherit; font-size: .95rem;
+                font-weight: 700; color: #222; border: 1px solid transparent; background: transparent;
+                border-radius: 3px; padding: .05rem .2rem; margin-left: -.2rem; }
     .ctitle-input:hover { border-color: var(--line); }
     .ctitle-input:focus { border-color: #bcd; background: #fff; color: #222; outline: none; }
+    /* Section label above the reference-hierarchy list. */
+    .sidebar .refhead { font-size: .68rem; font-weight: 600; letter-spacing: .04em;
+                text-transform: uppercase; color: var(--muted); margin: .35rem 0 .1rem; }
     /* Per-hierarchy row controls: an upload (+) and a hover trash. */
     .sidebar ul.hiers li.hieritem { gap: .25rem; }
     /* Drag handle to reorder references; revealed on row hover, like the trash. */
@@ -146,20 +150,15 @@
              font-size: .76rem; line-height: 1; padding: 0; }
     .hdel button:hover { color: var(--gap); }
     .sidebar .course { margin-bottom: 1rem; }
-    .sidebar .coursename { font-weight: 700; color: #222; text-decoration: none; font-size: .95rem; }
+    .sidebar .coursename { font-weight: 700; color: #222; text-decoration: none; font-size: .95rem;
+                           flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
+                           text-overflow: ellipsis; }
     .sidebar .course.active .coursename { color: #2b6cb0; }
-    .sidebar .ctitle { display: block; font-size: .7rem; color: var(--muted); margin: 0 0 .3rem; }
     .sidebar ul.hiers { list-style: none; margin: .2rem 0; padding: 0; }
     .sidebar ul.hiers li { display: flex; align-items: center; gap: .35rem; padding: .13rem 0; }
     .sidebar ul.hiers a { text-decoration: none; color: #2b6cb0; font-size: .88rem; flex: 1;
                           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sidebar ul.hiers li.active a { font-weight: 700; color: #222; }
-    /* Course outline + Objectives: the two bold, course-level items at the top
-       (normal color convention -- blue, black when active). A touch of space sets
-       them off from the references below. */
-    .sidebar ul.hiers li.outlineitem a,
-    .sidebar ul.hiers li.objitem a { font-weight: 700; }
-    .sidebar ul.hiers li.objitem { margin-bottom: .3rem; }
     .sidebar-foot { border-top: 1px solid var(--line); padding-top: .7rem; margin-top: .5rem;
                     display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
     .sidebar-foot .footlinks { display: flex; gap: .8rem; }
@@ -615,79 +614,41 @@
       {% endif %}
       {% for c in course_nav %}
         <div class="course {{ 'active' if c.course == nav_course else '' }}">
+          {# Header line: the course title (click-to-edit when editable) plus the
+             four course-view icons — outline, calendar, objectives, settings. #}
           <div class="coursehead">
-            <span class="coursename">{{ c.course|upper }}</span>
             {% if can_edit %}
-            {# Less-frequent actions (add hierarchy, save/export, rebuild outline,
-               bundle export, delete) all live on the per-course settings page; the
-               header keeps just the gear. The dot flags unsaved changes in plain
-               single-user mode, where Save now lives behind the gear. #}
+            <form class="ctitle-form autosave" method="post"
+                  action="{{ url_for('course_rename', course=c.course) }}"
+                  hx-post="{{ url_for('course_rename', course=c.course) }}" hx-swap="none">
+              <input class="ctitle-input" type="text" name="title" value="{{ c.title }}"
+                     autocomplete="off" aria-label="Course title" placeholder="{{ c.course|upper }}">
+            </form>
+            {% else %}
+            <span class="coursename">{{ c.title or c.course|upper }}</span>
+            {% endif %}
             <span class="coursehead-actions">
+              <a class="gear {{ 'on' if request.endpoint == 'plan' and c.course == nav_course else '' }}"
+                 href="{{ url_for('plan', course=c.course) }}"
+                 title="{{ c.course|upper }} outline"><i class="bi bi-diagram-3"></i></a>
+              <a class="gear {{ 'on' if request.endpoint == 'calendar' and c.course == nav_course else '' }}"
+                 href="{{ url_for('calendar', course=c.course) }}"
+                 title="{{ c.course|upper }} calendar"><i class="bi bi-calendar"></i></a>
+              <a class="gear {{ 'on' if request.endpoint == 'objectives' and c.course == nav_course else '' }}"
+                 href="{{ url_for('objectives', course=c.course) }}"
+                 title="{{ c.course|upper }} objectives"><i class="bi bi-list-check"></i></a>
+              {% if can_edit %}
               <a class="gear {{ 'dirty' if not git_backed and c.dirty else '' }}"
                  href="{{ url_for('course_settings', course=c.course) }}"
                  title="{{ c.course|upper }} settings{{ ' · unsaved changes' if not git_backed and c.dirty else '' }}">
                 <i class="bi bi-gear"></i></a>
+              {% endif %}
             </span>
-            {% endif %}
           </div>
-          {% if can_edit %}
-          <form class="ctitle-form autosave" method="post"
-                action="{{ url_for('course_rename', course=c.course) }}"
-                hx-post="{{ url_for('course_rename', course=c.course) }}" hx-swap="none">
-            <input class="ctitle-input" type="text" name="title" value="{{ c.title }}"
-                   autocomplete="off" aria-label="Course title" placeholder="course title…">
-          </form>
-          {% elif c.title %}
-          <span class="ctitle">{{ c.title }}</span>
+          {% if c.hierarchies %}
+          <div class="refhead">References</div>
           {% endif %}
           <ul class="hiers" data-course="{{ c.course }}">
-            <li class="outlineitem {{ 'active' if c.course == nav_course and c.outline and c.outline == active_hierarchy else '' }}">
-              <a href="{{ url_for('plan', course=c.course) }}">Course outline</a>
-              {% if can_edit and c.hierarchies and c.outline_empty %}
-                <button type="button" class="miniadd"
-                        title="Build the outline from a reference hierarchy"
-                        onclick="document.getElementById('oimport-{{ c.course }}').showModal()">
-                  <i class="bi bi-diagram-3"></i>
-                </button>
-                <dialog id="oimport-{{ c.course }}" class="oimport-dialog">
-                  <form method="post" action="{{ url_for('outline_import', course=c.course) }}">
-                    <h3>Import outline structure</h3>
-                    <p>Build the {{ c.course|upper }} outline from a reference hierarchy: each
-                       top-level item becomes a unit, each second-level item a lesson, and every
-                       objective is placed into the lesson whose subtree covers it.
-                       <strong>This replaces the current outline</strong> (its units, lessons,
-                       learning objectives, and placements).</p>
-                    <label>Reference:
-                      <select name="reference" required>
-                        {% for h in c.hierarchies %}
-                          <option value="{{ h.hierarchy }}">{{ h.label }}</option>
-                        {% endfor %}
-                      </select>
-                    </label>
-                    <menu>
-                      <button type="button" onclick="this.closest('dialog').close()">Cancel</button>
-                      <button type="submit" class="primary">Import</button>
-                    </menu>
-                  </form>
-                </dialog>
-              {% endif %}
-              <a class="miniadd {{ 'on' if request.endpoint == 'calendar' and c.course == nav_course else '' }}"
-                 href="{{ url_for('calendar', course=c.course) }}"
-                 title="Calendar — how the outline fits the school year">
-                <i class="bi bi-calendar3"></i></a>
-            </li>
-            <li class="objitem {{ 'active' if request.endpoint == 'objectives' and c.course == nav_course else '' }}">
-              <a href="{{ url_for('objectives', course=c.course) }}">Objectives</a>
-              {% if can_edit %}
-              <form method="post" class="objadd" enctype="multipart/form-data"
-                    action="{{ url_for('objectives_upload', course=c.course) }}">
-                <label class="miniadd" title="Upload objectives — plain text (one per line), or a (uuid, text, hierarchy_id, node_id) TSV">
-                  <i class="bi bi-plus-lg"></i>
-                  <input type="file" name="file" accept=".tsv,.txt,.csv" hidden onchange="this.form.submit()">
-                </label>
-              </form>
-              {% endif %}
-            </li>
             {% for h in c.hierarchies %}
               <li class="hieritem {{ 'active' if c.course == nav_course and h.hierarchy == active_hierarchy else '' }}"
                   data-hierarchy="{{ h.hierarchy }}">
