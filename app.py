@@ -401,15 +401,11 @@ def _finish_login(handle, name, email):
     # binding, so create it here before syncing.)
     if role == "editor":
         try:
+            # Ensure the sandbox exists, then sync: merge anything landed on main
+            # since last time AND push the branch (establishing origin/<handle> on a
+            # brand-new sandbox). sync pushes synchronously, so nothing more to do.
             collab.editor_binding(handle, name, email)
             collab.sync(handle, name, email)
-            # Establish the editor's branch on GitHub at login. A brand-new
-            # sandbox is forked from origin/main but not pushed, and sync is a
-            # no-op when already current, so without this the branch never
-            # reaches origin until the first edit -- leaving a misleading
-            # "Pushing N commit(s)" banner (N = whole history) in the meantime.
-            if collab.unpushed_count(handle) > 0:
-                collab.enqueue_push(handle)
         except Exception as e:
             print(f"collab: login sync failed for {handle}: {e}", file=sys.stderr)
     return redirect(nxt)
