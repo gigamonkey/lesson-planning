@@ -24,7 +24,7 @@ conforming markdown.
   lessons, and watch coverage fill in — then **export** the course back to
   git-trackable markdown.
 - A command-line pipeline for the same lifecycle: load a course from its markdown
-  corpus and rebuild the database from scratch.
+  courses directory and rebuild the database from scratch.
 - Live **coverage**: as you place objectives, every leaf of the standard reads as
   planned, objective-only, or a gap, with a gaps-only filter.
 
@@ -36,11 +36,11 @@ with [`uv`](https://docs.astral.sh/uv/).
 A synthetic example course ("Intro to Widgets") lives in `examples/widgets/` —
 a **course directory**: its reference hierarchy markdown (`widgets-ced.md`), the
 outline (`plan.md`), and the normalized `objectives.tsv` / `coverage.tsv`. Use the
-`examples/` corpus to see the whole pipeline end to end:
+`examples/` courses directory to see the whole pipeline end to end:
 
 ```bash
-# Rebuild a database from the markdown corpus (a dir of course directories).
-uv run rebuild_db.py --corpus examples            # -> db.db
+# Rebuild a database from the markdown courses directory (a dir of course directories).
+uv run rebuild_db.py --courses examples            # -> db.db
 ```
 
 To load a single hierarchy markdown file straight into a database (the lower-level
@@ -58,12 +58,12 @@ LESSON_COURSES_DIR=examples uv run app.py          # http://localhost:5001
 ```
 
 The app boots an empty database from `schema.sql`, then loads any course in the
-corpus directory. Without a corpus, create a course with **+** in the sidebar and
+courses directory. Without a courses directory, create a course with **+** in the sidebar and
 upload a hierarchy markdown file with the **+** in its sidebar header.
 
 ## The format
 
-A course is a directory of markdown + two TSVs; the corpus is a directory of
+A course is a directory of markdown + two TSVs; the courses directory is a directory of
 those. The full spec — reference hierarchy markdown, the `plan.md` outline
 profile, and the two TSVs — is in [`FORMAT.md`](FORMAT.md). A reference hierarchy
 declares its level names (`levels:`) and `title:` in front matter; heading depth
@@ -90,16 +90,16 @@ to a lesson.
 ## Saving & version control
 
 `db.db` is the live working copy and is gitignored. The committed state is the
-**corpus**: a git repo whose top-level directories are course directories of
+**courses directory**: a git repo whose top-level directories are course directories of
 markdown + TSVs. The app **autosaves + commits** your edits back to it; rebuild
 reproduces the database from it:
 
 ```bash
-uv run rebuild_db.py --corpus ../bhs-cs-courses  # rebuild db.db from a corpus
+uv run rebuild_db.py --courses ../bhs-cs-courses  # rebuild db.db from a courses directory
 uv run seed.py --all ../bhs-cs-courses db.db     # reload every course (non-destructive)
 ```
 
-(Single-user mode requires the corpus to be a git repo and commits there
+(Single-user mode requires the courses directory to be a git repo and commits there
 automatically — there is no manual Export button; the **Settings** page offers a
 global **Sync** to re-read external edits / a `git pull`. Reference hierarchy
 markdown is a load-only input and is never rewritten — only `plan.md` and the two
@@ -113,7 +113,7 @@ Setup is driven from the sidebar:
   bundle file.
 
 - each course's sidebar block holds its controls: the **+** adds a reference
-  hierarchy (upload hierarchy **markdown**, saved into the corpus); the title is
+  hierarchy (upload hierarchy **markdown**, saved into git); the title is
   click-to-edit; each reference has a **★** (set primary, shown with more than one)
   and a trash; the course header has a **download** (export the whole course as a
   self-contained bundle file) and a trash (delete the course).
@@ -131,11 +131,11 @@ uv run course_bundle.py export db.db <course> <course>.json
 uv run course_bundle.py import db.db <course>.json [--as <new-id>]
 ```
 
-## Running & the corpus
+## Running & the courses directory
 
-Point the app at a **corpus** — a directory whose subdirectories are course
+Point the app at a **courses directory** — a directory whose subdirectories are course
 directories — via `LESSON_COURSES_DIR`, and it populates a blank database
-automatically. In single-user mode the corpus must be a **git repo** (a checkout
+automatically. In single-user mode the courses directory must be a **git repo** (a checkout
 of your courses repo): edits autosave + commit there, on the checked-out branch,
 with no remote push. `serve.sh` defaults it to a sibling `../bhs-cs-courses`
 checkout when present.

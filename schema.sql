@@ -15,11 +15,11 @@
 -- targets); the course scope comes from the course directory. See
 -- plans/hierarchy-identity-and-kind.md.
 --
--- The db.db file is a disposable cache, rebuilt from the markdown corpus
--- (rebuild_db.py applies this file then loads every course). It is never migrated
--- in place; change the schema here, BUMP THE VERSION BELOW, and rebuild. The app
--- stamps every db with this version (PRAGMA user_version) and, on startup,
--- discards + rebuilds-from-corpus any db whose stamp doesn't match -- so a stale
+-- The db.db file is a disposable cache, rebuilt from the markdown courses
+-- directory (rebuild_db.py applies this file then loads every course). It is never
+-- migrated in place; change the schema here, BUMP THE VERSION BELOW, and rebuild.
+-- The app stamps every db with this version (PRAGMA user_version) and, on startup,
+-- discards + rebuilds any db whose stamp doesn't match -- so a stale
 -- db.db from an older schema heals itself instead of 500ing.
 PRAGMA user_version = 2;
 
@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS hierarchies (
   title     TEXT NOT NULL,
   source    TEXT,                      -- reference: the markdown filename; authored: NULL
   source_md TEXT,                      -- reference: the verbatim source markdown,
-                                       --   replayed by write_course so the corpus
-                                       --   stays self-contained; authored: NULL
+                                       --   replayed by write_course so the courses
+                                       --   directory stays self-contained; authored: NULL
   PRIMARY KEY (course, hierarchy)
 );
 

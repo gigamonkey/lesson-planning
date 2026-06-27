@@ -18,7 +18,7 @@ format and `plans/markdown-as-storage.md` for the design.
   school-calendar library, import name `bells`), and `bhs-calendars` (its bundled
   calendar data) — both PyPI packages now. Add a `[tool.uv.sources]` path/editable
   source for either to develop the library alongside this app.
-- SQLite as a cache; a git-tracked **corpus** of markdown + TSVs is the committed
+- SQLite as a cache; a git-tracked **courses directory** of markdown + TSVs is the committed
   state
 - Package manager: `uv` (run scripts with `uv run <script>.py`)
 - Frontend is server-rendered + htmx (CDN), **no build step except** the outline
@@ -35,12 +35,12 @@ format and `plans/markdown-as-storage.md` for the design.
 - `hierarchy.py` — the curriculum-hierarchy markdown parser (this repo owns it);
   `FORMAT.md` — the on-disk format spec
 - `schema.sql` — canonical schema; `db.db` — live working copy (gitignored). There
-  is **no in-repo `courses/` default corpus** — single-user mode requires
+  is **no in-repo `courses/` default courses directory** — single-user mode requires
   `LESSON_COURSES_DIR` to point at a git repo (a courses-repo checkout, e.g. the
   sibling `../bhs-cs-courses`); collab mode uses the git clone on the volume. A
   plain (non-repo) dir like `examples/` is copied into a throwaway git repo at
   startup so the demo still autosaves + commits.
-- `examples/` — a corpus with one synthetic course, `examples/widgets/`:
+- `examples/` — a courses directory with one synthetic course, `examples/widgets/`:
   `widgets-ced.md` (reference hierarchy markdown), `plan.md` (the outline +
   course wiring), `objectives.tsv`, `coverage.tsv`
 - `plans/` — implementation plans (design record). Do **not** read `plans/done/`
@@ -54,29 +54,29 @@ format and `plans/markdown-as-storage.md` for the design.
 | `load_nodes.py`        | Parses a hierarchy **markdown** file (`hierarchy.to_nodes`) into the `nodes` table (keyed by `(course, hierarchy)`), registers the hierarchy and upserts its `course`. Slug/course default from the front-matter `slug:`/filename and flags; `apply_schema` applies `schema.sql`. `load_into` does it on a caller's connection. |
 | `plan_io.py`           | Read/write a course as a directory: `read_course` (references + `plan.md` outline + the two TSVs → db) and `write_course` (db → `plan.md` + `objectives.tsv` / `coverage.tsv`; reference markdown left untouched). `load_plan_text` loads an edited `plan.md` *text* (outline + pool only, tokens resolved against the live db) — the in-memory loader behind the web Markdown editor. Objective identity via abbreviated uuid tokens. |
 | `import_objectives.py` | Imports raw objectives into a course's pool, interning by `(course, text)` — objectives are course-owned (idempotent; `parse_coverage` + `upsert`); `copy_objectives` re-interns one course's pool into another. Plain-text (pool only) or TSV (`objective`/`text`, optional `hierarchy_id`/`node_id` coverage edge, optional `uuid`). No default coverage target — a row's hierarchy is its `hierarchy_id` (bare slug; course from context) or `--hierarchy`, else pool-only. `--replace` re-seeds. |
-| `seed.py`              | Corpus loader: load each course directory in a corpus (`plan_io.read_course`). `seed` skips courses already present (create-if-absent; run on startup); `load_corpus`/`--all` reloads all. CLI: `uv run seed.py <corpus> [db]`. |
-| `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load every course in the corpus. `--corpus <dir>` (default `courses`). |
-| `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + durations + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the markdown corpus. |
+| `seed.py`              | Courses-directory loader: load each course directory in a courses directory (`plan_io.read_course`). `seed` skips courses already present (create-if-absent; run on startup); `load_courses`/`--all` reloads all. CLI: `uv run seed.py <courses-dir> [db]`. |
+| `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load every course in the courses directory. `--courses <dir>` (default `courses`). |
+| `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + durations + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the markdown courses directory. |
 | `calendar_view.py`     | Pure layout engine for the calendar view: given a `bells.BellSchedule` + a course's outline (units→weeks, lessons→days), lays units across the year's *teaching weeks* (loose; breaks skipped) and lessons into school days, returning a view model. No Flask/SQL. `load_calendar(id, dir)` loads a bells JSON. |
 
 ## Running
 
 ```bash
-# Rebuild a db from a markdown corpus (a dir of course directories).
-uv run rebuild_db.py --corpus <corpus>         # deletes db.db; default corpus 'courses'
+# Rebuild a db from a markdown courses directory (a dir of course directories).
+uv run rebuild_db.py --courses <courses-dir>   # deletes db.db; default courses dir 'courses'
 
 # Load a single hierarchy markdown file into a db (the step rebuild_db orchestrates).
 uv run load_nodes.py <your-hierarchy>.md db.db --course <course>
 
-# Export a course back to its corpus directory (plan.md + the two TSVs).
-uv run python -c "import plan_io; plan_io.write_course('db.db', '<course>', '<corpus>/<course>')"
+# Export a course back to its courses directory (plan.md + the two TSVs).
+uv run python -c "import plan_io; plan_io.write_course('db.db', '<course>', '<courses-dir>/<course>')"
 
 # Web app (port 5001): bootstraps an empty db from schema.sql, then loads the
-# corpus dir. Setup is sidebar-driven: the top "+" creates (or imports) a course;
+# courses directory. Setup is sidebar-driven: the top "+" creates (or imports) a course;
 # each course's controls live on its sidebar block -- "+" uploads a hierarchy
 # markdown, the title is click-to-edit, per-reference star/trash set-primary/delete,
 # and the course header has bundle-export + delete; the Settings page does global
-# restore-from-corpus.
+# restore-from-courses-directory.
 #
 # ALWAYS run the server via serve.sh -d (detached, idempotent, listens on
 # 0.0.0.0). It defaults LESSON_COURSES_DIR to the sibling ../bhs-cs-courses
@@ -94,7 +94,7 @@ content edits, immediate for structural ops), authored as the local git user, on
 the checked-out branch (main), with **no remote push**. There is **no manual Save
 button** — only Sync/Refresh, for picking up external edits / a `git pull`. A
 plain (non-repo) `LESSON_COURSES_DIR` (e.g. `examples/`) is copied into a
-**throwaway git repo** at startup (`_ensure_git_corpus` in `app.py`, with a local
+**throwaway git repo** at startup (`_ensure_courses_repo` in `app.py`, with a local
 demo git identity) so the demo still autosaves + commits — to disposable git, never
 into this engine repo. `serve.sh` defaults `LESSON_COURSES_DIR` to a sibling
 `../bhs-cs-courses` checkout when present, else `examples`. The commit/autosave
@@ -129,7 +129,7 @@ npm run build      # -> static/editor.bundle.js (committed)
 uv run test_plan_io.py
 ```
 
-The `examples/` corpus (`examples/widgets/`) is a drop-in example course — see
+The `examples/` courses directory (`examples/widgets/`) is a drop-in example course — see
 `README.md`.
 
 ## Markdown

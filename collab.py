@@ -203,7 +203,7 @@ def ensure_clone():
             _git(["clone", CONFIG["repo"], cd], check=True)
         _git(["fetch", "origin"], cwd=cd)
         # Keep the primary clone pinned to origin/main -- it doubles as the
-        # viewers' read-only corpus, so it must never carry a teacher's edits.
+        # viewers' read-only courses directory, so it must never carry a teacher's edits.
         _git(["checkout", "-B", "main", "origin/main"], cwd=cd)
 
 
@@ -223,7 +223,7 @@ def _ref_exists(ref):
 
 
 # --------------------------------------------------------------------------
-# Per-user db cache (built from the worktree corpus)
+# Per-user db cache (built from the worktree courses directory)
 # --------------------------------------------------------------------------
 
 _db_locks = {}
@@ -236,12 +236,12 @@ def _db_lock(handle):
 
 
 def rebuild_db(handle):
-    """(Re)build a handle's db cache from its worktree corpus, atomically.
+    """(Re)build a handle's db cache from its worktree courses directory, atomically.
 
     Builds into a temp file then os.replace()s it into place, so concurrent
     readers (each opening their own short-lived connection) never see a
     half-built db."""
-    corpus = worktree_path(handle)
+    courses_root = worktree_path(handle)
     final = db_path_for(handle)
     os.makedirs(os.path.dirname(final), exist_ok=True)
     tmp = final + ".tmp"
@@ -250,15 +250,15 @@ def rebuild_db(handle):
             os.remove(tmp)
         # read_course applies schema.sql itself, so a fresh file is enough.
         # hierarchy.py reports parse errors via sys.exit() (SystemExit, which is
-        # NOT an Exception), so a malformed corpus file would otherwise escape and
+        # NOT an Exception), so a malformed courses directory file would otherwise escape and
         # kill the request thread. Convert any failure into a normal error and
         # leave the existing (good) db in place by not replacing it.
         try:
-            seed_module.load_corpus(tmp, corpus)
+            seed_module.load_courses(tmp, courses_root)
         except (Exception, SystemExit) as e:
             if os.path.exists(tmp):
                 os.remove(tmp)
-            raise RuntimeError(f"corpus failed to load: {e}") from None
+            raise RuntimeError(f"courses directory failed to load: {e}") from None
         os.replace(tmp, final)
 
 
@@ -580,11 +580,11 @@ def sync(handle, name, email):
         try:
             rebuild_db(handle)
         except RuntimeError as e:
-            # Merge landed but the merged corpus is malformed; still push so the
+            # Merge landed but the merged courses directory is malformed; still push so the
             # commit isn't stranded, and report.
             ok, out = _push_once(handle)
             return {"ok": False, "updated": True, "conflict": False, "pushed": ok,
-                    "message": f"Merged main, but the corpus didn't load: {e}"
+                    "message": f"Merged main, but the courses directory didn't load: {e}"
                                + ("" if ok else f" (push also failed: {out})")}
         updated = True
     # Push synchronously so Sync returns only once GitHub has the branch.

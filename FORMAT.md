@@ -11,13 +11,13 @@ assigns identity on upload).
 See `plans/markdown-as-storage.md` for the design rationale, and `plan_io.py` /
 `hierarchy.py` / `load_nodes.py` for the implementation.
 
-## The corpus and a course directory
+## The courses directory and a course directory
 
-A **corpus** is a directory whose immediate subdirectories are each one course.
+A **courses directory** is a directory whose immediate subdirectories are each one course.
 One course directory holds everything that describes that course:
 
 ```
-my-courses/              # the corpus root (a git repo; load source AND export target)
+my-courses/              # the courses root (a git repo; load source AND export target)
   widgets/
     ced.md               # a reference hierarchy — load-only input
     plan.md              # the outline + course wiring in front matter
@@ -61,7 +61,7 @@ A reference exists in **two forms** that differ by exactly one field — the `sl
   hierarchy's identity within a course is assigned when the file is placed into
   one, so a source file is course-agnostic and portable. This is the form
   `hierarchy-extractors` emits.
-- **Stored (corpus) form** — what the app writes into a course directory after an
+- **Stored form** — what the app writes into a course directory after an
   upload, and reloads on startup. It is the source form **plus a pinned `slug:`**
   (the bare, course-relative identity), with the file named `{slug}.md`.
 

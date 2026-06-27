@@ -49,7 +49,7 @@ import plan_io  # noqa: E402
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
 )
-# The corpus: a directory of course directories that is BOTH the load source and
+# The courses directory: a directory of course directories that is BOTH the load source and
 # the export target (markdown hierarchies + objectives.tsv / coverage.tsv per
 # course). See FORMAT.md / plan_io.py. In single-user mode it must be a git repo (a
 # checkout of your courses repo) so edits autosave + commit there -- COURSES_ROOT is
@@ -72,7 +72,7 @@ CALENDAR_EXTRAS_DIR = os.environ.get(
 )
 
 
-def _is_corpus_repo(d):
+def _is_courses_repo(d):
     """True if `d` is the TOP of its own git repo (a dedicated courses repo), so
     committing there is safe. False for a plain dir, or a subdir of another repo
     (e.g. the in-repo `courses/`) -- committing there would land in THIS repo."""
@@ -84,19 +84,19 @@ def _is_corpus_repo(d):
     return r.returncode == 0 and os.path.realpath(r.stdout.strip()) == os.path.realpath(d)
 
 
-# Single-user git mode is now the ONLY single-user mode: the corpus is a git repo
+# Single-user git mode is now the ONLY single-user mode: the courses directory is a git repo
 # (a courses-repo checkout) and every edit autosaves + commits there on the
 # checked-out branch, authored as the local git user, with no remote push -- the
-# single-user analogue of collab. A plain (non-repo) corpus dir -- the bundled
+# single-user analogue of collab. A plain (non-repo) courses directory -- the bundled
 # examples/ demo -- is copied into a throwaway tmp git repo at startup so edits
 # still commit (to disposable git, never into this engine repo). Off only in collab
 # mode (collab owns git). Set LESSON_COURSES_DIR to your courses-repo checkout.
-def _ensure_git_corpus(d):
-    """Resolve the single-user corpus to a git repo. If `d` is already the top of
+def _ensure_courses_repo(d):
+    """Resolve the single-user courses directory to a git repo. If `d` is already the top of
     its own repo, use it in place (real local-git mode). Otherwise (a plain dir,
     e.g. examples/) copy it into a fresh throwaway repo so edits still autosave +
     commit, just to disposable git. Returns (resolved_dir, is_demo)."""
-    if _is_corpus_repo(d):
+    if _is_courses_repo(d):
         return d, False
     tmp = tempfile.mkdtemp(prefix="lesson-demo-")
     for name in os.listdir(d):
@@ -108,7 +108,7 @@ def _ensure_git_corpus(d):
                  ("user.email", "demo@localhost")):
         subprocess.run(["git", "-C", tmp, "config", k, v], check=True)
     subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
-    subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "Seed demo corpus"],
+    subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "Seed demo courses"],
                    check=True)
     return tmp, True
 
@@ -116,12 +116,12 @@ def _ensure_git_corpus(d):
 if collab.enabled():
     COURSES_ROOT, LOCAL_GIT, DEMO_MODE = None, False, False
 else:
-    _corpus = os.environ.get("LESSON_COURSES_DIR")
-    if not _corpus or not os.path.isdir(_corpus):
+    _courses = os.environ.get("LESSON_COURSES_DIR")
+    if not _courses or not os.path.isdir(_courses):
         sys.exit("LESSON_COURSES_DIR must point at a courses git repo (or a plain "
                  "directory to run as a throwaway demo, e.g. "
                  "LESSON_COURSES_DIR=examples). See README.")
-    COURSES_ROOT, DEMO_MODE = _ensure_git_corpus(os.path.abspath(_corpus))
+    COURSES_ROOT, DEMO_MODE = _ensure_courses_repo(os.path.abspath(_courses))
     LOCAL_GIT = True
 LOCAL_AUTOSAVE_SECONDS = int(os.environ.get("LESSON_AUTOSAVE_SECONDS", "2"))
 
@@ -239,7 +239,7 @@ def _git_target():
 
 
 def commit_structural(course, message, *, drop_course=False, remove_files=()):
-    """Immediately persist a structural change to the git-backed corpus and commit
+    """Immediately persist a structural change to the git-backed courses directory and commit
     it with an explicit `message` (collab: worktree + push; local-git: the courses
     repo) -- for create/delete/import of a course or add/remove of a reference,
     which shouldn't wait for (or can't be expressed by) the debounced autosave.
@@ -269,7 +269,7 @@ def current_user():
 
 
 def commit_after_save(course, fallback):
-    """After a save wrote the corpus, commit it with the buffered edit phrases
+    """After a save wrote the courses directory, commit it with the buffered edit phrases
     (collab: worktree + push; local-git: the courses repo). No-op when not
     git-backed."""
     t = _git_target()
@@ -284,7 +284,7 @@ def commit_after_save(course, fallback):
 
 @app.before_request
 def _collab_gate():
-    """In collab mode: require a session, bind the per-user (db, corpus), and
+    """In collab mode: require a session, bind the per-user (db, courses directory), and
     block writes from viewers. A no-op in single-user mode."""
     if not collab.enabled():
         return
@@ -317,7 +317,7 @@ def _collab_gate():
 @app.after_request
 def _autocommit_edit(resp):
     """Record an edit phrase and schedule the debounced autosave, so a git-backed
-    corpus (collab or local-git) commits content edits automatically -- no manual
+    courses directory (collab or local-git) commits content edits automatically -- no manual
     Save. No-op when not git-backed, or when the op commits itself."""
     if not (request.method == "POST" and resp.status_code < 400):
         return resp
@@ -466,8 +466,8 @@ def collab_pending():
 @app.route("/sync", methods=["POST"])
 def sync_courses():
     """Pull in the latest course content. Collab: merge origin/main into the
-    editor's branch (per-user). Single-user: reload every course in the corpus
-    from its files on disk -- the single-user analogue. (The corpus is git-tracked;
+    editor's branch (per-user). Single-user: reload every course in the courses directory
+    from its files on disk -- the single-user analogue. (The courses directory is git-tracked;
     do the git pull/commit yourself; this re-reads whatever's on disk.)"""
     back = redirect(request.referrer or url_for("index"))
     if collab.enabled():
@@ -500,7 +500,7 @@ def sync_courses():
         return back
     try:
         dirs = seed_module.course_dirs(courses_root())
-        seed_module.load_corpus(db_path(), courses_root())
+        seed_module.load_courses(db_path(), courses_root())
     except (OSError, ValueError) as e:
         flash(f"Couldn't reload from git: {e}")
         return back
@@ -524,9 +524,9 @@ def ensure_schema():
     "no courses loaded". The db is a disposable cache, never migrated in place; a
     db.db left over from an OLDER schema (its `PRAGMA user_version` doesn't match
     schema.sql) is deleted here so the schema is re-applied fresh and the startup
-    `seed` rebuilds it from the corpus -- rather than 500ing on a missing column.
-    (Any course that lived only in the db and was never saved to the corpus is
-    lost; the corpus is the source of truth.)
+    `seed` rebuilds it from the courses directory -- rather than 500ing on a missing column.
+    (Any course that lived only in the db and was never saved to git is
+    lost; the courses directory is the source of truth.)
     """
     if os.path.exists(DB_PATH):
         with db() as conn:
@@ -535,7 +535,7 @@ def ensure_schema():
             version = conn.execute("PRAGMA user_version").fetchone()[0]
         if populated and version != _schema_version():
             print(f"db.db is schema v{version}, current is v{_schema_version()}; "
-                  f"discarding it and rebuilding from the corpus.", file=sys.stderr)
+                  f"discarding it and rebuilding from the courses directory.", file=sys.stderr)
             os.remove(DB_PATH)
     with db() as conn:
         if "courses" not in {r[0] for r in conn.execute(
@@ -773,17 +773,17 @@ def help_page():
 
 
 # --------------------------------------------------------------------------
-# Data: bootstrap & populate from the corpus / version control. These wire the
+# Data: bootstrap & populate from the courses directory / version control. These wire the
 # load_nodes / plan_io / seed library functions to the UI so the whole lifecycle
 # -- start empty, load real data, export markdown -- happens in the app.
 
 @app.route("/data")
 def data():
-    """Settings page: how the on-disk corpus relates to the app (export + the
+    """Settings page: how the on-disk courses directory relates to the app (export + the
     sidebar Sync). Creating a course is the sidebar (+); adding a reference
     hierarchy and exporting/deleting a course live on the per-course settings page
     (the gear). Also the empty-db landing page (see `index`). Reloading from the
-    corpus is the sidebar Sync button."""
+    courses directory is the sidebar Sync button."""
     with db() as conn:
         cs = conn.execute("SELECT course, title FROM courses ORDER BY course").fetchall()
     return render_template("data.html", courses=cs,
@@ -868,7 +868,7 @@ def hierarchy_prepare(course):
 @app.route("/<course>/hierarchy/load", methods=["POST"])
 def hierarchy_load_course(course):
     """Step 2 (commit): load the confirmed reference markdown into THIS course and
-    persist it to the corpus as `{slug}.md` with the bare slug pinned in the front
+    persist it to the courses directory as `{slug}.md` with the bare slug pinned in the front
     matter. The slug/title come from the confirm form; `mode` ('add'|'replace')
     resolves a slug that already names a reference in the course."""
     with db() as conn:
@@ -901,7 +901,7 @@ def hierarchy_load_course(course):
                        f"or rename the slug to add it as a new hierarchy.")
     text = _pin_slug(text, slug)   # author the bare slug into the front matter
     rows = load_nodes.build_rows(course, slug, doc["nodes"])
-    # Persist the markdown into the corpus as <slug>.md (the load source of truth).
+    # Persist the markdown into the courses directory as <slug>.md (the load source of truth).
     course_dir = os.path.join(courses_root(), course)
     os.makedirs(course_dir, exist_ok=True)
     with open(os.path.join(course_dir, f"{slug}.md"), "w", encoding="utf-8") as out:
@@ -1506,7 +1506,7 @@ def outline_edit(course):
 def outline_source(course):
     """GET: the editable plan.md text (the round-trippable storage form). POST:
     load the edited markdown into the db (plan_io.load_plan_text) then write the
-    canonical plan.md + TSVs to the corpus, leaving the course clean. A parse/load
+    canonical plan.md + TSVs to the courses directory, leaving the course clean. A parse/load
     error is reported and writes nothing (the db and disk stay untouched)."""
     if request.method == "GET":
         with db() as conn:
@@ -2043,13 +2043,13 @@ else:
     ensure_schema()
     if DEMO_MODE:
         print(f"demo mode: edits autosave + commit to a throwaway git repo at "
-              f"{COURSES_ROOT} (not your original corpus)", file=sys.stderr)
-    # Unattended population: load any course in the corpus directory that doesn't
+              f"{COURSES_ROOT} (not your original courses directory)", file=sys.stderr)
+    # Unattended population: load any course in the courses directory that doesn't
     # already exist (see seed.py). Safe to run every boot; never fatal.
     if os.path.isdir(COURSES_ROOT):
         try:
             seed_module.seed(DB_PATH, COURSES_ROOT)
-        except Exception as e:  # a broken corpus must not stop the app booting
+        except Exception as e:  # a broken courses directory must not stop the app booting
             print(f"seed: failed: {e}", file=sys.stderr)
 
 

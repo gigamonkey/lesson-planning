@@ -16,7 +16,7 @@ holds:
     plan.md, so it is NOT duplicated here).
 
 `read_course` loads such a directory into the database; `write_course` serializes
-a course back out to one. The corpus root is both the load source and the export
+a course back out to one. The courses root is both the load source and the export
 target, so the pair round-trips. Objective identity rides on a short uuid token
 `(#abcd)` on each bullet, resolved by prefix against `objectives.tsv` -- never a
 full uuid in the markdown. See FORMAT.md for the format.
@@ -340,7 +340,7 @@ def read_course(db_path, course_dir):
         # invariant -- so collapse them onto one winner (the first, i.e. smallest
         # uuid, since the TSV is uuid-sorted) and rewrite every reference (bullets,
         # reference coverage, pool membership) to it. Separately, a uuid already
-        # owned by ANOTHER course (a corpus saved while objectives were still
+        # owned by ANOTHER course (a courses directory saved while objectives were still
         # shared) is re-minted, never shared. Both rewrites flow through `canon`.
         canon = {}
         winner_for_text = {}
@@ -630,7 +630,7 @@ def render_course(conn, course):
 
 def _reference_files(conn, course):
     """{<slug>.md: markdown} for each reference hierarchy, from its stored verbatim
-    source markdown, so the corpus is self-contained (reloadable). A reference is
+    source markdown, so the courses directory is self-contained (reloadable). A reference is
     load-only, so its markdown is replayed exactly as loaded -- not reconstructed
     from the db nodes. Skips a reference with no stored source (e.g. one created by
     an older import); such a hierarchy has no canonical markdown to emit."""
@@ -646,7 +646,7 @@ def _reference_files(conn, course):
 def write_course(db_path, course, course_dir):
     """Serialize a course's authored state to `course_dir`: plan.md + the two TSVs,
     plus a markdown file for each reference hierarchy that isn't already on disk
-    (so the corpus is self-contained / reloadable). An existing reference .md --
+    (so the courses directory is self-contained / reloadable). An existing reference .md --
     hand-authored or uploaded, same nodes but different formatting -- is left as is.
 
     Returns (plan_path, n_objectives, n_coverage).

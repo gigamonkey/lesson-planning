@@ -199,7 +199,7 @@ def to_nodes(md, title=None):
 
         version - the FORMAT_VERSION of this contract (semver string)
         slug    - the front matter's `slug:` (the bare, course-relative id), or
-                  None. Present in the STORED (corpus) form; absent in the SOURCE
+                  None. Present in the STORED form; absent in the SOURCE
                   form an extractor emits (the app assigns/pins it on upload). When
                   None the consumer falls back to the filename stem. See FORMAT.md.
         title   - a human title for the hierarchy, or None if unknown (from the

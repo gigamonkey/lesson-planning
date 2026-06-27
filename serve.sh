@@ -16,8 +16,8 @@ export PORT="${PORT:-5001}"
 
 default_courses_repo="../bhs-cs-courses"
 
-# Corpus: a directory of course directories. Single-user mode requires it to be a
-# git repo (a checkout of the courses repo) and autosaves + commits edits to it
+# Courses directory: a directory of course directories. Single-user mode requires
+# it to be a git repo (a checkout of the courses repo) and autosaves + commits to it
 # (see app.py). Default to a sibling ../bhs-cs-courses checkout when present; else
 # fall back to the bundled examples/ demo, which app.py copies into a throwaway git
 # repo so edits still commit (to disposable git). Override with LESSON_COURSES_DIR.

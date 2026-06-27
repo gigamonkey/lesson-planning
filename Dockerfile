@@ -11,7 +11,7 @@
 
 FROM python:3.13-slim
 
-# git + ssh for the corpus repo (clone/fetch/push over the deploy key).
+# git + ssh for the courses repo (clone/fetch/push over the deploy key).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git openssh-client ca-certificates \
     && rm -rf /var/lib/apt/lists/*

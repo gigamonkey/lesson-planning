@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-contained checks for loading the corpus into the composite-key schema and
+"""Self-contained checks for loading the courses directory into the composite-key schema and
 querying it. No test framework: run directly.
 
     uv run test_schema_load.py

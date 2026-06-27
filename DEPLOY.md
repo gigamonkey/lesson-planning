@@ -44,9 +44,9 @@ No `collab.json` ⇒ none of that runs. So local `uv run app.py` is unaffected.
 
 ## 1. Split the courses into their own repo
 
-Your course content (the corpus: one directory per course, each with `plan.md`,
+Your course content (the courses directory: one directory per course, each with `plan.md`,
 reference `*.md`, `objectives.tsv`, `coverage.tsv`) moves to a new GitHub repo,
-e.g. **`lesson-courses`**. The repo's **top level is the corpus** — course
+e.g. **`lesson-courses`**. The repo's **top level is the courses directory** — course
 directories sit directly at the root.
 
 ```bash
@@ -278,7 +278,7 @@ every `main_refresh_seconds` (default 5 min) and right after a merge.
   Resolve it on GitHub (the teacher's branch vs. `main`), then Sync again.
 
 - **A bad file in `main` won't load.** If a malformed course markdown reaches
-  `main`, db rebuilds report "corpus didn't load" rather than crashing — the live
+  `main`, db rebuilds report "courses directory didn't load" rather than crashing — the live
   view keeps its last good state. Fix the file via a PR. (Keep `main` clean by
   reviewing PRs.)
 
