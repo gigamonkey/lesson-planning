@@ -396,7 +396,9 @@ def push_error(handle):
 
 def _push_once(handle):
     wt = worktree_path(handle)
-    code, out = _git(["push", "origin", handle], cwd=wt)
+    # -u so the branch tracks origin/<handle> after the first push, rather than
+    # staying pointed at origin/main (its fork point). Harmless once set.
+    code, out = _git(["push", "-u", "origin", handle], cwd=wt)
     return code == 0, out
 
 
