@@ -72,7 +72,9 @@
                 <div class="cal-cell lesson" style="grid-column: span {{ c.days }}">
                   <form class="cal-lessonname autosave" method="post"
                         action="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
-                        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}" hx-swap="none">
+                        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
+                        hx-target="#cal-content" hx-swap="innerHTML">
+                    <input type="hidden" name="view" value="calendar">
                     <input type="text" name="title" value="{{ c.title }}"
                            autocomplete="off" aria-label="Lesson title" placeholder="Lesson title…">
                   </form>

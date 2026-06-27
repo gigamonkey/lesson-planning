@@ -1882,6 +1882,12 @@ def lesson_edit(course, lesson_id):
                 conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=? AND node_id=? "
                              "AND name='learning_objective'", (course, O, lesson_id))
         conn.commit()
+        # From the calendar's lesson box: a lesson can span several week-boxes that
+        # share this node_id, so re-render the calendar content for htmx to swap in
+        # rather than leave the other boxes showing the stale title.
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   **_calendar_ctx(conn, course))
     if request.headers.get("HX-Request"):
         return ("", 204)
     return _back(course)
