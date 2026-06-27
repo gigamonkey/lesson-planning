@@ -1160,6 +1160,11 @@ def place(course, hierarchy):
                             (hierarchy, course)).fetchone()
         if not hrow:
             abort(409, "hierarchy no longer exists -- reload the page")
+        # Where the dragged objective sat BEFORE this drop, so the commit message
+        # can tell a reorder from an actual move (node it was in, or None = pool).
+        prev = conn.execute("SELECT node_id FROM coverage WHERE course=? AND hierarchy=? AND uuid=?",
+                            (course, hierarchy, uuid)).fetchone()
+        prev_node = prev["node_id"] if prev else None
         conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND uuid=?",
                      (course, hierarchy, uuid))
         if node:
@@ -1175,12 +1180,17 @@ def place(course, hierarchy):
                 conn.execute("UPDATE course_objectives SET position=? "
                              "WHERE course=? AND uuid=?", (i, course, u))
         conn.commit()
-    # Name the hierarchy (not just the course) in the commit message, and
-    # distinguish mapping into it from unmapping back to the pool. The editable
-    # outline reads best as "the <course> outline"; references go by slug.
+    # Commit message: name the hierarchy (editable outline reads best as "the
+    # <course> outline"; references go by slug) and distinguish what actually
+    # happened -- map, recategorize, unmap, or a pure reorder -- using where the
+    # objective sat before (prev_node).
     where = f"the {course} outline" if hrow["editable"] else f"{course}/{hierarchy}"
-    g.action_phrase = (f"removed objectives from {where}" if to == "pool"
-                       else f"placed objectives in {where}")
+    if to == "pool":
+        g.action_phrase = (f"removed objectives from {where}" if prev_node
+                           else f"reordered the {course} pool")
+    elif node:
+        g.action_phrase = (f"reordered objectives in {where}" if prev_node == node
+                           else f"placed objectives in {where}")
     return ("", 204)
 
 
