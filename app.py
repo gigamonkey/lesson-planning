@@ -676,6 +676,11 @@ def data_restore():
     """Restore everything from version control: reload every course in the corpus
     directory from its markdown + TSVs (each read_course is a scoped replace, so
     un-exported in-db edits to those courses are overwritten)."""
+    if collab.enabled():
+        # Single-user op: the corpus is the git worktree in collab mode, kept in
+        # sync by autosave + Sync; a bulk reload would just discard recent edits.
+        flash("Use Sync to pull the latest from main.")
+        return redirect(url_for("data"))
     dirs = seed_module.course_dirs(corpus_dir())
     seed_module.load_corpus(db_path(), corpus_dir())
     names = ", ".join(os.path.basename(d) for d in dirs) or "none"
@@ -1548,6 +1553,12 @@ def save_button(course):
 def course_refresh(course):
     """Reload a course from its corpus directory on disk, replacing the db's copy
     -- the inverse of export, for when the corpus was edited outside the app."""
+    if collab.enabled():
+        # The corpus is the git worktree here; pulling upstream is Sync's job, and
+        # reloading would discard not-yet-autosaved edits. (The button is hidden in
+        # collab; this guards a direct POST.)
+        flash("Use Sync to pull the latest from main.")
+        return redirect(request.referrer or url_for("tree", course=course))
     course_dir = os.path.join(corpus_dir(), course)
     back = request.referrer or url_for("tree", course=course)
     if not os.path.isdir(course_dir):

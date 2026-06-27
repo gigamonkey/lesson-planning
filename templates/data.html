@@ -12,6 +12,11 @@
      sidebar, or restore from the corpus below.</div>
   {% endif %}
 
+  {% if collab_enabled %}
+  <div class="note">In collaboration mode edits autosave and commit to git
+     automatically — use <b>Sync</b> in the sidebar to pull the latest from main.
+     The manual restore/export below are only for the single-user tool.</div>
+  {% else %}
   <h2>Restore from version control</h2>
   <p>Reload every course in the corpus directory
      (<code>{{ export_dir }}</code>) from its markdown + <code>.tsv</code> files.
@@ -33,6 +38,7 @@
      <code>objectives.tsv</code> / <code>coverage.tsv</code> into
      <code>{{ export_dir }}/&lt;course&gt;/</code> — the committable state.
      Reference hierarchy markdown is a load-only input and is never rewritten.</p>
+  {% endif %}
   {% endif %}
 </div>
 
