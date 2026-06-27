@@ -68,6 +68,14 @@ CALENDAR_EXTRAS_DIR = os.environ.get(
 )
 
 app = Flask(__name__)
+# On fly the app runs behind a TLS-terminating proxy that forwards the request as
+# http, so trust its X-Forwarded-Proto/Host headers -- otherwise url_for(...,
+# _external=True) builds http:// URLs and the OAuth redirect_uri won't match the
+# registered https:// callback. Gated on FLY_APP_NAME so we only trust forwarded
+# headers when actually behind fly's proxy (never in local dev).
+if os.environ.get("FLY_APP_NAME"):
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 # In single-user (local) mode the secret isn't security-sensitive. In collab mode
 # it signs the session cookie that carries the logged-in identity, so it MUST be a
 # real secret (set FLASK_SECRET_KEY as a fly secret).
