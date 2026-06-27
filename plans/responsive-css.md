@@ -131,21 +131,47 @@ else cascades from making the sidebar a drawer and `main` full-width.
 
 ### 3. The calendar (`templates/calendar.html`)
 
-The calendar is the hardest case: it's deliberately a **fixed-width** grid
-(`.cal-unit` is `calc(8rem + .5rem + (6.25rem * 5) + (.3rem * 4))` ≈ 600px; the
-day grid is five rigid 6.25rem columns). It can't reflow to a phone without
-losing its "week = row, weekday = column" meaning.
+The calendar is deliberately **fixed-width** on desktop: `.cal-unit` is
+`calc(8rem + .5rem + (6.25rem * 5) + (.3rem * 4))` ≈ 600px, the day grid is five
+rigid 6.25rem columns (`.cal-cell` min-height 4.45rem), and the left `.cal-when`
+date column is `flex: 0 0 8rem`. That's far too wide for a ~375px phone.
 
-Recommended: **let it scroll horizontally** on narrow screens rather than trying
-to reflow it. Wrap the calendar content in a container with `overflow-x: auto`
-(its template owns its `<style>`, so the rule goes there inside an `@media`), and
-shrink the left `.cal-when` label column (`flex: 0 0 8rem` → something like
-`5rem`) to claw back width. The grid keeps its shape; the user swipes
-horizontally. This preserves legibility at the cost of a scroll — acceptable for
-a browse-focused goal.
+**Decided: shrink it to fit the viewport — no horizontal scroll.** The "week =
+row, weekday = column" structure is what makes the calendar legible, so we keep
+the five-column grid but make the boxes small enough that a full week fits across
+the screen. All of these go in an `@media` block inside `calendar.html`'s own
+`<style>`:
 
-A reflow-to-list alternative (each day a stacked block) is a much bigger change
-and loses the calendar's whole point; defer unless the scroll proves unusable.
+- **Fluid columns:** `.cal-days { grid-template-columns: repeat(5, 1fr) }` and
+  `.cal-unit { width: auto; max-width: 100% }` so the row tracks the available
+  width instead of a fixed 600px. The five columns then split whatever space is
+  left after the date label and gaps.
+
+- **Shrink the date label:** `.cal-when { flex-basis: ~3.5rem; font-size:
+  ~.62rem }` (it currently eats 8rem). This is the biggest single width win,
+  leaving more room for the day columns.
+
+- **Smaller, shorter boxes:** lower `.cal-cell` `min-height` (~3rem) and
+  `font-size` (~.6rem), and tighten `padding`/`gap`, so the boxes are compact and
+  square-ish at the narrow column width.
+
+- **Shrink or omit the day-box text:** the per-day lesson title is the thing that
+  doesn't fit a ~55px box. Shrink its font first; if it's still unreadable,
+  **omit it on mobile** — the box color (lesson vs. free vs. off vs. exam) plus
+  the unit grouping above already convey the shape of the week, and the full
+  lesson title remains visible in the unit head and on tap-to-edit. Likely
+  approach: `.cal-cell.lesson .cal-lessonname { font-size: ~.55rem }` with
+  `overflow: hidden`, and consider hiding the title entirely
+  (`.cal-lessonname { display: none }`) if even the shrunk text crowds the box —
+  decide by eye during implementation.
+
+- The weekday header row (`.cal-dayhdr`) already shrinks with its column; verify
+  the Mon–Fri labels still read (they can drop to single letters via the media
+  query if needed).
+
+Tap-to-edit a day's count still works (it's a tap, not hover), so editing stays
+possible. Reflowing the calendar into a stacked per-day list is explicitly *not*
+the approach — it loses the at-a-glance week structure.
 
 ### 4. The objectives matrix (`templates/objectives.html`)
 
@@ -195,7 +221,8 @@ these are invisible/unreachable.
 
 ## Out of scope / explicitly deferred
 
-- Reflowing the calendar into a stacked day list (scroll instead).
+- Reflowing the calendar into a stacked per-day list (we shrink the grid to fit
+  instead).
 - A polished touch drag-and-drop experience.
 - A dedicated nav-only landing route (the drawer replaces it).
 - Any change to the data model, routes (beyond an optional `open_nav` flag), or
@@ -209,7 +236,8 @@ emulation). Check each route:
 - Outline (`/<course>`), references (`/<course>/h/<hierarchy>`): drawer toggles,
   pool stacks under the outline, content readable.
 - Objectives (`/<course>/objectives`): table scrolls, controls reachable.
-- Calendar (`/<course>/calendar`): scrolls horizontally, weeks legible.
+- Calendar (`/<course>/calendar`): a full week fits across the screen with no
+  horizontal scroll; weeks/boxes legible.
 - Settings (`data.html`), Help, login: readable, no overflow.
 - Desktop (>48rem): **unchanged** — the whole mobile block is gated behind the
   media query, so regressions should be impossible by construction; confirm
