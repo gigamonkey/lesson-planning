@@ -497,15 +497,12 @@
             <i class="bi bi-box-arrow-right"></i></a>
         </div>
       </div>
-      {% if can_edit and collab_pending %}
-        <div class="collabpending {{ 'err' if collab_push_error else '' }}">
-          {% if collab_push_error %}
-            <i class="bi bi-exclamation-triangle"></i> {{ collab_pending }} commit(s) not yet pushed to GitHub.
-          {% elif not collab_branch_published %}
-            <i class="bi bi-cloud-arrow-up"></i> Setting up your branch on GitHub…
-          {% else %}
-            <i class="bi bi-cloud-arrow-up"></i> Pushing {{ collab_pending }} commit(s) to GitHub…
-          {% endif %}
+      {% if can_edit %}
+        {# Live push-status: no manual Save in collab, so poll to keep this fresh
+           as autosave commits and the background pusher drains. #}
+        <div id="collab-pending" hx-get="{{ url_for('collab_pending') }}"
+             hx-trigger="every 5s" hx-swap="innerHTML">
+          {% include "_collab_pending.html" %}
         </div>
       {% endif %}
       {% endif %}
@@ -539,6 +536,9 @@
                   <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
                 </label>
               </form>
+              {# In collab mode edits autosave + commit; the manual Save/Refresh
+                 (db<->corpus on disk) only make sense for the single-user tool. #}
+              {% if not collab_enabled %}
               {% include "_savebtn.html" %}
               <form method="post" action="{{ url_for('course_refresh', course=c.course) }}" class="crefresh"
                     {% if c.dirty %}onsubmit="return confirm('Refresh {{ c.course|upper }} from disk? This course has unsaved changes that will be replaced by the corpus.');"{% endif %}>
@@ -547,6 +547,7 @@
                   <i class="bi bi-arrow-clockwise"></i>
                 </button>
               </form>
+              {% endif %}
               <a class="gear" href="{{ url_for('course_bundle_download', course=c.course) }}" download
                  title="Download {{ c.course|upper }} as a bundle (.json)"><i class="bi bi-box-arrow-down"></i></a>
               <form method="post" action="{{ url_for('course_delete', course=c.course) }}" class="cdel"

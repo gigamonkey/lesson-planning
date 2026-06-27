@@ -146,6 +146,19 @@ _ACTION_PHRASES = {
 # Endpoints that themselves perform the commit -- don't double-record them.
 _SAVE_ENDPOINTS = {"export", "outline_source"}
 
+# Edits the debounced autosave can't capture with write_course (whole-course or
+# reference-file changes): left to their own handling, not auto-committed here.
+_AUTOSAVE_FILE_OPS = {"hierarchy_load_course", "hierarchy_delete",
+                      "course_delete", "course_import", "course_new"}
+
+
+def _autosave_write(handle, course):
+    """Serialize one course from an editor's db cache to their git worktree --
+    the db->disk step of the debounced collab autosave (collab.schedule_autosave).
+    Module-level so it's a stable callback the timer thread can call."""
+    course_dir = os.path.join(collab.worktree_path(handle), course)
+    plan_io.write_course(collab.db_path_for(handle), course, course_dir)
+
 
 def current_user():
     return session.get("user") if collab.enabled() else None
@@ -203,15 +216,22 @@ def _collab_record(resp):
     if (collab.enabled() and getattr(g, "editor", False)
             and request.method == "POST" and resp.status_code < 400):
         ep = request.endpoint
-        course = (request.view_args or {}).get("course", "the course")
+        course = (request.view_args or {}).get("course")
         # A handler may set g.action_phrase to describe what it actually did when
         # one endpoint covers several actions (e.g. `place` maps vs. unmaps);
         # otherwise fall back to the static per-endpoint phrase.
         phrase = getattr(g, "action_phrase", None)
         if phrase is None and ep in _ACTION_PHRASES and ep not in _SAVE_ENDPOINTS:
-            phrase = _ACTION_PHRASES[ep].format(course=course)
+            phrase = _ACTION_PHRASES[ep].format(course=course or "the course")
         if phrase:
             collab.record_action(g.handle, phrase)
+            # Debounced autosave: persist the edit to git automatically so collab
+            # mode needs no manual Save button. (File-level ops that write_course
+            # can't represent are handled separately.)
+            if course and ep not in _AUTOSAVE_FILE_OPS:
+                u = g.user or {}
+                collab.schedule_autosave(g.handle, u.get("name"), u.get("email"),
+                                         course, _autosave_write)
     return resp
 
 
@@ -315,6 +335,16 @@ def _finish_login(handle, name, email):
 def collab_logout():
     session.clear()
     return redirect(url_for("collab_login"))
+
+
+@app.route("/collab/pending")
+def collab_pending():
+    """The push-status banner fragment, polled by the sidebar so it stays live as
+    autosave commits and the background pusher drains -- the feedback that used to
+    come from the (now removed in collab) Save button. Empty when nothing pends."""
+    if not (collab.enabled() and getattr(g, "editor", False)):
+        return ("", 204)
+    return render_template("_collab_pending.html")
 
 
 @app.route("/sync", methods=["POST"])

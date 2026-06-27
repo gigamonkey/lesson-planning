@@ -76,6 +76,9 @@ def _load_config():
     cfg.setdefault("data_dir", os.environ.get("LESSON_DATA_DIR", "/data"))
     cfg.setdefault("repo", os.environ.get("LESSON_COURSES_REPO"))
     cfg.setdefault("main_refresh_seconds", 300)
+    # Debounce window for autosave: after this many seconds of no edits, the
+    # editor's dirty courses are written to their worktree and committed+pushed.
+    cfg.setdefault("autosave_seconds", 2)
     cfg.setdefault("allowlist", {})
     # Normalize allowlist handles (case-insensitive match against GitHub login).
     cfg["allowlist"] = {k.lower(): v for k, v in cfg["allowlist"].items()}
@@ -439,6 +442,57 @@ def _requeue(handle, attempt):
             return
         _queued.add(handle)
     _push_q.put((handle, attempt))
+
+
+# --------------------------------------------------------------------------
+# Debounced autosave: collect an editor's edits and, after a quiet period,
+# write each touched course to its worktree and commit+push. Replaces the manual
+# per-course Save button in collab mode -- the db is the live state, this is what
+# lands it in git. write_fn(handle, course) does the db->worktree serialization
+# (supplied by app.py so this module stays free of plan_io).
+# --------------------------------------------------------------------------
+
+_autosave_guard = threading.Lock()
+_autosave = {}   # handle -> {"courses": set, "ident": (name, email), "timer": Timer}
+
+
+def autosave_seconds():
+    return int(CONFIG.get("autosave_seconds", 2)) if enabled() else 0
+
+
+def schedule_autosave(handle, name, email, course, write_fn):
+    """Mark `course` dirty for `handle` and (re)arm the debounce timer. A no-op
+    if autosave is disabled (autosave_seconds <= 0)."""
+    delay = autosave_seconds()
+    if not delay:
+        return
+    with _autosave_guard:
+        st = _autosave.setdefault(
+            handle, {"courses": set(), "ident": (name, email), "timer": None})
+        st["courses"].add(course)
+        st["ident"] = (name, email)
+        if st["timer"] is not None:
+            st["timer"].cancel()
+        t = threading.Timer(delay, lambda: _autosave_fire(handle, write_fn))
+        t.daemon = True
+        st["timer"] = t
+        t.start()
+
+
+def _autosave_fire(handle, write_fn):
+    with _autosave_guard:
+        st = _autosave.get(handle)
+        if not st:
+            return
+        courses, (name, email) = st["courses"], st["ident"]
+        st["courses"] = set()
+        st["timer"] = None
+    for course in courses:
+        try:
+            write_fn(handle, course)                       # db -> worktree files
+            commit_and_push(handle, name, email, f"Update {course}")
+        except Exception as e:                             # never kill the timer thread
+            print(f"collab: autosave {handle}/{course} failed: {e}", file=sys.stderr)
 
 
 # --------------------------------------------------------------------------

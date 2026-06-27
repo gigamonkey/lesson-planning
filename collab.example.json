@@ -15,5 +15,6 @@
 
   "ssh_key_path": "/data/deploy_key",
   "main_refresh_seconds": 300,
+  "autosave_seconds": 2,
   "dev_login": false
 }
