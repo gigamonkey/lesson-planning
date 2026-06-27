@@ -71,17 +71,38 @@
               display: flex; flex-direction: column; align-items: center; justify-content: center;
               gap: .15rem; text-align: center; }
   .cal-cell.lesson { background: #eaf0fa; border: 1px solid #cdd9eb; color: #2f4e6f;
-              cursor: pointer; }              /* signals "click to edit" */
+              cursor: pointer; position: relative; }   /* signals "click to edit" */
   .cal-cell.lesson.editing { cursor: default; }
   /* Lesson title: reads as plain centered text until the box is clicked into
-     edit mode (the `editing` class), then it's a bordered, editable field. */
+     edit mode (the `editing` class), then it's a bordered, editable field. It's a
+     textarea (not an input) so a long title WRAPS within the box instead of being
+     clipped; field-sizing + the autosize JS grow it (and the cell) to fit. */
   .cal-lessonname { margin: 0; width: 100%; }
-  .cal-lessonname input { font: inherit; color: inherit; text-align: center; width: 100%;
+  .cal-lessonname textarea { font: inherit; color: inherit; text-align: center; width: 100%;
               box-sizing: border-box; padding: .05rem .2rem; background: transparent;
-              border: 1px solid transparent; border-radius: 4px; cursor: inherit; }
-  .cal-cell.lesson.editing .cal-lessonname input { cursor: text; }
-  .cal-cell.lesson.editing .cal-lessonname input:hover { border-color: #cdebd9; }
-  .cal-cell.lesson.editing .cal-lessonname input:focus { border-color: #bcd; background: #fff; outline: none; }
+              border: 1px solid transparent; border-radius: 4px; cursor: inherit;
+              resize: none; overflow: hidden; line-height: 1.2;
+              white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+              field-sizing: content; }
+  .cal-cell.lesson.editing .cal-lessonname textarea { cursor: text; }
+  .cal-cell.lesson.editing .cal-lessonname textarea:hover { border-color: #cdebd9; }
+  .cal-cell.lesson.editing .cal-lessonname textarea:focus { border-color: #bcd; background: #fff; outline: none; }
+  /* Drag handle: a faint grip on the left edge, revealed on hover. Only it is
+     draggable (native HTML5 DnD) -- so a drag starts only when grabbed here, never
+     from a click in the title/days fields. */
+  .cal-draghandle { position: absolute; left: 0; top: 0; bottom: 0; width: .9rem;
+              display: flex; align-items: center; justify-content: center;
+              color: #9fb3cc; font-size: .8rem; line-height: 1; cursor: grab;
+              opacity: 0; transition: opacity .1s; }
+  .cal-cell.lesson:hover .cal-draghandle { opacity: 1; }
+  .cal-draghandle:active { cursor: grabbing; }
+  /* While dragging, droppable units get a dashed outline; the lesson cell the drop
+     would land beside shows a colored edge on the insertion side. */
+  body.cal-dragging .cal-unit[data-unit-id] { outline: 1px dashed #b9cbe0;
+              outline-offset: 3px; border-radius: 4px; }
+  .cal-cell.lesson.cal-insert-before { box-shadow: -3px 0 0 0 #3b73c4; }
+  .cal-cell.lesson.cal-insert-after { box-shadow: 3px 0 0 0 #3b73c4; }
+  .cal-cell.lesson.cal-drag-src { opacity: .4; }
   /* Days pill: hidden until the box is in edit mode, then editable. */
   .cal-lessondays { display: none; margin: 0;
               font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
@@ -143,7 +164,7 @@
     .cal-when { flex: 0 0 3.4rem; font-size: .6rem; }
     .cal-cell { min-height: 2.8rem; font-size: .58rem; padding: .15rem .1rem; gap: .1rem; }
     /* min-width: 0 so the input doesn't impose its intrinsic width on the track. */
-    .cal-cell.lesson .cal-lessonname input { font-size: .55rem; padding: .02rem; min-width: 0; }
+    .cal-cell.lesson .cal-lessonname textarea { font-size: .55rem; padding: .02rem; min-width: 0; }
     .cal-dayhdr { font-size: .52rem; letter-spacing: 0; }
     .cal-break { font-size: .72rem; min-height: 2.6rem; }
   }
@@ -173,6 +194,7 @@
   {% endif %}
 
   <script>
+    const course = "{{ course }}";
     // A lesson box is read-only text until clicked. Clicking it (or tabbing in)
     // adds `editing`, which reveals the bordered title field and the days pill,
     // both editable. A plain click on the box jumps straight to the days count;
@@ -190,6 +212,8 @@
       document.querySelectorAll('.cal-cell.lesson.editing').forEach(function (c) {
         if (c !== cell) c.classList.remove('editing');
       });
+      // Grabbing the drag handle starts a drag, not an edit -- leave the box closed.
+      if (e.target.closest && e.target.closest('.cal-draghandle')) return;
       if (!cell || cell.classList.contains('editing')) return;
       // First click anywhere in a box -> edit the days count (even if the click
       // landed on the title text). preventDefault stops the title from taking
@@ -223,10 +247,11 @@
     // the title field by name -- the form's first input is a hidden `view` field,
     // which isn't focusable (so a bare `input` selector silently no-ops).
     document.body.addEventListener('htmx:afterSettle', function (e) {
+      autosizeLessons();
       const cell = document.querySelector('#cal-content [data-focus-title]');
       if (!cell) return;
       cell.removeAttribute('data-focus-title');
-      const input = cell.querySelector('.cal-lessonname input[name="title"]');
+      const input = cell.querySelector('.cal-lessonname textarea[name="title"]');
       if (input) { input.focus(); input.select(); }
     });
     // Escape reverts the field to its last-rendered/saved value and exits editing.
@@ -234,10 +259,109 @@
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
       const el = e.target;
-      if (el.matches && el.matches('.cal-lessonname input, .cal-lessondays input')) {
+      if (el.matches && el.matches('.cal-lessonname textarea, .cal-lessondays input')) {
         el.value = el.defaultValue;
         el.blur();
       }
+    });
+
+    // Lesson titles are textareas so they wrap; grow each to fit its (wrapped) text,
+    // so the box itself expands rather than clipping a long title. `field-sizing:
+    // content` does this in modern browsers; this is the fallback + the live grow on
+    // each keystroke. Re-run on input and after every htmx swap of #cal-content.
+    function autosizeLesson(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+    function autosizeLessons() {
+      document.querySelectorAll('.cal-lessonname textarea').forEach(autosizeLesson);
+    }
+    document.addEventListener('input', function (e) {
+      if (e.target.matches && e.target.matches('.cal-lessonname textarea')) autosizeLesson(e.target);
+    });
+    document.addEventListener('DOMContentLoaded', autosizeLessons);
+
+    // --- Drag and drop: reorder lessons within a unit or move them between units ---
+    // The calendar grid is irregular -- a lesson can span several day-cells and even
+    // wrap across week rows, and lesson cells are interspersed with off/free/exam
+    // cells -- so SortableJS's sibling-reordering model (used in the outline) doesn't
+    // fit. Instead we drive native HTML5 DnD from the per-lesson handle: on drop we
+    // compute the destination unit's new lesson order from the DOM and POST it to
+    // /lesson/arrange (view=calendar), which re-lays-out and swaps #cal-content.
+    let dragId = null, dragSrcCells = null;
+
+    // The destination unit's lesson node_ids in document order, de-duplicated (a
+    // lesson that spans a week boundary renders as more than one cell sharing a
+    // node_id).
+    function unitLessonIds(section) {
+      const ids = [];
+      section.querySelectorAll('.cal-cell.lesson[data-node-id]').forEach(function (c) {
+        const id = c.dataset.nodeId;
+        if (id && ids[ids.length - 1] !== id) ids.push(id);
+      });
+      return ids;
+    }
+    function clearInsertMarks() {
+      document.querySelectorAll('.cal-insert-before, .cal-insert-after')
+        .forEach(function (c) { c.classList.remove('cal-insert-before', 'cal-insert-after'); });
+    }
+    // Drop before the target cell when the pointer is in its leading half (above its
+    // row, or left-of-center on the same row); otherwise after.
+    function dropsAfter(cell, e) {
+      const r = cell.getBoundingClientRect();
+      if (e.clientY < r.top) return false;
+      if (e.clientY > r.bottom) return true;
+      return e.clientX > r.left + r.width / 2;
+    }
+
+    document.addEventListener('dragstart', function (e) {
+      const handle = e.target.closest && e.target.closest('.cal-draghandle');
+      if (!handle) return;
+      const cell = handle.closest('.cal-cell.lesson[data-node-id]');
+      if (!cell) return;
+      dragId = cell.dataset.nodeId;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragId);
+      // Drag the whole box, not the tiny handle.
+      if (e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(cell, 10, 10);
+      document.body.classList.add('cal-dragging');
+      // Grey out every cell of the dragged lesson.
+      dragSrcCells = document.querySelectorAll('.cal-cell.lesson[data-node-id="' + dragId + '"]');
+      dragSrcCells.forEach(function (c) { c.classList.add('cal-drag-src'); });
+    });
+    document.addEventListener('dragend', function () {
+      document.body.classList.remove('cal-dragging');
+      clearInsertMarks();
+      if (dragSrcCells) dragSrcCells.forEach(function (c) { c.classList.remove('cal-drag-src'); });
+      dragId = null; dragSrcCells = null;
+    });
+    document.addEventListener('dragover', function (e) {
+      if (!dragId) return;
+      const section = e.target.closest && e.target.closest('.cal-unit[data-unit-id]');
+      clearInsertMarks();
+      if (!section) return;            // not a droppable unit -- no drop allowed here
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const cell = e.target.closest('.cal-cell.lesson[data-node-id]');
+      if (cell && cell.dataset.nodeId !== dragId) {
+        cell.classList.add(dropsAfter(cell, e) ? 'cal-insert-after' : 'cal-insert-before');
+      }
+    });
+    document.addEventListener('drop', function (e) {
+      if (!dragId) return;
+      const section = e.target.closest && e.target.closest('.cal-unit[data-unit-id]');
+      if (!section) return;
+      e.preventDefault();
+      const unitId = section.dataset.unitId;
+      const ids = unitLessonIds(section).filter(function (id) { return id !== dragId; });
+      const cell = e.target.closest('.cal-cell.lesson[data-node-id]');
+      let at = ids.length;             // default: append to the unit's end
+      if (cell && cell.dataset.nodeId !== dragId) {
+        const idx = ids.indexOf(cell.dataset.nodeId);
+        if (idx !== -1) at = dropsAfter(cell, e) ? idx + 1 : idx;
+      }
+      ids.splice(at, 0, dragId);
+      window.htmx && htmx.ajax('POST', '/' + course + '/lesson/arrange', {
+        target: '#cal-content', swap: 'innerHTML',
+        values: { unit: unitId, ids: ids.join(','), view: 'calendar' }
+      });
     });
   </script>
 {% endblock %}

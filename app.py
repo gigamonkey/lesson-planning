@@ -1986,9 +1986,15 @@ def lesson_arrange(course):
             conn.execute("UPDATE nodes SET parent_id=?, ordinal=? WHERE course=? AND hierarchy=? "
                          "AND node_id=? AND level='lesson'", (unit_id, pos, course, O, lid))
         conn.commit()
-    moved = any(prev.get(lid) != unit_id for lid in ids)
-    g.action_phrase = (f"moved lessons in {course}" if moved
-                       else f"reordered lessons in {course}")
+        moved = any(prev.get(lid) != unit_id for lid in ids)
+        g.action_phrase = (f"moved lessons in {course}" if moved
+                           else f"reordered lessons in {course}")
+        # From the calendar's drag-and-drop: re-lay-out and swap #cal-content so the
+        # moved lesson lands in its new unit/position (calendar drops only ever target
+        # real units, so `unit_id` is always set here).
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   **_calendar_ctx(conn, course))
     return ("", 204)
 
 

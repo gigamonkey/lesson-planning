@@ -18,7 +18,8 @@
     {% endfor %}
   </section>
   {% else %}
-  <section class="cal-unit {{ 'cal-unplanned' if u.unplanned }}">
+  <section class="cal-unit {{ 'cal-unplanned' if u.unplanned }}"
+           {% if u.node_id %}data-unit-id="{{ u.node_id }}"{% endif %}>
     <div class="cal-unit-head">
       {% if u.node_id %}
         {# Click-to-edit unit title (htmx autosave on blur/Enter, like the outline). #}
@@ -77,14 +78,20 @@
                    A just-added lesson (focus_lesson) opens with its title focused. #}
                 <div class="cal-cell lesson{{ ' editing' if focus_lesson and c.node_id == focus_lesson else '' }}"
                      {% if focus_lesson and c.node_id == focus_lesson %}data-focus-title="1"{% endif %}
+                     data-node-id="{{ c.node_id }}"
                      style="grid-column: span {{ c.days }}">
+                  {# Drag handle (revealed on hover): grab to reorder this lesson within
+                     its unit or move it to another unit. Only the handle is draggable,
+                     so clicks in the title/days fields never start a drag. #}
+                  <span class="cal-draghandle" draggable="true" aria-hidden="true"
+                        title="Drag to reorder or move this lesson"><i class="bi bi-grip-vertical"></i></span>
                   <form class="cal-lessonname autosave" method="post"
                         action="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
                         hx-post="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
                         hx-target="#cal-content" hx-swap="innerHTML">
                     <input type="hidden" name="view" value="calendar">
-                    <input type="text" name="title" value="{{ c.title }}"
-                           autocomplete="off" aria-label="Lesson title" placeholder="Lesson title…">
+                    <textarea name="title" rows="1" autocomplete="off"
+                           aria-label="Lesson title" placeholder="Lesson title…">{{ c.title }}</textarea>
                   </form>
                   <form class="cal-lessondays autosave" method="post"
                         action="{{ url_for('node_duration_set', course=course, node_id=c.node_id) }}"
