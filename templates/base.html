@@ -104,8 +104,7 @@
     .ctitle-input:focus { border-color: #bcd; background: #fff; color: #222; outline: none; }
     .coursehead-actions .cdel { margin: 0; display: inline-flex; }
     .coursehead-actions .cdel button:hover { color: var(--gap); }
-    .coursehead-actions .csave,
-    .coursehead-actions .crefresh { margin: 0; display: inline-flex; }
+    .coursehead-actions .csave { margin: 0; display: inline-flex; }
     /* Save icon greys out (and stops reacting) when the corpus is up to date. */
     .coursehead .gear:disabled, .coursehead .gear:disabled:hover { color: #d8d8d8; cursor: default; }
     /* Per-hierarchy row controls: an upload (+) and a hover trash. */
@@ -479,6 +478,18 @@
         <button type="button" id="addcourse-btn" class="addcourse" title="New course">+</button>
         {% endif %}
       </div>
+      {% if not collab_enabled and can_edit %}
+      {# Single-user analogue of collab Sync: reload every course from the corpus
+         files on disk (git-tracked). Replaces the per-course Refresh buttons. #}
+      <div class="collabbar">
+        <div class="collabacts">
+          <form method="post" action="{{ url_for('sync_courses') }}" class="collabsync">
+            <button type="submit" title="Reload all courses from the corpus files on disk">
+              <i class="bi bi-arrow-repeat"></i> Sync</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
       {% if collab_enabled %}
       <div class="collabbar">
         <div class="collabwho">
@@ -488,7 +499,7 @@
         </div>
         <div class="collabacts">
           {% if can_edit %}
-          <form method="post" action="{{ url_for('collab_sync') }}" class="collabsync">
+          <form method="post" action="{{ url_for('sync_courses') }}" class="collabsync">
             <button type="submit" title="Pull the latest merged changes from main">
               <i class="bi bi-arrow-repeat"></i> Sync</button>
           </form>
@@ -537,19 +548,10 @@
                 </label>
               </form>
               {# Git-backed (collab or local-git) autosaves + commits, so no manual
-                 Save. Refresh (reload db from the corpus on disk) stays for any
-                 single-user run -- handy to pick up external edits / a git pull. #}
+                 Save. Plain single-user keeps a per-course Save (db -> disk);
+                 reloading from disk is the sidebar Sync button (all courses). #}
               {% if not git_backed %}
               {% include "_savebtn.html" %}
-              {% endif %}
-              {% if not collab_enabled %}
-              <form method="post" action="{{ url_for('course_refresh', course=c.course) }}" class="crefresh"
-                    {% if c.dirty %}onsubmit="return confirm('Refresh {{ c.course|upper }} from disk? This course has unsaved changes that will be replaced by the corpus.');"{% endif %}>
-                <button type="submit" class="gear" {{ '' if c.has_corpus else 'disabled' }}
-                        title="{{ 'Refresh this course from the corpus on disk' if c.has_corpus else 'No corpus on disk yet (save first)' }}">
-                  <i class="bi bi-arrow-clockwise"></i>
-                </button>
-              </form>
               {% endif %}
               <a class="gear" href="{{ url_for('course_bundle_download', course=c.course) }}" download
                  title="Download {{ c.course|upper }} as a bundle (.json)"><i class="bi bi-box-arrow-down"></i></a>

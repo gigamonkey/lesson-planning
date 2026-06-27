@@ -433,16 +433,31 @@ def collab_pending():
 
 
 @app.route("/sync", methods=["POST"])
-def collab_sync():
-    if not collab.enabled() or not getattr(g, "editor", False):
-        abort(403)
-    u = g.user
-    result = collab.sync(u["handle"], u.get("name"), u.get("email"))
-    if result.get("conflict"):
-        flash(f"{result['message']} Files: {', '.join(result.get('files', []))}")
-    else:
-        flash(result["message"])
-    return redirect(request.referrer or url_for("index"))
+def sync_courses():
+    """Pull in the latest course content. Collab: merge origin/main into the
+    editor's branch (per-user). Single-user: reload every course in the corpus
+    from its files on disk -- the single-user analogue. (The corpus is git-tracked;
+    do the git pull/commit yourself; this re-reads whatever's on disk.)"""
+    back = redirect(request.referrer or url_for("index"))
+    if collab.enabled():
+        if not getattr(g, "editor", False):
+            abort(403)
+        u = g.user
+        result = collab.sync(u["handle"], u.get("name"), u.get("email"))
+        if result.get("conflict"):
+            flash(f"{result['message']} Files: {', '.join(result.get('files', []))}")
+        else:
+            flash(result["message"])
+        return back
+    try:
+        dirs = seed_module.course_dirs(corpus_dir())
+        seed_module.load_corpus(db_path(), corpus_dir())
+    except (OSError, ValueError) as e:
+        flash(f"Couldn't sync from the corpus: {e}")
+        return back
+    names = ", ".join(os.path.basename(d) for d in dirs) or "none"
+    flash(f"Synced {len(dirs)} course(s) from the corpus: {names}")
+    return back
 
 
 def _schema_version():
@@ -570,16 +585,14 @@ def inject_nav():
                 outline = c["primary_outline"] or next(
                     (h["hierarchy"] for h in hs if h["editable"]), None)
                 refs = [h for h in hs if h["hierarchy"] != outline]
-                # Does the on-disk corpus need a (re)export? Drives the save icon;
-                # has_corpus drives whether Refresh (pull from disk) is available.
+                # Does the on-disk corpus need a (re)export? Drives the save icon.
                 course_dir = os.path.join(corpus_dir(), c["course"])
-                has_corpus = os.path.isdir(course_dir)
                 try:
                     dirty = plan_io.is_dirty(conn, c["course"], course_dir)
                 except Exception:
                     dirty = True
                 nav.append({"course": c["course"], "title": c["title"], "outline": outline,
-                            "hierarchies": refs, "dirty": dirty, "has_corpus": has_corpus})
+                            "hierarchies": refs, "dirty": dirty})
     except sqlite3.OperationalError:
         pass
     return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}
@@ -1627,30 +1640,6 @@ def save_button(course):
         except Exception:
             dirty = True
     return render_template("_savebtn.html", c={"course": course, "dirty": dirty})
-
-
-@app.route("/<course>/refresh", methods=["POST"])
-def course_refresh(course):
-    """Reload a course from its corpus directory on disk, replacing the db's copy
-    -- the inverse of export, for when the corpus was edited outside the app."""
-    if collab.enabled():
-        # The corpus is the git worktree here; pulling upstream is Sync's job, and
-        # reloading would discard not-yet-autosaved edits. (The button is hidden in
-        # collab; this guards a direct POST.)
-        flash("Use Sync to pull the latest from main.")
-        return redirect(request.referrer or url_for("tree", course=course))
-    course_dir = os.path.join(corpus_dir(), course)
-    back = request.referrer or url_for("tree", course=course)
-    if not os.path.isdir(course_dir):
-        flash(f"No corpus for {course!r} yet (export it first).")
-        return redirect(back)
-    try:
-        _c, n_refs, n_obj = plan_io.read_course(db_path(), course_dir)
-    except (OSError, ValueError) as e:
-        flash(f"Couldn't refresh {course!r} from disk: {e}")
-        return redirect(back)
-    flash(f"Refreshed {course!r} from disk · {n_refs} reference(s), {n_obj} objectives")
-    return redirect(back)
 
 
 # --------------------------------------------------------------------------
