@@ -20,6 +20,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import sys
 import uuid as uuidlib
@@ -146,10 +147,12 @@ _ACTION_PHRASES = {
 # Endpoints that themselves perform the commit -- don't double-record them.
 _SAVE_ENDPOINTS = {"export", "outline_source"}
 
-# Edits the debounced autosave can't capture with write_course (whole-course or
-# reference-file changes): left to their own handling, not auto-committed here.
-_AUTOSAVE_FILE_OPS = {"hierarchy_load_course", "hierarchy_delete",
-                      "course_delete", "course_import", "course_new"}
+# Discrete structural ops that commit themselves immediately (via commit_structural)
+# with their own message, rather than going through the debounced autosave -- they
+# add/remove whole courses or reference files, which a single write_course can't
+# express, and they deserve a meaningful one-off commit.
+_IMMEDIATE_OPS = {"course_new", "course_delete", "course_import",
+                  "hierarchy_load_course", "hierarchy_delete"}
 
 
 def _autosave_write(handle, course):
@@ -158,6 +161,30 @@ def _autosave_write(handle, course):
     Module-level so it's a stable callback the timer thread can call."""
     course_dir = os.path.join(collab.worktree_path(handle), course)
     plan_io.write_course(collab.db_path_for(handle), course, course_dir)
+
+
+def commit_structural(course, message, *, drop_course=False, remove_files=()):
+    """Collab: immediately persist a structural change to the editor's worktree and
+    commit it with an explicit `message`, then push -- for create/delete/import of
+    a course or add/remove of a reference, which shouldn't wait for (or can't be
+    expressed by) the debounced autosave. `remove_files` are paths relative to the
+    course dir to delete; `drop_course` removes the whole course dir and skips
+    write_course (the course is gone). No-op outside collab mode."""
+    if not collab.enabled() or not getattr(g, "editor", False):
+        return
+    handle = g.handle
+    course_dir = os.path.join(collab.worktree_path(handle), course)
+    for rel in remove_files:
+        try:
+            os.remove(os.path.join(course_dir, rel))
+        except FileNotFoundError:
+            pass
+    if drop_course:
+        shutil.rmtree(course_dir, ignore_errors=True)
+    else:
+        _autosave_write(handle, course)   # write_course: db -> worktree files
+    u = g.user or {}
+    collab.commit_worktree(handle, u.get("name"), u.get("email"), message)
 
 
 def current_user():
@@ -216,19 +243,21 @@ def _collab_record(resp):
     if (collab.enabled() and getattr(g, "editor", False)
             and request.method == "POST" and resp.status_code < 400):
         ep = request.endpoint
+        # Save endpoints and the immediate structural ops commit themselves.
+        if ep in _SAVE_ENDPOINTS or ep in _IMMEDIATE_OPS:
+            return resp
         course = (request.view_args or {}).get("course")
         # A handler may set g.action_phrase to describe what it actually did when
         # one endpoint covers several actions (e.g. `place` maps vs. unmaps);
         # otherwise fall back to the static per-endpoint phrase.
         phrase = getattr(g, "action_phrase", None)
-        if phrase is None and ep in _ACTION_PHRASES and ep not in _SAVE_ENDPOINTS:
+        if phrase is None and ep in _ACTION_PHRASES:
             phrase = _ACTION_PHRASES[ep].format(course=course or "the course")
         if phrase:
             collab.record_action(g.handle, phrase)
             # Debounced autosave: persist the edit to git automatically so collab
-            # mode needs no manual Save button. (File-level ops that write_course
-            # can't represent are handled separately.)
-            if course and ep not in _AUTOSAVE_FILE_OPS:
+            # mode needs no manual Save button.
+            if course:
                 u = g.user or {}
                 collab.schedule_autosave(g.handle, u.get("name"), u.get("email"),
                                          course, _autosave_write)
@@ -682,6 +711,7 @@ def course_new():
         conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)",
                      (course, title or course.upper()))
         ensure_outline(conn, course)
+    commit_structural(course, f"Create course {course}")
     # The new course appears in the sidebar; land on it (its empty outline).
     return redirect(url_for("tree", course=course))
 
@@ -795,6 +825,7 @@ def hierarchy_load_course(course):
         flash(f"Loaded {slug!r}, but {len(orphaned)} existing coverage edge(s) now "
               f"point to node ids not in this version: {', '.join(orphaned[:6])}"
               f"{'…' if len(orphaned) > 6 else ''}")
+    commit_structural(course, f"Add reference {slug} to {course}")
     # Land on the loaded hierarchy so the upload (from the sidebar or setup) shows.
     return redirect(url_for("hierarchy_view", course=course, hierarchy=slug))
 
@@ -821,6 +852,8 @@ def hierarchy_delete(course, hierarchy):
                      (course, hierarchy, hierarchy))
         conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=?", (course, hierarchy))
         conn.execute("DELETE FROM hierarchies WHERE course=? AND hierarchy=?", (course, hierarchy))
+    commit_structural(course, f"Remove reference {hierarchy} from {course}",
+                      remove_files=[f"{hierarchy}.md"])
     flash(f"Deleted hierarchy {hierarchy!r} ({n} coverage edge(s) removed).")
     return redirect(url_for("tree", course=course))
 
@@ -869,6 +902,7 @@ def course_delete(course):
         # belonging to no course at all.
         conn.execute("DELETE FROM objectives WHERE uuid NOT IN "
                      "(SELECT uuid FROM course_objectives)")
+    commit_structural(course, f"Delete course {course}", drop_course=True)
     flash(f"Deleted course {course!r}.")
     return redirect(url_for("index"))
 
@@ -904,6 +938,7 @@ def course_import():
     except Exception as e:  # bad JSON, version, or id/slug clash (rolled back)
         flash(f"Import failed: {e}")
         return redirect(back)
+    commit_structural(cid, f"Import course {cid}")
     # We land on the imported course (in the sidebar, with its data); no flash.
     return redirect(url_for("tree", course=cid))
 

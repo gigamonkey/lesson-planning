@@ -340,23 +340,45 @@ def _compose_message(handle, fallback):
 # Commit + push
 # --------------------------------------------------------------------------
 
-def commit_and_push(handle, name, email, fallback_message):
-    """Commit the worktree (author = the teacher) and enqueue a push. The caller
-    has already written the corpus files (plan_io.write_course); we sweep the
-    whole worktree with `add -A` so any reference markdown lands too.
+# Serialize all worktree commits: the debounced autosave timer and the immediate
+# structural commits both run `git add -A` + commit, and concurrent git in one
+# repo collides on index.lock. Coarse (one lock for all handles) but commits are
+# brief and the deployment is small.
+_commit_lock = threading.Lock()
 
-    Returns the commit subject if a commit was made, else None."""
+
+def _commit_worktree(handle, name, email, message_fn):
+    """Stage the whole worktree and, if anything changed, commit it (author = the
+    teacher) and enqueue a push. `message_fn()` yields the commit message and is
+    called ONLY when there's a diff, so a no-op commit doesn't consume the action
+    buffer. Returns the commit subject, or None when nothing changed."""
     handle = _safe_handle(handle)
     wt = worktree_path(handle)
-    _git(["add", "-A"], cwd=wt)
-    code, _ = _git(["diff", "--cached", "--quiet"], cwd=wt)
-    if code == 0:
-        return None   # nothing staged
-    message = _compose_message(handle, fallback_message)
-    author = (name or handle, email or _noreply(handle))
-    _git(["commit", "-m", message], cwd=wt, check=True, author=author)
+    with _commit_lock:
+        _git(["add", "-A"], cwd=wt)
+        code, _ = _git(["diff", "--cached", "--quiet"], cwd=wt)
+        if code == 0:
+            return None   # nothing staged
+        message = message_fn()
+        author = (name or handle, email or _noreply(handle))
+        _git(["commit", "-m", message], cwd=wt, check=True, author=author)
     enqueue_push(handle)
     return message.splitlines()[0]
+
+
+def commit_and_push(handle, name, email, fallback_message):
+    """Commit the worktree with the buffered edit phrases composed into the message
+    (the caller has already written the corpus files), and enqueue a push. Used by
+    the debounced autosave. Returns the commit subject, or None."""
+    return _commit_worktree(handle, name, email,
+                            lambda: _compose_message(handle, fallback_message))
+
+
+def commit_worktree(handle, name, email, message):
+    """Commit the worktree with an explicit `message` (NOT the buffered edits) and
+    enqueue a push -- for discrete structural changes (course/reference add or
+    delete) that warrant their own message. Returns the subject, or None."""
+    return _commit_worktree(handle, name, email, lambda: message)
 
 
 def _noreply(handle):
