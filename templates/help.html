@@ -109,11 +109,10 @@
   </ol>
 
   <div class="note">
-    Edits go to the live database immediately. To capture a reviewable, committable
-    state, open the course's <b>settings</b> (the <b>gear</b> next to its name in the
-    sidebar) and click <b>Save</b> (greyed when the corpus is already up to date) — it
-    writes the course's git-diffable <code>plan.md</code> (the outline) plus
-    <code>objectives.tsv</code> / <code>coverage.tsv</code> into its corpus directory.
+    Edits go to the live database immediately and are <b>autosaved + committed</b> to
+    the corpus git repo for you (debounced a couple of seconds) — the course's
+    git-diffable <code>plan.md</code> (the outline) plus <code>objectives.tsv</code> /
+    <code>coverage.tsv</code>. There are no Save buttons.
   </div>
 
   <h2>Setting up a new course</h2>
@@ -137,10 +136,9 @@
   <p>In the sidebar, click a course's <b>title</b> to rename it, and each reference
      has a trash to delete it. The course header's <b>gear</b> opens its
      <b>settings</b> page, which holds the less-frequent actions: add a reference
-     hierarchy, <b>Save</b> (export to the corpus, single-user mode), rebuild the
-     outline from a reference, download the whole course as a bundle, and delete the
-     course. To reload courses from disk (edits made outside the app), use the sidebar
-     <b>Sync</b>. Recreate a course elsewhere with <b>…or import a course bundle</b>
+     hierarchy, rebuild the outline from a reference, download the whole course as a
+     bundle, and delete the course. To reload courses from disk (edits made outside
+     the app, e.g. a <code>git pull</code>), use the sidebar <b>Sync</b>. Recreate a course elsewhere with <b>…or import a course bundle</b>
      under the top <b>+</b>.</p>
   <p class="hint">Equivalent from a terminal:
      <code>uv run load_nodes.py my-course-hierarchy.md db.db</code>
@@ -151,8 +149,8 @@
   <p>The database (<code>db.db</code>) is the live working copy and is not checked
      in. The committed state is the <b>corpus</b>: a directory of course
      directories, each holding its hierarchy markdown, <code>plan.md</code>, and
-     <code>objectives.tsv</code> / <code>coverage.tsv</code>. <b>Save</b> on a course's
-     settings page writes it back to the corpus. Starting the app with no database creates an empty one and
+     <code>objectives.tsv</code> / <code>coverage.tsv</code>. The corpus is a git repo
+     and your edits are autosaved + committed to it automatically. Starting the app with no database creates an empty one and
      loads any course already in the corpus; the sidebar <b>Sync</b> button reloads
      every course from disk — so the whole thing is reproducible from
      version-controlled markdown.
@@ -173,9 +171,8 @@
     <b>Sync</b> button, a course <b>refresh</b>, or an app restart /
     <code>rebuild_db</code> — the app <b>unifies</b> objectives that share the same
     text onto one id and rewrites every placement and coverage link to it. The
-    cleaned-up files are written back to the corpus the next time the course saves
-    (automatically in git-backed mode, or with <b>Save</b> on the course's settings
-    page otherwise).
+    cleaned-up files are autosaved + committed back to the corpus the next time the
+    course is touched.
   </div>
   <p>The one thing the app <i>can't</i> decide for you: if the two people placed
      their copies in <b>different lessons</b>, the unified objective will show up in

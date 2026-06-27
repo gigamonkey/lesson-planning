@@ -34,10 +34,12 @@ format and `plans/markdown-as-storage.md` for the design.
   editor, bundled to `static/editor.bundle.js` (committed) via `npm run build`
 - `hierarchy.py` — the curriculum-hierarchy markdown parser (this repo owns it);
   `FORMAT.md` — the on-disk format spec
-- `schema.sql` — canonical schema; `db.db` — live working copy (gitignored);
-  `courses/` — the default corpus directory, holding the committed corpus (`csa`,
-  `csp`, `ib-eng`, `ib-sl`); loaded on startup in single-user mode (in collab mode
-  the corpus is the git clone on the volume instead, and `courses/` is ignored)
+- `schema.sql` — canonical schema; `db.db` — live working copy (gitignored). There
+  is **no in-repo `courses/` default corpus** — single-user mode requires
+  `LESSON_CORPUS_DIR` to point at a git repo (a courses-repo checkout, e.g. the
+  sibling `../bhs-cs-courses`); collab mode uses the git clone on the volume. A
+  plain (non-repo) dir like `examples/` is copied into a throwaway git repo at
+  startup so the demo still autosaves + commits.
 - `examples/` — a corpus with one synthetic course, `examples/widgets/`:
   `widgets-ced.md` (reference hierarchy markdown), `plan.md` (the outline +
   course wiring), `objectives.tsv`, `coverage.tsv`
@@ -78,25 +80,28 @@ uv run python -c "import plan_io; plan_io.write_course('db.db', '<course>', '<co
 #
 # ALWAYS run the server via serve.sh -d (detached, idempotent, listens on
 # 0.0.0.0). It defaults LESSON_CORPUS_DIR to the sibling ../bhs-cs-courses
-# checkout when present -- which enables Local git mode (below). A bare
-# `uv run app.py` skips that default and falls back to the in-repo courses/
-# (git mode off), so don't launch it that way.
+# checkout when present -- which enables Local git mode (below). Single-user mode
+# now REQUIRES LESSON_CORPUS_DIR: a bare `uv run app.py` with none set exits with
+# an error. A plain (non-repo) dir like examples/ runs as a throwaway-git demo.
 ./serve.sh -d                                  # detached on 0.0.0.0:5001; log: /tmp/lesson-planning.log
-LESSON_CORPUS_DIR=examples uv run app.py       # load the bundled widgets example (no git mode)
+LESSON_CORPUS_DIR=examples uv run app.py       # bundled widgets demo (throwaway git repo)
 ```
 
-**Local git mode.** If `LESSON_CORPUS_DIR` is the top of its own git repo (a
-checkout of the courses repo), single-user mode treats it like collab does: edits
-**autosave + commit** to it (debounced for content edits, immediate for structural
-ops), authored as the local git user, on the checked-out branch (main), with **no
-remote push** — so the Save button is hidden (Refresh stays, for picking up
-external edits / a `git pull`). Off when the corpus is a plain dir or a subdir of
-another repo (e.g. the in-repo `courses/`, which would otherwise commit into this
-repo). `serve.sh` defaults `LESSON_CORPUS_DIR` to a sibling `../bhs-cs-courses`
-checkout when present. The commit/autosave core lives in `collab.py`
-(`commit_repo`, `schedule_autosave`) and is shared by both modes; `app.py`'s
-`_git_target()` picks per-mode (repo, db, author, push) and `git_backed()` gates
-the shared UI/behavior. Debounce: `LESSON_AUTOSAVE_SECONDS` (default 2).
+**Local git mode is now the only single-user mode.** `LESSON_CORPUS_DIR` must be
+the top of its own git repo (a checkout of the courses repo); single-user then
+treats it like collab does: edits **autosave + commit** to it (debounced for
+content edits, immediate for structural ops), authored as the local git user, on
+the checked-out branch (main), with **no remote push**. There is **no manual Save
+button** — only Sync/Refresh, for picking up external edits / a `git pull`. A
+plain (non-repo) `LESSON_CORPUS_DIR` (e.g. `examples/`) is copied into a
+**throwaway git repo** at startup (`_ensure_git_corpus` in `app.py`, with a local
+demo git identity) so the demo still autosaves + commits — to disposable git, never
+into this engine repo. `serve.sh` defaults `LESSON_CORPUS_DIR` to a sibling
+`../bhs-cs-courses` checkout when present, else `examples`. The commit/autosave
+core lives in `collab.py` (`commit_repo`, `schedule_autosave`) and is shared by
+both modes; `app.py`'s `_git_target()` picks per-mode (repo, db, author, push) and
+`git_backed()` gates the shared UI/behavior. Debounce: `LESSON_AUTOSAVE_SECONDS`
+(default 2).
 
 The outline workspace has an **"Edit as Markdown"** button (only on the editable
 outline) opening a CodeMirror 6 editor (`/<course>/outline/edit`) on the

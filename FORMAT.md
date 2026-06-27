@@ -17,7 +17,7 @@ A **corpus** is a directory whose immediate subdirectories are each one course.
 One course directory holds everything that describes that course:
 
 ```
-courses/                 # the corpus root (load source AND export target)
+my-courses/              # the corpus root (a git repo; load source AND export target)
   widgets/
     ced.md               # a reference hierarchy — load-only input
     plan.md              # the outline + course wiring in front matter
@@ -97,7 +97,7 @@ title: AP Computer Science A — 2025 CED
 ---
 ```
 
-**Stored form** (in `courses/csa/ced.md`) is identical but adds the pinned slug:
+**Stored form** (in `my-courses/csa/ced.md`) is identical but adds the pinned slug:
 
 ```
 ---

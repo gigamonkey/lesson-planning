@@ -19,18 +19,12 @@
      disk. {% if collab_enabled %}On the collaborative server it instead merges the
      latest from <code>main</code> into your sandbox.{% endif %}</p>
 
-  {% if collab_enabled %}
-  <div class="note">In collaboration mode edits autosave and commit to git
-     automatically; there's no manual Export.</div>
-  {% elif courses %}
-  <h2>Export</h2>
-  <p>Export is per course: open a course's settings (the <b>gear</b> next to its name
-     in the sidebar) and click <b>Save</b> to write its <code>plan.md</code> +
-     <code>objectives.tsv</code> / <code>coverage.tsv</code> into
-     <code>{{ export_dir }}/&lt;course&gt;/</code> — the committable state.
-     Reference hierarchy markdown is a load-only input and is never rewritten.
-     (In local git mode this Save is automatic.)</p>
-  {% endif %}
+  <div class="note">Edits autosave and commit to git automatically
+     {% if collab_enabled %}(to your sandbox branch){% else %}(to the corpus repo
+     at <code>{{ export_dir }}</code>){% endif %} — there's no manual Save or
+     Export. Each course's <code>plan.md</code> + <code>objectives.tsv</code> /
+     <code>coverage.tsv</code> are written for you; reference hierarchy markdown is
+     a load-only input and is never rewritten.</div>
 </div>
 
 <style>

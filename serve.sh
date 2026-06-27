@@ -16,16 +16,17 @@ export PORT="${PORT:-5001}"
 
 default_courses_repo="../bhs-cs-courses"
 
-# Corpus: a directory of course directories. If it's a checkout of the courses
-# repo, single-user mode autosaves + commits edits to it (see LOCAL_GIT in
-# app.py). Default to a sibling ../bhs-cs-courses checkout when present, else
-# the in-repo courses/. Override with LESSON_CORPUS_DIR=... .
+# Corpus: a directory of course directories. Single-user mode requires it to be a
+# git repo (a checkout of the courses repo) and autosaves + commits edits to it
+# (see app.py). Default to a sibling ../bhs-cs-courses checkout when present; else
+# fall back to the bundled examples/ demo, which app.py copies into a throwaway git
+# repo so edits still commit (to disposable git). Override with LESSON_CORPUS_DIR.
 
 if [ -z "${LESSON_CORPUS_DIR:-}" ]; then
   if [ -d "$default_courses_repo" ]; then
     export LESSON_CORPUS_DIR="$(cd "$default_courses_repo" && pwd)"
   else
-    export LESSON_CORPUS_DIR="courses"
+    export LESSON_CORPUS_DIR="examples"
   fi
 fi
 LOG="${LESSON_LOG:-/tmp/lesson-planning.log}"

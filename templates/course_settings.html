@@ -18,19 +18,6 @@
     </label>
   </form>
 
-  {% if not git_backed %}
-  <h2>Save</h2>
-  <p>Write this course back to the corpus — <code>plan.md</code> plus
-     <code>objectives.tsv</code> / <code>coverage.tsv</code>. Reference markdown is a
-     load-only input and is never rewritten.</p>
-  <form method="post" action="{{ url_for('export', course=course) }}" class="caction">
-    <button type="submit" class="btn" {{ '' if dirty else 'disabled' }}>
-      <i class="bi bi-{{ 'floppy' if dirty else 'check2' }}"></i>
-      {{ 'Save to corpus' if dirty else 'Saved — up to date' }}
-    </button>
-  </form>
-  {% endif %}
-
   <h2>Rebuild the outline</h2>
   {% if references %}
   <p>Build this course's outline from a reference hierarchy: each top-level item

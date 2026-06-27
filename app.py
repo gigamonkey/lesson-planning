@@ -24,6 +24,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import uuid as uuidlib
 from importlib.resources import files as importlib_files
 
@@ -50,10 +51,11 @@ DB_PATH = os.environ.get(
 )
 # The corpus: a directory of course directories that is BOTH the load source and
 # the export target (markdown hierarchies + objectives.tsv / coverage.tsv per
-# course). See FORMAT.md / plan_io.py. Tracked in git -- the canonical state.
-CORPUS_DIR = os.environ.get(
-    "LESSON_CORPUS_DIR", os.path.join(os.path.dirname(__file__), "courses")
-)
+# course). See FORMAT.md / plan_io.py. In single-user mode it must be a git repo (a
+# checkout of your courses repo) so edits autosave + commit there -- CORPUS_DIR is
+# resolved below (a plain dir, like the bundled examples/ demo, is copied into a
+# throwaway repo). Collab mode manages its own clone, so LESSON_CORPUS_DIR is
+# single-user only.
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 # Where the calendar view reads bells calendar JSONs (e.g. 'bhs-2025-2026.json').
 # Defaults to the data bundled in the `bhs-calendars` PyPI package (whose JSON
@@ -82,13 +84,45 @@ def _is_corpus_repo(d):
     return r.returncode == 0 and os.path.realpath(r.stdout.strip()) == os.path.realpath(d)
 
 
-# Local single-user git mode: when the corpus IS its own git repo (a checkout of
-# the courses repo), edits autosave + commit to it on whatever branch is checked
-# out (main) -- the single-user analogue of collab, authored as the local git user,
-# no remote push. Off when collab is on (collab owns git) or the corpus isn't a
-# dedicated repo. Set LESSON_CORPUS_DIR to your courses-repo checkout to use it.
-LOCAL_GIT = (not collab.enabled() and os.path.isdir(CORPUS_DIR)
-             and _is_corpus_repo(CORPUS_DIR))
+# Single-user git mode is now the ONLY single-user mode: the corpus is a git repo
+# (a courses-repo checkout) and every edit autosaves + commits there on the
+# checked-out branch, authored as the local git user, with no remote push -- the
+# single-user analogue of collab. A plain (non-repo) corpus dir -- the bundled
+# examples/ demo -- is copied into a throwaway tmp git repo at startup so edits
+# still commit (to disposable git, never into this engine repo). Off only in collab
+# mode (collab owns git). Set LESSON_CORPUS_DIR to your courses-repo checkout.
+def _ensure_git_corpus(d):
+    """Resolve the single-user corpus to a git repo. If `d` is already the top of
+    its own repo, use it in place (real local-git mode). Otherwise (a plain dir,
+    e.g. examples/) copy it into a fresh throwaway repo so edits still autosave +
+    commit, just to disposable git. Returns (resolved_dir, is_demo)."""
+    if _is_corpus_repo(d):
+        return d, False
+    tmp = tempfile.mkdtemp(prefix="lesson-demo-")
+    for name in os.listdir(d):
+        src = os.path.join(d, name)
+        (shutil.copytree if os.path.isdir(src) else shutil.copy2)(
+            src, os.path.join(tmp, name))
+    subprocess.run(["git", "init", "-q", tmp], check=True)
+    for k, v in (("user.name", "Lesson Planning Demo"),
+                 ("user.email", "demo@localhost")):
+        subprocess.run(["git", "-C", tmp, "config", k, v], check=True)
+    subprocess.run(["git", "-C", tmp, "add", "-A"], check=True)
+    subprocess.run(["git", "-C", tmp, "commit", "-q", "-m", "Seed demo corpus"],
+                   check=True)
+    return tmp, True
+
+
+if collab.enabled():
+    CORPUS_DIR, LOCAL_GIT, DEMO_CORPUS = None, False, False
+else:
+    _corpus = os.environ.get("LESSON_CORPUS_DIR")
+    if not _corpus or not os.path.isdir(_corpus):
+        sys.exit("LESSON_CORPUS_DIR must point at a courses git repo (or a plain "
+                 "directory to run as a throwaway demo, e.g. "
+                 "LESSON_CORPUS_DIR=examples). See README.")
+    CORPUS_DIR, DEMO_CORPUS = _ensure_git_corpus(os.path.abspath(_corpus))
+    LOCAL_GIT = True
 LOCAL_AUTOSAVE_SECONDS = int(os.environ.get("LESSON_AUTOSAVE_SECONDS", "2"))
 
 app = Flask(__name__)
@@ -167,7 +201,7 @@ _ACTION_PHRASES = {
     "course_rename": "renamed course {course}",
 }
 # Endpoints that themselves perform the commit -- don't double-record them.
-_SAVE_ENDPOINTS = {"export", "outline_source"}
+_SAVE_ENDPOINTS = {"outline_source"}
 
 # Discrete structural ops that commit themselves immediately (via commit_structural)
 # with their own message, rather than going through the debounced autosave -- they
@@ -322,9 +356,10 @@ def inject_collab():
     """Template flags: whether the current user may edit (always true in
     single-user mode), their identity, and any pending-push state."""
     if not collab.enabled():
-        # local-git is git_backed too (autosave commits) -> hide the Save button.
+        # Single-user is always git-backed now (edits autosave + commit), so there
+        # is no manual Save button -- only a Sync/Refresh to pick up external edits.
         return {"collab_enabled": False, "can_edit": True, "collab_user": None,
-                "git_backed": LOCAL_GIT}
+                "git_backed": True}
     editor = getattr(g, "editor", False)
     handle = getattr(g, "handle", None)
     published, pending = collab.push_status(handle) if editor and handle else (True, 0)
@@ -606,15 +641,8 @@ def inject_nav():
                     outline_empty = conn.execute(
                         "SELECT 1 FROM nodes WHERE course=? AND hierarchy=? LIMIT 1",
                         (c["course"], outline)).fetchone() is None
-                # Does the on-disk corpus need a (re)export? Drives the save icon.
-                course_dir = os.path.join(corpus_dir(), c["course"])
-                try:
-                    dirty = plan_io.is_dirty(conn, c["course"], course_dir)
-                except Exception:
-                    dirty = True
                 nav.append({"course": c["course"], "title": c["title"], "outline": outline,
-                            "hierarchies": refs, "dirty": dirty,
-                            "outline_empty": outline_empty})
+                            "hierarchies": refs, "outline_empty": outline_empty})
     except sqlite3.OperationalError:
         pass
     return {"course_nav": nav, "active_hierarchy": active, "nav_course": nav_course}
@@ -970,9 +998,7 @@ def course_rename(course):
 @app.route("/<course>/settings")
 def course_settings(course):
     """Per-course settings: the less-frequent actions — add a reference hierarchy,
-    save/export (single-user mode), rebuild the outline from a reference, export a
-    bundle, delete the course."""
-    course_dir = os.path.join(corpus_dir(), course)
+    rebuild the outline from a reference, export a bundle, delete the course."""
     with db() as conn:
         crow = conn.execute(
             "SELECT title, primary_outline FROM courses WHERE course=?", (course,)).fetchone()
@@ -994,12 +1020,8 @@ def course_settings(course):
             outline_empty = conn.execute(
                 "SELECT 1 FROM nodes WHERE course=? AND hierarchy=? LIMIT 1",
                 (course, outline)).fetchone() is None
-        try:
-            dirty = plan_io.is_dirty(conn, course, course_dir)
-        except Exception:
-            dirty = True
     return render_template("course_settings.html", course=course, title=crow["title"],
-                           references=references, outline_empty=outline_empty, dirty=dirty,
+                           references=references, outline_empty=outline_empty,
                            page_title=f"{course.upper()} settings")
 
 
@@ -1685,22 +1707,6 @@ def objective_edit(course, uuid):
     return _back(course)
 
 
-@app.route("/<course>/export", methods=["POST"])
-def export(course):
-    """Serialize this course back to its corpus directory: plan.md (the outline +
-    course wiring) plus objectives.tsv / coverage.tsv. Reference markdown files are
-    inputs and are left untouched."""
-    course_dir = os.path.join(corpus_dir(), course)
-    plan_path, n_obj, n_cov = plan_io.write_course(db_path(), course, course_dir)
-    commit_after_save(course, f"Save {course.upper()}")
-    rel = os.path.relpath(course_dir, REPO_ROOT)
-    msg = f"Exported {course!r} to {rel}/ · {n_obj} objectives, {n_cov} coverage edges"
-    # Save now lives on the per-course settings page as a plain form, so this is a
-    # full-page POST -- flash and redirect back where the Save was clicked.
-    flash(msg)
-    return redirect(request.referrer or url_for("course_settings", course=course))
-
-
 # --------------------------------------------------------------------------
 # Lesson builder: synthesize raw -> lesson objectives, then schedule into lessons
 
@@ -2035,6 +2041,9 @@ if collab.enabled():
     collab.startup()
 else:
     ensure_schema()
+    if DEMO_CORPUS:
+        print(f"demo mode: edits autosave + commit to a throwaway git repo at "
+              f"{CORPUS_DIR} (not your original corpus)", file=sys.stderr)
     # Unattended population: load any course in the corpus directory that doesn't
     # already exist (see seed.py). Safe to run every boot; never fatal.
     if os.path.isdir(CORPUS_DIR):

@@ -13,8 +13,8 @@ the git-tracked files.
 The existing database file is DELETED first, so anything in it not yet exported
 to the corpus is lost -- export (and stop the app) before rebuilding.
 
-    uv run rebuild_db.py                       # default corpus 'courses/'
-    uv run rebuild_db.py --corpus examples     # the bundled widgets example
+    uv run rebuild_db.py                       # default corpus 'examples/' (the demo)
+    uv run rebuild_db.py --corpus ../bhs-cs-courses
     uv run rebuild_db.py --db /tmp/x.db --corpus mycorpus
 """
 
@@ -49,7 +49,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--db", default="db.db")
     p.add_argument("--schema", default="schema.sql")
-    p.add_argument("--corpus", default="courses")
+    p.add_argument("--corpus", default="examples")
     args = p.parse_args()
     rebuild(args.db, args.schema, args.corpus)
 

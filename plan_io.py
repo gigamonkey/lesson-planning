@@ -522,8 +522,7 @@ def _new_uuid():
 def render_course(conn, course):
     """Build a course's authored files in memory (no disk writes): returns
     ({plan.md, objectives.tsv, coverage.tsv} -> text, n_objectives, n_coverage).
-    Raises KeyError if the course is absent. write_course writes these; is_dirty
-    compares them to disk."""
+    Raises KeyError if the course is absent. write_course writes these to disk."""
     conn.row_factory = sqlite3.Row
     crow = conn.execute("SELECT course, title, primary_outline, calendar"
                         " FROM courses WHERE course=?", (course,)).fetchone()
@@ -669,30 +668,6 @@ def write_course(db_path, course, course_dir):
             with open(path, "w", encoding="utf-8", newline="") as f:
                 f.write(text)
     return os.path.join(course_dir, PLAN_FILE), n_obj, n_cov
-
-
-def is_dirty(conn, course, course_dir):
-    """True if the course has unsaved changes: the authored files (plan.md + TSVs)
-    differ from what write_course would produce, or any reference hierarchy has no
-    .md on disk yet. (References are read-only, so once present they're in sync --
-    an existence check keeps this cheap, no per-render serialization.) False when
-    the course is absent or fully in sync."""
-    try:
-        files, _n_obj, _n_cov = render_course(conn, course)
-    except KeyError:
-        return False
-    for name, text in files.items():
-        try:
-            with open(os.path.join(course_dir, name), encoding="utf-8", newline="") as f:
-                if f.read() != text:
-                    return True
-        except FileNotFoundError:
-            return True
-    for (slug,) in conn.execute(
-            "SELECT hierarchy FROM hierarchies WHERE course=? AND editable=0", (course,)):
-        if not os.path.exists(os.path.join(course_dir, f"{slug}.md")):
-            return True
-    return False
 
 
 def import_structure(conn, course, outline, reference):

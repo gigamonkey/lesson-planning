@@ -98,10 +98,6 @@
     .coursehead .gear { color: #bbb; text-decoration: none; font-size: .82rem; flex: none;
                 cursor: pointer; line-height: 1; position: relative; }
     .coursehead .gear:hover, .coursehead .gear.on { color: #2b6cb0; }
-    /* Unsaved-changes dot — Save lives behind the gear in plain single-user mode. */
-    .coursehead .gear.dirty { color: #2b6cb0; }
-    .coursehead .gear.dirty::after { content: ""; position: absolute; top: -1px; right: -3px;
-                width: 5px; height: 5px; border-radius: 50%; background: var(--gap, #c05621); }
     /* Click-to-edit course title (the header line): looks like plain bold text
        until hover/focus. Shares the row with the four course-view icons. */
     .ctitle-form { margin: 0; flex: 1; min-width: 0; }
@@ -652,9 +648,9 @@
                  href="{{ url_for('objectives', course=c.course) }}"
                  title="{{ c.course|upper }} objectives"><i class="bi bi-list-check"></i></a>
               {% if can_edit %}
-              <a class="gear {{ 'dirty' if not git_backed and c.dirty else '' }}"
+              <a class="gear"
                  href="{{ url_for('course_settings', course=c.course) }}"
-                 title="{{ c.course|upper }} settings{{ ' · unsaved changes' if not git_backed and c.dirty else '' }}">
+                 title="{{ c.course|upper }} settings">
                 <i class="bi bi-gear"></i></a>
               {% endif %}
             </span>
@@ -828,10 +824,9 @@
     document.addEventListener('focusin', selectWeeksPill);
     document.addEventListener('click', selectWeeksPill);
 
-    // The per-course Save now lives behind the sidebar gear (settings page); its
-    // dirty dot is computed on each full page render. The workspace's drag/edit
-    // handlers still call window.saveRefresh() after a save — keep it as a no-op so
-    // those call sites don't need to know the control is gone.
+    // There is no manual Save — edits autosave + commit to git. The workspace's
+    // drag/edit handlers still call window.saveRefresh() after a save — keep it as a
+    // no-op so those call sites don't need to know the control is gone.
     window.saveRefresh = function () {};
   </script>
 </body>

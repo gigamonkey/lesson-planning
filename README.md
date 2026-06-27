@@ -90,17 +90,20 @@ to a lesson.
 ## Saving & version control
 
 `db.db` is the live working copy and is gitignored. The committed state is the
-**corpus**: a directory of course directories of markdown + TSVs. Export writes a
-course back to it; rebuild reproduces the database from it:
+**corpus**: a git repo whose top-level directories are course directories of
+markdown + TSVs. The app **autosaves + commits** your edits back to it; rebuild
+reproduces the database from it:
 
 ```bash
-uv run rebuild_db.py --corpus courses            # rebuild db.db from the corpus
-uv run seed.py --all courses db.db               # reload every course (non-destructive)
+uv run rebuild_db.py --corpus ../bhs-cs-courses  # rebuild db.db from a corpus
+uv run seed.py --all ../bhs-cs-courses db.db     # reload every course (non-destructive)
 ```
 
-(The app exposes per-course **Export** in the sidebar and a global **Restore from
-version control** on its **Settings** page. Reference hierarchy markdown is a
-load-only input and is never rewritten — only `plan.md` and the two TSVs are.)
+(Single-user mode requires the corpus to be a git repo and commits there
+automatically — there is no manual Export button; the **Settings** page offers a
+global **Sync** to re-read external edits / a `git pull`. Reference hierarchy
+markdown is a load-only input and is never rewritten — only `plan.md` and the two
+TSVs are.)
 
 ## Setting up courses in the app
 
@@ -128,14 +131,25 @@ uv run course_bundle.py export db.db <course> <course>.json
 uv run course_bundle.py import db.db <course>.json [--as <new-id>]
 ```
 
-## Seeding on startup
+## Running & the corpus
 
 Point the app at a **corpus** — a directory whose subdirectories are course
-directories — and it populates a blank database automatically. Set
-`LESSON_CORPUS_DIR` (default `courses`):
+directories — via `LESSON_CORPUS_DIR`, and it populates a blank database
+automatically. In single-user mode the corpus must be a **git repo** (a checkout
+of your courses repo): edits autosave + commit there, on the checked-out branch,
+with no remote push. `serve.sh` defaults it to a sibling `../bhs-cs-courses`
+checkout when present.
 
 ```bash
-LESSON_CORPUS_DIR=examples uv run app.py        # or set it before serve.sh
+LESSON_CORPUS_DIR=../bhs-cs-courses uv run app.py   # or just ./serve.sh -d
+```
+
+To try it without a courses repo, point it at the bundled synthetic demo. A plain
+(non-repo) directory is copied into a **throwaway git repo** at startup, so edits
+still autosave + commit — just to disposable git, discarded when you're done:
+
+```bash
+LESSON_CORPUS_DIR=examples uv run app.py        # the "Intro to Widgets" demo
 ```
 
 Each course directory carries everything the loader needs (its `plan.md` front
@@ -144,6 +158,6 @@ Seeding is **create-if-absent per course**, so it's safe on every restart
 (existing courses are left untouched). The same thing from a terminal:
 
 ```bash
-uv run seed.py examples db.db                   # load new courses
-uv run seed.py --all examples db.db             # reload every course
+uv run seed.py ../bhs-cs-courses db.db          # load new courses
+uv run seed.py --all ../bhs-cs-courses db.db    # reload every course
 ```
