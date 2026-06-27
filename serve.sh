@@ -13,9 +13,17 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-5001}"
-# Auto-populate a blank db on startup from the corpus: a directory of course
-# directories (no-op if absent). Override with LESSON_CORPUS_DIR=... .
-export LESSON_CORPUS_DIR="${LESSON_CORPUS_DIR:-courses}"
+# Corpus: a directory of course directories. If it's a checkout of the courses
+# repo, single-user mode autosaves + commits edits to it (see LOCAL_GIT in
+# app.py). Default to a sibling ../lesson-courses checkout when present, else the
+# in-repo courses/. Override with LESSON_CORPUS_DIR=... .
+if [ -z "${LESSON_CORPUS_DIR:-}" ]; then
+  if [ -d ../lesson-courses ]; then
+    export LESSON_CORPUS_DIR="$(cd ../lesson-courses && pwd)"
+  else
+    export LESSON_CORPUS_DIR="courses"
+  fi
+fi
 LOG="${LESSON_LOG:-/tmp/lesson-planning.log}"
 
 if [ "${1:-}" = "-d" ] || [ "${1:-}" = "--detach" ]; then

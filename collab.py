@@ -149,7 +149,9 @@ def _git_env():
     env = dict(os.environ)
     # Never block on an interactive credential/host prompt -- fail fast instead.
     env.setdefault("GIT_TERMINAL_PROMPT", "0")
-    key = CONFIG.get("ssh_key_path") or os.environ.get("LESSON_GIT_SSH_KEY")
+    # CONFIG is None in local single-user git mode (no collab.json); the deploy key
+    # only applies to collab's remote pushes.
+    key = (CONFIG or {}).get("ssh_key_path") or os.environ.get("LESSON_GIT_SSH_KEY")
     if key:
         env["GIT_SSH_COMMAND"] = (
             f"ssh -i {key} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new")
@@ -340,45 +342,54 @@ def _compose_message(handle, fallback):
 # Commit + push
 # --------------------------------------------------------------------------
 
-# Serialize all worktree commits: the debounced autosave timer and the immediate
-# structural commits both run `git add -A` + commit, and concurrent git in one
-# repo collides on index.lock. Coarse (one lock for all handles) but commits are
-# brief and the deployment is small.
+# Serialize all commits: the debounced autosave timer and the immediate structural
+# commits both run `git add -A` + commit, and concurrent git in one repo collides
+# on index.lock. Coarse (one lock for everything) but commits are brief.
 _commit_lock = threading.Lock()
 
 
-def _commit_worktree(handle, name, email, message_fn):
-    """Stage the whole worktree and, if anything changed, commit it (author = the
-    teacher) and enqueue a push. `message_fn()` yields the commit message and is
-    called ONLY when there's a diff, so a no-op commit doesn't consume the action
-    buffer. Returns the commit subject, or None when nothing changed."""
-    handle = _safe_handle(handle)
-    wt = worktree_path(handle)
+# Public alias: app.py composes a commit message from the buffered edit phrases.
+compose_message = _compose_message
+
+
+def commit_repo(repo_dir, message, author=None, push_key=None):
+    """Stage the whole repo at `repo_dir` and, if anything changed, commit it and
+    (if `push_key`) enqueue a push for that handle. The shared commit primitive for
+    both collab worktrees and the local single-user courses repo.
+
+    `message` is a string, or a thunk called ONLY when there's a diff (so composing
+    from the action buffer doesn't consume it on a no-op). `author` is (name, email)
+    or None to use the ambient git identity (local mode commits as whoever runs the
+    server). Returns the commit subject, or None when nothing changed."""
     with _commit_lock:
-        _git(["add", "-A"], cwd=wt)
-        code, _ = _git(["diff", "--cached", "--quiet"], cwd=wt)
+        _git(["add", "-A"], cwd=repo_dir)
+        code, _ = _git(["diff", "--cached", "--quiet"], cwd=repo_dir)
         if code == 0:
             return None   # nothing staged
-        message = message_fn()
-        author = (name or handle, email or _noreply(handle))
-        _git(["commit", "-m", message], cwd=wt, check=True, author=author)
-    enqueue_push(handle)
-    return message.splitlines()[0]
+        msg = message() if callable(message) else message
+        _git(["commit", "-m", msg], cwd=repo_dir, check=True, author=author)
+    if push_key:
+        enqueue_push(push_key)
+    return msg.splitlines()[0]
 
 
 def commit_and_push(handle, name, email, fallback_message):
-    """Commit the worktree with the buffered edit phrases composed into the message
-    (the caller has already written the corpus files), and enqueue a push. Used by
-    the debounced autosave. Returns the commit subject, or None."""
-    return _commit_worktree(handle, name, email,
-                            lambda: _compose_message(handle, fallback_message))
+    """Collab: commit a teacher's worktree with the buffered edit phrases composed
+    into the message, and enqueue a push. Returns the commit subject, or None."""
+    handle = _safe_handle(handle)
+    return commit_repo(worktree_path(handle),
+                       lambda: _compose_message(handle, fallback_message),
+                       author=(name or handle, email or _noreply(handle)),
+                       push_key=handle)
 
 
 def commit_worktree(handle, name, email, message):
-    """Commit the worktree with an explicit `message` (NOT the buffered edits) and
-    enqueue a push -- for discrete structural changes (course/reference add or
-    delete) that warrant their own message. Returns the subject, or None."""
-    return _commit_worktree(handle, name, email, lambda: message)
+    """Collab: commit a teacher's worktree with an explicit `message` and enqueue a
+    push -- for discrete structural changes. Returns the subject, or None."""
+    handle = _safe_handle(handle)
+    return commit_repo(worktree_path(handle), message,
+                       author=(name or handle, email or _noreply(handle)),
+                       push_key=handle)
 
 
 def _noreply(handle):
@@ -467,54 +478,52 @@ def _requeue(handle, attempt):
 
 
 # --------------------------------------------------------------------------
-# Debounced autosave: collect an editor's edits and, after a quiet period,
-# write each touched course to its worktree and commit+push. Replaces the manual
-# per-course Save button in collab mode -- the db is the live state, this is what
-# lands it in git. write_fn(handle, course) does the db->worktree serialization
-# (supplied by app.py so this module stays free of plan_io).
+# Debounced autosave: collect edits under a `key` and, after `delay` seconds of
+# quiet, run `flush(course)` for each touched course (write db -> repo + commit).
+# Keyed + callback-driven so both collab (key = handle, flush pushes) and local
+# single-user git (key = "_local", flush commits to the courses repo, no push)
+# share it. The flush callback is built by app.py, capturing the repo/db/author at
+# schedule time so the timer thread needs no request context.
 # --------------------------------------------------------------------------
 
 _autosave_guard = threading.Lock()
-_autosave = {}   # handle -> {"courses": set, "ident": (name, email), "timer": Timer}
+_autosave = {}   # key -> {"courses": set, "flush": callable, "timer": Timer}
 
 
 def autosave_seconds():
     return int(CONFIG.get("autosave_seconds", 2)) if enabled() else 0
 
 
-def schedule_autosave(handle, name, email, course, write_fn):
-    """Mark `course` dirty for `handle` and (re)arm the debounce timer. A no-op
-    if autosave is disabled (autosave_seconds <= 0)."""
-    delay = autosave_seconds()
+def schedule_autosave(key, delay, course, flush):
+    """Mark `course` dirty under `key` and (re)arm its debounce timer. `flush(course)`
+    is invoked per dirty course when the timer fires. A no-op if delay <= 0."""
     if not delay:
         return
     with _autosave_guard:
-        st = _autosave.setdefault(
-            handle, {"courses": set(), "ident": (name, email), "timer": None})
+        st = _autosave.setdefault(key, {"courses": set(), "flush": None, "timer": None})
         st["courses"].add(course)
-        st["ident"] = (name, email)
+        st["flush"] = flush
         if st["timer"] is not None:
             st["timer"].cancel()
-        t = threading.Timer(delay, lambda: _autosave_fire(handle, write_fn))
+        t = threading.Timer(delay, lambda: _autosave_fire(key))
         t.daemon = True
         st["timer"] = t
         t.start()
 
 
-def _autosave_fire(handle, write_fn):
+def _autosave_fire(key):
     with _autosave_guard:
-        st = _autosave.get(handle)
+        st = _autosave.get(key)
         if not st:
             return
-        courses, (name, email) = st["courses"], st["ident"]
+        courses, flush = st["courses"], st["flush"]
         st["courses"] = set()
         st["timer"] = None
     for course in courses:
         try:
-            write_fn(handle, course)                       # db -> worktree files
-            commit_and_push(handle, name, email, f"Update {course}")
+            flush(course)
         except Exception as e:                             # never kill the timer thread
-            print(f"collab: autosave {handle}/{course} failed: {e}", file=sys.stderr)
+            print(f"collab: autosave {key}/{course} failed: {e}", file=sys.stderr)
 
 
 # --------------------------------------------------------------------------

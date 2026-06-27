@@ -79,6 +79,19 @@ uv run app.py
 LESSON_CORPUS_DIR=examples uv run app.py       # load the bundled widgets example
 ```
 
+**Local git mode.** If `LESSON_CORPUS_DIR` is the top of its own git repo (a
+checkout of the courses repo), single-user mode treats it like collab does: edits
+**autosave + commit** to it (debounced for content edits, immediate for structural
+ops), authored as the local git user, on the checked-out branch (main), with **no
+remote push** — so the Save button is hidden (Refresh stays, for picking up
+external edits / a `git pull`). Off when the corpus is a plain dir or a subdir of
+another repo (e.g. the in-repo `courses/`, which would otherwise commit into this
+repo). `serve.sh` defaults `LESSON_CORPUS_DIR` to a sibling `../lesson-courses`
+checkout when present. The commit/autosave core lives in `collab.py`
+(`commit_repo`, `schedule_autosave`) and is shared by both modes; `app.py`'s
+`_git_target()` picks per-mode (repo, db, author, push) and `git_backed()` gates
+the shared UI/behavior. Debounce: `LESSON_AUTOSAVE_SECONDS` (default 2).
+
 The outline workspace has an **"Edit as Markdown"** button (only on the editable
 outline) opening a CodeMirror 6 editor (`/<course>/outline/edit`) on the
 round-trippable `plan.md`. Saving posts to `/<course>/outline/source`, which runs

@@ -22,6 +22,7 @@ import re
 import secrets
 import shutil
 import sqlite3
+import subprocess
 import sys
 import uuid as uuidlib
 from importlib.resources import files as importlib_files
@@ -67,6 +68,28 @@ CALENDAR_DIR = os.environ.get(
 CALENDAR_EXTRAS_DIR = os.environ.get(
     "LESSON_CALENDAR_EXTRAS_DIR", os.path.join(os.path.dirname(__file__), "calendar-extras")
 )
+
+
+def _is_corpus_repo(d):
+    """True if `d` is the TOP of its own git repo (a dedicated courses repo), so
+    committing there is safe. False for a plain dir, or a subdir of another repo
+    (e.g. the in-repo `courses/`) -- committing there would land in THIS repo."""
+    try:
+        r = subprocess.run(["git", "-C", d, "rev-parse", "--show-toplevel"],
+                           capture_output=True, text=True)
+    except OSError:
+        return False
+    return r.returncode == 0 and os.path.realpath(r.stdout.strip()) == os.path.realpath(d)
+
+
+# Local single-user git mode: when the corpus IS its own git repo (a checkout of
+# the courses repo), edits autosave + commit to it on whatever branch is checked
+# out (main) -- the single-user analogue of collab, authored as the local git user,
+# no remote push. Off when collab is on (collab owns git) or the corpus isn't a
+# dedicated repo. Set LESSON_CORPUS_DIR to your courses-repo checkout to use it.
+LOCAL_GIT = (not collab.enabled() and os.path.isdir(CORPUS_DIR)
+             and _is_corpus_repo(CORPUS_DIR))
+LOCAL_AUTOSAVE_SECONDS = int(os.environ.get("LESSON_AUTOSAVE_SECONDS", "2"))
 
 app = Flask(__name__)
 # On fly the app runs behind a TLS-terminating proxy that forwards the request as
@@ -155,25 +178,43 @@ _IMMEDIATE_OPS = {"course_new", "course_delete", "course_import",
                   "objectives_upload", "hierarchy_upload", "objectives_import_from"}
 
 
-def _autosave_write(handle, course):
-    """Serialize one course from an editor's db cache to their git worktree --
-    the db->disk step of the debounced collab autosave (collab.schedule_autosave).
-    Module-level so it's a stable callback the timer thread can call."""
-    course_dir = os.path.join(collab.worktree_path(handle), course)
-    plan_io.write_course(collab.db_path_for(handle), course, course_dir)
+def git_backed():
+    """True when the current request's edits are auto-persisted to git -- collab
+    (a signed-in editor) or local single-user git mode."""
+    return (collab.enabled() and getattr(g, "editor", False)) or LOCAL_GIT
+
+
+def _git_target():
+    """How to persist the current edit to git, or None if not git-backed. A dict:
+    repo (dir to commit), db (for write_course), author ((name,email) or None for
+    the ambient git identity), push_key (handle to push, or None), key (debounce /
+    action-buffer bucket), delay (autosave debounce seconds). Read in the request
+    so an autosave flush built from it can run later without `g`.
+      - collab editor: their worktree + db, teacher author, push enabled;
+      - local-git:     the courses repo + main db, ambient author, no push."""
+    if collab.enabled() and getattr(g, "editor", False):
+        u = g.user or {}
+        return {"repo": g.corpus_dir, "db": g.db_path,
+                "author": (u.get("name"), u.get("email")),
+                "push_key": g.handle, "key": g.handle,
+                "delay": collab.autosave_seconds()}
+    if LOCAL_GIT:
+        return {"repo": CORPUS_DIR, "db": DB_PATH, "author": None,
+                "push_key": None, "key": "_local", "delay": LOCAL_AUTOSAVE_SECONDS}
+    return None
 
 
 def commit_structural(course, message, *, drop_course=False, remove_files=()):
-    """Collab: immediately persist a structural change to the editor's worktree and
-    commit it with an explicit `message`, then push -- for create/delete/import of
-    a course or add/remove of a reference, which shouldn't wait for (or can't be
-    expressed by) the debounced autosave. `remove_files` are paths relative to the
-    course dir to delete; `drop_course` removes the whole course dir and skips
-    write_course (the course is gone). No-op outside collab mode."""
-    if not collab.enabled() or not getattr(g, "editor", False):
+    """Immediately persist a structural change to the git-backed corpus and commit
+    it with an explicit `message` (collab: worktree + push; local-git: the courses
+    repo) -- for create/delete/import of a course or add/remove of a reference,
+    which shouldn't wait for (or can't be expressed by) the debounced autosave.
+    `remove_files` are paths relative to the course dir to delete; `drop_course`
+    removes the whole course dir (and skips write_course). No-op when not git-backed."""
+    t = _git_target()
+    if not t:
         return
-    handle = g.handle
-    course_dir = os.path.join(collab.worktree_path(handle), course)
+    course_dir = os.path.join(t["repo"], course)
     for rel in remove_files:
         try:
             os.remove(os.path.join(course_dir, rel))
@@ -182,9 +223,11 @@ def commit_structural(course, message, *, drop_course=False, remove_files=()):
     if drop_course:
         shutil.rmtree(course_dir, ignore_errors=True)
     else:
-        _autosave_write(handle, course)   # write_course: db -> worktree files
-    u = g.user or {}
-    collab.commit_worktree(handle, u.get("name"), u.get("email"), message)
+        plan_io.write_course(t["db"], course, course_dir)
+    try:
+        collab.commit_repo(t["repo"], message, author=t["author"], push_key=t["push_key"])
+    except Exception as e:
+        flash(f"Saved locally, but git commit failed: {e}")
 
 
 def current_user():
@@ -192,14 +235,15 @@ def current_user():
 
 
 def commit_after_save(course, fallback):
-    """After a save has written the corpus to the editor's worktree, commit it
-    (author = the teacher) and enqueue the push. No-op outside collab mode."""
-    if not collab.enabled() or not getattr(g, "editor", False):
+    """After a save wrote the corpus, commit it with the buffered edit phrases
+    (collab: worktree + push; local-git: the courses repo). No-op when not
+    git-backed."""
+    t = _git_target()
+    if not t:
         return
-    u = g.user
     try:
-        collab.commit_and_push(u["handle"], u.get("name"), u.get("email"),
-                               fallback)
+        collab.commit_repo(t["repo"], lambda: collab.compose_message(t["key"], fallback),
+                           author=t["author"], push_key=t["push_key"])
     except Exception as e:
         flash(f"Saved locally, but git commit failed: {e}")
 
@@ -237,30 +281,39 @@ def _collab_gate():
 
 
 @app.after_request
-def _collab_record(resp):
-    """Record a human phrase for each successful structured edit so the next save
-    can compose a descriptive commit message."""
-    if (collab.enabled() and getattr(g, "editor", False)
-            and request.method == "POST" and resp.status_code < 400):
-        ep = request.endpoint
-        # Save endpoints and the immediate structural ops commit themselves.
-        if ep in _SAVE_ENDPOINTS or ep in _IMMEDIATE_OPS:
-            return resp
-        course = (request.view_args or {}).get("course")
-        # A handler may set g.action_phrase to describe what it actually did when
-        # one endpoint covers several actions (e.g. `place` maps vs. unmaps);
-        # otherwise fall back to the static per-endpoint phrase.
-        phrase = getattr(g, "action_phrase", None)
-        if phrase is None and ep in _ACTION_PHRASES:
-            phrase = _ACTION_PHRASES[ep].format(course=course or "the course")
-        if phrase:
-            collab.record_action(g.handle, phrase)
-            # Debounced autosave: persist the edit to git automatically so collab
-            # mode needs no manual Save button.
-            if course:
-                u = g.user or {}
-                collab.schedule_autosave(g.handle, u.get("name"), u.get("email"),
-                                         course, _autosave_write)
+def _autocommit_edit(resp):
+    """Record an edit phrase and schedule the debounced autosave, so a git-backed
+    corpus (collab or local-git) commits content edits automatically -- no manual
+    Save. No-op when not git-backed, or when the op commits itself."""
+    if not (request.method == "POST" and resp.status_code < 400):
+        return resp
+    t = _git_target()
+    if not t:
+        return resp
+    ep = request.endpoint
+    # Save endpoints and the immediate structural ops commit themselves.
+    if ep in _SAVE_ENDPOINTS or ep in _IMMEDIATE_OPS:
+        return resp
+    course = (request.view_args or {}).get("course")
+    # A handler may set g.action_phrase to describe what it actually did when one
+    # endpoint covers several actions (e.g. `place` maps vs. unmaps); otherwise
+    # fall back to the static per-endpoint phrase.
+    phrase = getattr(g, "action_phrase", None)
+    if phrase is None and ep in _ACTION_PHRASES:
+        phrase = _ACTION_PHRASES[ep].format(course=course or "the course")
+    if phrase:
+        collab.record_action(t["key"], phrase)
+        if course:
+            # Capture the target now so the timer thread needs no request context.
+            repo, db, author, push_key, key = (t["repo"], t["db"], t["author"],
+                                               t["push_key"], t["key"])
+
+            def flush(c, repo=repo, db=db, author=author, push_key=push_key, key=key):
+                plan_io.write_course(db, c, os.path.join(repo, c))
+                collab.commit_repo(repo, lambda: collab.compose_message(key, f"Update {c}"),
+                                   author=author, push_key=push_key)
+
+            collab.schedule_autosave(key, t["delay"], course, flush)
     return resp
 
 
@@ -269,12 +322,15 @@ def inject_collab():
     """Template flags: whether the current user may edit (always true in
     single-user mode), their identity, and any pending-push state."""
     if not collab.enabled():
-        return {"collab_enabled": False, "can_edit": True, "collab_user": None}
+        # local-git is git_backed too (autosave commits) -> hide the Save button.
+        return {"collab_enabled": False, "can_edit": True, "collab_user": None,
+                "git_backed": LOCAL_GIT}
     editor = getattr(g, "editor", False)
     handle = getattr(g, "handle", None)
     published, pending = collab.push_status(handle) if editor and handle else (True, 0)
     return {
         "collab_enabled": True,
+        "git_backed": editor,
         "can_edit": editor,
         "collab_user": getattr(g, "user", None),
         "collab_role": getattr(g, "role", None),

@@ -536,10 +536,13 @@
                   <input type="file" name="file" accept=".md" hidden onchange="this.form.submit()">
                 </label>
               </form>
-              {# In collab mode edits autosave + commit; the manual Save/Refresh
-                 (db<->corpus on disk) only make sense for the single-user tool. #}
-              {% if not collab_enabled %}
+              {# Git-backed (collab or local-git) autosaves + commits, so no manual
+                 Save. Refresh (reload db from the corpus on disk) stays for any
+                 single-user run -- handy to pick up external edits / a git pull. #}
+              {% if not git_backed %}
               {% include "_savebtn.html" %}
+              {% endif %}
+              {% if not collab_enabled %}
               <form method="post" action="{{ url_for('course_refresh', course=c.course) }}" class="crefresh"
                     {% if c.dirty %}onsubmit="return confirm('Refresh {{ c.course|upper }} from disk? This course has unsaved changes that will be replaced by the corpus.');"{% endif %}>
                 <button type="submit" class="gear" {{ '' if c.has_corpus else 'disabled' }}
