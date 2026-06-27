@@ -30,6 +30,6 @@ targets: ced
 
 - Troubleshoot a frobnicator that will not spin.  (#2d93)
 
-## Pool — not yet placed
+# Unplaced objectives
 
 - Brainstorm a class project that uses widgets.  (#9eec)

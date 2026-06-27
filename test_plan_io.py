@@ -192,7 +192,7 @@ def main():
                 added += 1
                 break
         for i, l in enumerate(lines2):
-            if l.startswith("## ") and not l[3:].lower().startswith("pool"):
+            if l.startswith("## "):   # every H2 is now a lesson (pool is H1)
                 lines2[i] = l + " (3 days)"
                 added += 1
                 break

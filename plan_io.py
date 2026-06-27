@@ -117,6 +117,12 @@ def parse_plan(text):
         if m:
             depth, rest = len(m.group(1)), m.group(2).strip()
             if depth == 1:
+                # The unplaced-objectives pool is its own H1 section
+                # ("# Unplaced objectives"); bullets under it are pooled, not
+                # placed. A following "# Unit:" resets in_pool below.
+                if rest.lower().startswith("unplaced"):
+                    cur_lesson, in_pool = None, True
+                    continue
                 um = UNIT_RE.match(rest)
                 title = um.group(1) if um else rest
                 title, duration = hierarchy.split_duration(title)
@@ -126,6 +132,9 @@ def parse_plan(text):
                 cur_lesson, in_pool = None, False
                 units.append((cur_unit, title, duration))
             elif depth == 2:
+                # Legacy: the pool used to be an H2 ("## Pool ..."); still
+                # accept it so older plan.md files load (re-render migrates it
+                # to the H1 form above).
                 if rest.lower().startswith("pool"):
                     cur_lesson, in_pool = None, True
                     continue
@@ -594,7 +603,7 @@ def render_course(conn, course):
     placed_uuids = {u for us in placed.values() for u in us}
     unplaced = [r["uuid"] for r in pool if r["uuid"] not in placed_uuids]
     if unplaced:
-        out.append("## Pool — not yet placed")
+        out.append("# Unplaced objectives")
         out.append("")
         for uuid in unplaced:
             out.append(bullet(uuid))

@@ -152,7 +152,7 @@ targets: widgets-ced
 - Name the two main parts of a widget.  (#faf3)
 - Explain what the frobnicator does.  (#221a)
 
-## Pool — not yet placed
+# Unplaced objectives
 
 - Brainstorm a class project that uses widgets.  (#9eec)
 ```
@@ -187,9 +187,10 @@ lesson's `learning_objective` node attribute.
 
 A column-0 bullet under a lesson is a **raw objective placed in that lesson** (not
 a node): it is interned into the objective pool and given a coverage edge to the
-lesson. A `## Pool …` section (a level-2 heading whose text starts with “Pool”)
-holds pooled objectives not yet placed in any lesson. Document order of all
-bullets is the **master pool order** (`course_objectives.position`).
+lesson. A `# Unplaced objectives` section (a level-1 heading whose text starts
+with “Unplaced”) holds pooled objectives not yet placed in any lesson; the legacy
+`## Pool …` level-2 heading is still read on load. Document order of all bullets
+is the **master pool order** (`course_objectives.position`).
 
 The bullet order **within a single lesson** (or a unit's rough zone) is that
 node's own **per-node order** (`coverage.position`) — independent of the master
