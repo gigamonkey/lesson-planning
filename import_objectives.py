@@ -23,8 +23,8 @@ node_ids for an existing objective are added. uuids are generated when absent.
 There is no default coverage target: a row's hierarchy comes from its
 `hierarchy_id` column, or from `--hierarchy` (a per-hierarchy import), else the
 row is pool-only. node_ids are checked against the loaded `nodes` (load_nodes.py
-first) and unknown ones are reported -- still inserted, but flag a mislabeled
-objective or a change.
+first); an unknown one is reported and skipped (its coverage edge is not inserted)
+-- flag a mislabeled objective or a change.
 
     uv run import_objectives.py objectives.txt db.db --course csa
     uv run import_objectives.py categorized.tsv db.db --course csa
@@ -126,6 +126,7 @@ def upsert(db_path, course, rows):
     Returns (stats, dangling) -- dangling maps hierarchy -> sorted unknown node_ids.
     """
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         apply_schema(conn)
         stats = {"read": 0, "objectives_new": 0, "text_updated": 0, "text_conflicts": 0,
@@ -146,10 +147,13 @@ def upsert(db_path, course, rows):
                 if hierarchy not in known_cache:
                     known_cache[hierarchy] = {n for (n,) in conn.execute(
                         "SELECT node_id FROM nodes WHERE course=? AND hierarchy=?", (course, hierarchy))}
-                if known_cache[hierarchy] and node not in known_cache[hierarchy]:
-                    dangling.setdefault(hierarchy, set()).add(node)
-                else:
+                # Place only nodes that actually exist (coverage -> nodes FK); an
+                # unknown node -- or any node when the hierarchy has none loaded --
+                # is reported as dangling, not inserted.
+                if node in known_cache[hierarchy]:
                     placements.setdefault((hierarchy, uuid), set()).add(node)
+                else:
+                    dangling.setdefault(hierarchy, set()).add(node)
         # Replace placement: only for (hierarchy, uuid) named with valid nodes here.
         # New edges append after the node's existing objectives (coverage.position).
         for (hierarchy, uuid), nodes in placements.items():
@@ -176,6 +180,7 @@ def copy_objectives(db_path, src_course, dst_course):
     Appended to the destination pool in the source's pool order. Returns the count
     newly added to the destination."""
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         apply_schema(conn)
         texts = [r[0] for r in conn.execute(
@@ -227,6 +232,7 @@ def main():
 
     if args.replace:
         conn = sqlite3.connect(args.database)
+        conn.execute("PRAGMA foreign_keys = ON")
         try:
             apply_schema(conn)
             conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy IN "

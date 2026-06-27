@@ -155,6 +155,7 @@ def main():
     args = p.parse_args()
 
     conn = sqlite3.connect(args.database)
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         if args.cmd == "export":
             doc = export_course(conn, args.course)

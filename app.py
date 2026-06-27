@@ -128,6 +128,7 @@ def corpus_dir():
 
 def db():
     conn = sqlite3.connect(db_path())
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -918,6 +919,7 @@ def hierarchy_delete(course, hierarchy):
                          (course, hierarchy)).fetchone()[0]
         conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=?", (course, hierarchy))
         conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=?", (course, hierarchy))
+        conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=?", (course, hierarchy))
         conn.execute("DELETE FROM hierarchy_targets WHERE course=? AND (outline=? OR reference=?)",
                      (course, hierarchy, hierarchy))
         conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=?", (course, hierarchy))
@@ -964,6 +966,9 @@ def course_delete(course):
     with db() as conn:
         if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
+        # Null the outline pointer before dropping hierarchies (courses.primary_outline
+        # -> hierarchies FK); children before parents so the deletes satisfy the FKs.
+        conn.execute("UPDATE courses SET primary_outline=NULL WHERE course=?", (course,))
         for tbl in ("coverage", "node_attr", "node_duration", "nodes",
                     "hierarchy_targets", "course_objectives", "objectives", "hierarchies"):
             conn.execute(f"DELETE FROM {tbl} WHERE course=?", (course,))
@@ -1801,6 +1806,7 @@ def unit_delete(course, unit_id):
                      (course, O, unit_id))
         conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND node_id=?", (course, O, unit_id))
         conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=? AND node_id=?", (course, O, unit_id))
+        conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=? AND node_id=?", (course, O, unit_id))
         conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=? AND node_id=?", (course, O, unit_id))
         conn.commit()
         msg = "Deleted unit; lessons moved to Unassigned, rough raws back in the pool."
@@ -1894,6 +1900,7 @@ def lesson_delete(course, lesson_id):
         # Return its raws to the pool, then drop the lesson.
         conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND node_id=?", (course, O, lesson_id))
         conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=? AND node_id=?", (course, O, lesson_id))
+        conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=? AND node_id=?", (course, O, lesson_id))
         conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=? AND node_id=?", (course, O, lesson_id))
         conn.commit()
         msg = "Deleted lesson; its raws returned to the pool."

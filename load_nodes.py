@@ -105,10 +105,9 @@ def load_into(conn, slug, course, course_title, rows, source=None, title=None,
     conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)"
                  " ON CONFLICT(course) DO NOTHING",
                  (course, course_title))
-    conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=?", (course, slug))
-    conn.executemany("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
-    conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=?", (course, slug))
-    conn.executemany("INSERT INTO node_duration VALUES (?, ?, ?, ?, ?)", durations or [])
+    # Register the hierarchy BEFORE its nodes (nodes -> hierarchies FK), and clear
+    # the old node_duration before its nodes (node_duration -> nodes FK), so the
+    # replace satisfies foreign keys.
     title = title or slug   # title is required in the markdown; last-ditch default
     conn.execute(
         "INSERT INTO hierarchies(course, hierarchy, editable, title, source, source_md)"
@@ -117,6 +116,10 @@ def load_into(conn, slug, course, course_title, rows, source=None, title=None,
         " editable=0, title=excluded.title, source=excluded.source,"
         " source_md=excluded.source_md",
         (course, slug, title, source, source_md))
+    conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=?", (course, slug))
+    conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=?", (course, slug))
+    conn.executemany("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    conn.executemany("INSERT INTO node_duration VALUES (?, ?, ?, ?, ?)", durations or [])
 
 
 def load(db_path, slug, course, course_title, rows, source=None, title=None,
@@ -130,6 +133,7 @@ def load(db_path, slug, course, course_title, rows, source=None, title=None,
     for this hierarchy (replaced wholesale).
     """
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         apply_schema(conn)
         load_into(conn, slug, course, course_title, rows, source, title, durations,

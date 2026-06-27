@@ -203,7 +203,7 @@ def _rebuild_outline_nodes(conn, course, outline, units, lessons, los):
         _set_duration(conn, course, outline, lid, duration)
 
 
-def _resolve_bullets(conn, course, outline, bullets, known_uuids):
+def _resolve_bullets(conn, course, outline, bullets, known_uuids, canon=None):
     """Resolve each plan.md bullet to an objective and (re)build the course's pool
     membership/order + outline placements. Each bullet's token is matched (by
     shortest-unique prefix) against `known_uuids` -- the course's existing
@@ -211,14 +211,20 @@ def _resolve_bullets(conn, course, outline, bullets, known_uuids):
     of truth), while a tokenless/ambiguous bullet interns by text or mints a fresh
     uuid (appended to `known_uuids`). Shared by read_course and load_plan_text.
 
+    `canon` (optional) maps a disk uuid to the canonical uuid the course actually
+    uses, so a token that resolves to a loser uuid (a same-text duplicate or a
+    cross-course re-mint -- see read_course) lands on the surviving objective.
+
     Returns the number of outline placements made.
     """
+    canon = canon or {}
     pos = 0
     n_place = 0
     outline_pos = {}   # outline node_id -> next per-node coverage position
     for otext, token, placement in bullets:
         uuid = resolve_token(token, known_uuids) if token else None
         if uuid:
+            uuid = canon.get(uuid, uuid)
             # Token wins: markdown text is the source of truth -> adopt it.
             conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (otext, uuid))
         else:
@@ -274,18 +280,25 @@ def read_course(db_path, course_dir):
     targets = _split_list(meta.get("targets"))
 
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         conn.executescript(SCHEMA_DDL)
+        # Under FK enforcement courses.primary_outline must not dangle: null it
+        # before we drop this course's hierarchies, and re-point it once the outline
+        # hierarchy has been rebuilt (at the end of the load).
+        conn.execute("UPDATE courses SET primary_outline=NULL WHERE course=?", (course,))
         # Scoped reset: every hierarchy-scoped table carries `course`, so dropping
-        # this course's rows is a flat per-table delete.
+        # this course's rows is a flat per-table delete. Children before parents
+        # (coverage/attrs/durations before nodes; nodes before hierarchies) so the
+        # deletes themselves satisfy the foreign keys.
         for tbl in ("coverage", "node_attr", "node_duration", "nodes",
                     "hierarchy_targets", "course_objectives", "objectives", "hierarchies"):
             conn.execute(f"DELETE FROM {tbl} WHERE course=?", (course,))
         conn.execute(
             "INSERT INTO courses(course, title, primary_outline, calendar)"
-            " VALUES (?, ?, ?, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
-            " primary_outline=excluded.primary_outline, calendar=excluded.calendar",
-            (course, title, outline, meta.get("calendar")))
+            " VALUES (?, ?, NULL, ?) ON CONFLICT(course) DO UPDATE SET title=excluded.title,"
+            " primary_outline=NULL, calendar=excluded.calendar",
+            (course, title, meta.get("calendar")))
 
         # Reference hierarchies (editable=0), parsed straight from markdown.
         n_refs = 0
@@ -320,27 +333,43 @@ def read_course(db_path, course_dir):
 
         # Objectives: seed the uuid<->text registry, then resolve each bullet's
         # token (by prefix) to a uuid, or intern by text / mint a fresh uuid.
-        # Resolve against THIS course's registry only (tokens are the shortest
-        # prefix unique within the course); newly minted uuids join it.
         reg = _read_objectives_tsv(course_dir)        # [(uuid, text)]
-        # Objectives are course-owned now. A uuid already claimed by ANOTHER course
-        # (a corpus saved while objectives were still shared) is re-minted for this
-        # course; `remap` then rewrites this course's coverage.tsv references to it.
-        remap = {}
+        # Build `canon`: every disk uuid -> the canonical uuid this course uses.
+        # Two TSV rows with identical text are the SAME objective minted twice --
+        # only a branch merge produces this, and UNIQUE(course, text) is the model's
+        # invariant -- so collapse them onto one winner (the first, i.e. smallest
+        # uuid, since the TSV is uuid-sorted) and rewrite every reference (bullets,
+        # reference coverage, pool membership) to it. Separately, a uuid already
+        # owned by ANOTHER course (a corpus saved while objectives were still
+        # shared) is re-minted, never shared. Both rewrites flow through `canon`.
+        canon = {}
+        winner_for_text = {}
+        dup_losers = {}   # winner uuid -> [loser uuids], for reporting
         for uuid, text in reg:
+            win = winner_for_text.get(text)
+            if win is not None:
+                canon[uuid] = win
+                dup_losers.setdefault(win, []).append(uuid)
+                continue
             owner = conn.execute("SELECT course FROM objectives WHERE uuid=?", (uuid,)).fetchone()
-            if owner and owner[0] != course:
-                remap[uuid] = uuid = _new_uuid()
+            use = _new_uuid() if owner and owner[0] != course else uuid
+            canon[uuid] = use
+            winner_for_text[text] = use
             conn.execute("INSERT OR IGNORE INTO objectives(uuid, course, text) VALUES (?, ?, ?)",
-                         (uuid, course, text))
-        _resolve_bullets(conn, course, outline, bullets,
-                         [remap.get(u, u) for u, _ in reg])
+                         (use, course, text))
+        for win, losers in dup_losers.items():
+            wtext = conn.execute("SELECT text FROM objectives WHERE uuid=?", (win,)).fetchone()[0]
+            print(f"note: {course!r}: unified {len(losers) + 1} objectives with identical "
+                  f"text onto one uuid ({len(losers)} duplicate(s) merged): {wtext!r}")
+        # Resolve tokens against the full disk uuid list (so a loser's token still
+        # resolves), then map the result through `canon`.
+        _resolve_bullets(conn, course, outline, bullets, [u for u, _ in reg], canon)
 
         # Reference coverage edges (many-to-many across hierarchies). The row order
         # within each (hierarchy, node_id) in coverage.tsv is the per-node order.
         ref_pos = {}
         for uuid, hid, node_id in _read_coverage_tsv(course_dir):
-            uuid = remap.get(uuid, uuid)
+            uuid = canon.get(uuid, uuid)
             p = ref_pos.get((hid, node_id), 0)
             ref_pos[(hid, node_id)] = p + 1
             conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"
@@ -355,6 +384,29 @@ def read_course(db_path, course_dir):
             conn.execute("INSERT OR IGNORE INTO hierarchy_targets"
                          "(course, outline, reference, position) VALUES (?, ?, ?, ?)",
                          (course, outline, ref, pos))
+
+        # Re-point the outline now that its hierarchy + nodes exist (see the null
+        # above): a no-op when unchanged, but required under FK enforcement.
+        conn.execute("UPDATE courses SET primary_outline=? WHERE course=?", (outline, course))
+
+        # (2) Surface placements the merge collapsed onto one objective. After
+        # unification an objective may sit in two outline nodes -- each user placed
+        # "their" copy in a different lesson. We keep BOTH edges (the objective then
+        # shows up under both lessons, which is itself the surfacing), but warn: the
+        # outline is single-placement, so a human must pick one. (Normal, unmerged
+        # data is single-placement, so this never fires.)
+        title_of = dict(conn.execute(
+            "SELECT node_id, text FROM nodes WHERE course=? AND hierarchy=?", (course, outline)))
+        for (uuid,) in conn.execute(
+                "SELECT uuid FROM coverage WHERE course=? AND hierarchy=?"
+                " GROUP BY uuid HAVING count(*) > 1", (course, outline)).fetchall():
+            where = [title_of.get(nid, nid) for (nid,) in conn.execute(
+                "SELECT node_id FROM coverage WHERE course=? AND hierarchy=? AND uuid=?"
+                " ORDER BY position", (course, outline, uuid))]
+            otext = conn.execute("SELECT text FROM objectives WHERE uuid=?", (uuid,)).fetchone()[0]
+            print(f"warning: {course!r}: objective {otext!r} is placed in {len(where)} "
+                  f"lessons after merge ({'; '.join(where)}) -- pick one")
+
         conn.commit()
         n_obj = conn.execute("SELECT count(*) FROM course_objectives WHERE course=?",
                              (course,)).fetchone()[0]
@@ -385,6 +437,7 @@ def load_plan_text(db_path, course, text):
     targets = _split_list(meta.get("targets"))
 
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         conn.executescript(SCHEMA_DDL)
         row = conn.execute(
@@ -409,14 +462,15 @@ def load_plan_text(db_path, course, text):
                      (course, outline))
         conn.execute("DELETE FROM course_objectives WHERE course=?", (course,))
 
-        conn.execute(
-            "UPDATE courses SET title=?, primary_outline=?, calendar=? WHERE course=?",
-            (title, outline, meta.get("calendar"), course))
-        # The outline hierarchy row normally already exists; ensure it does.
+        # Ensure the outline hierarchy exists BEFORE pointing courses.primary_outline
+        # at it (FK enforcement); it normally already exists.
         conn.execute(
             "INSERT OR IGNORE INTO hierarchies(course, hierarchy, editable, title, source)"
             " VALUES (?, ?, 1, ?, ?)",
             (course, outline, "Course outline", PLAN_FILE))
+        conn.execute(
+            "UPDATE courses SET title=?, primary_outline=?, calendar=? WHERE course=?",
+            (title, outline, meta.get("calendar"), course))
 
         _rebuild_outline_nodes(conn, course, outline, units, lessons, los)
         n_place = _resolve_bullets(conn, course, outline, bullets, known_uuids)
@@ -600,6 +654,7 @@ def write_course(db_path, course, course_dir):
     """
     os.makedirs(course_dir, exist_ok=True)
     conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         files, n_obj, n_cov = render_course(conn, course)
         ref_files = _reference_files(conn, course)
