@@ -550,7 +550,7 @@
         <div class="collabacts">
           {% if can_edit %}
           <form method="post" action="{{ url_for('sync_courses') }}" class="collabsync">
-            <button type="submit" title="Pull the latest merged changes from main">
+            <button type="submit" title="Commit & push your changes and pull the latest from main">
               <i class="bi bi-arrow-repeat"></i> Sync</button>
           </form>
           {% endif %}

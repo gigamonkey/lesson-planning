@@ -442,7 +442,25 @@ def sync_courses():
         if not getattr(g, "editor", False):
             abort(403)
         u = g.user
-        result = collab.sync(u["handle"], u.get("name"), u.get("email"))
+        try:
+            # 1) Persist EVERYTHING: write the live db for all of the editor's
+            #    courses to the worktree and commit synchronously, so Sync captures
+            #    any debounced-but-uncommitted edits (and anything a restart lost),
+            #    not just what the autosave timer happened to flush.
+            collab.cancel_autosave(g.handle)
+            with db() as conn:
+                courses = [r["course"] for r in
+                           conn.execute("SELECT course FROM courses ORDER BY course")]
+            for c in courses:
+                plan_io.write_course(g.db_path, c, os.path.join(g.corpus_dir, c))
+            collab.commit_repo(g.corpus_dir,
+                               lambda: collab.compose_message(g.handle, "Save edits"),
+                               author=(u.get("name"), u.get("email")), push_key=None)
+            # 2) Merge origin/main and push -- synchronously.
+            result = collab.sync(u["handle"], u.get("name"), u.get("email"))
+        except Exception as e:
+            flash(f"Sync failed: {e}")
+            return back
         if result.get("conflict"):
             flash(f"{result['message']} Files: {', '.join(result.get('files', []))}")
         else:

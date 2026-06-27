@@ -538,45 +538,67 @@ def _autosave_fire(key):
             print(f"collab: autosave {key}/{course} failed: {e}", file=sys.stderr)
 
 
+def cancel_autosave(key):
+    """Drop any pending debounce timer + dirty set for `key`. Used by Sync, which
+    commits everything synchronously, so the deferred autosave has nothing to do."""
+    with _autosave_guard:
+        st = _autosave.get(key)
+        if st:
+            if st["timer"] is not None:
+                st["timer"].cancel()
+            st["timer"] = None
+            st["courses"] = set()
+
+
 # --------------------------------------------------------------------------
-# Sync: merge origin/main into a worktree branch (never rebase)
+# Sync: make the editor's branch consistent with GitHub -- merge origin/main in
+# (never rebase) and push, both SYNCHRONOUSLY. The caller commits pending edits
+# first; this returns only once GitHub is (or isn't) up to date.
 # --------------------------------------------------------------------------
 
 def sync(handle, name, email):
-    """Fetch and merge origin/main into the editor's branch. Returns a dict:
-    {ok, updated, conflict, files, message}. On a clean merge the db is rebuilt
-    and the (merge) commit is pushed."""
+    """Merge origin/main into the editor's branch, then push -- synchronously.
+    Returns {ok, updated, conflict, pushed, files, message}. `ok` is False on a
+    merge conflict or a failed push (so the caller can surface it)."""
     handle = _safe_handle(handle)
     wt = worktree_path(handle)
     git_fetch()
-    _, before = _git(["rev-parse", "HEAD"], cwd=wt)
-    _, main = _git(["rev-parse", "origin/main"], cwd=wt)
-    # Already contains origin/main? Nothing to do.
+    updated = False
+    # Merge origin/main unless the branch already contains it.
     code, _ = _git(["merge-base", "--is-ancestor", "origin/main", "HEAD"], cwd=wt)
-    if code == 0:
-        return {"ok": True, "updated": False, "conflict": False,
-                "message": "Already up to date with main."}
-    author = (name or handle, email or _noreply(handle))
-    code, out = _git(["merge", "--no-edit", "origin/main"], cwd=wt, author=author)
     if code != 0:
-        # Surface the conflicted files; leave the merge in progress for the user
-        # to resolve on GitHub or locally. (Abort so the sandbox stays usable.)
-        _, files = _git(["diff", "--name-only", "--diff-filter=U"], cwd=wt)
-        _git(["merge", "--abort"], cwd=wt)
-        return {"ok": False, "updated": False, "conflict": True,
-                "files": [f for f in files.splitlines() if f],
-                "message": "Merge conflict with main; resolve on GitHub."}
-    try:
-        rebuild_db(handle)
-    except RuntimeError as e:
-        # The merge landed but the merged corpus is malformed. The commit is on
-        # the branch (pushable); the live db kept its previous good state.
-        enqueue_push(handle)
-        return {"ok": False, "updated": True, "conflict": False,
-                "message": f"Merged main, but the corpus didn't load: {e}"}
-    enqueue_push(handle)
-    return {"ok": True, "updated": True, "conflict": False,
-            "message": "Merged the latest from main."}
+        author = (name or handle, email or _noreply(handle))
+        mcode, _out = _git(["merge", "--no-edit", "origin/main"], cwd=wt, author=author)
+        if mcode != 0:
+            # Surface the conflicted files; abort so the sandbox stays usable.
+            _, files = _git(["diff", "--name-only", "--diff-filter=U"], cwd=wt)
+            _git(["merge", "--abort"], cwd=wt)
+            return {"ok": False, "updated": False, "conflict": True, "pushed": False,
+                    "files": [f for f in files.splitlines() if f],
+                    "message": "Merge conflict with main; resolve on GitHub. "
+                               "(Your edits are committed and safe.)"}
+        try:
+            rebuild_db(handle)
+        except RuntimeError as e:
+            # Merge landed but the merged corpus is malformed; still push so the
+            # commit isn't stranded, and report.
+            ok, out = _push_once(handle)
+            return {"ok": False, "updated": True, "conflict": False, "pushed": ok,
+                    "message": f"Merged main, but the corpus didn't load: {e}"
+                               + ("" if ok else f" (push also failed: {out})")}
+        updated = True
+    # Push synchronously so Sync returns only once GitHub has the branch.
+    ok, out = _push_once(handle)
+    if updated and ok:
+        msg = "Merged the latest from main and pushed your branch."
+    elif updated:
+        msg = f"Merged main, but the push failed: {out}"
+    elif ok:
+        msg = "Pushed your branch — already up to date with main."
+    else:
+        msg = f"Up to date with main, but the push failed: {out}"
+    return {"ok": ok, "updated": updated, "conflict": False, "pushed": ok,
+            "message": msg}
 
 
 # --------------------------------------------------------------------------
