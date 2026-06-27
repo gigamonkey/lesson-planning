@@ -79,28 +79,36 @@ def parse_coverage(content, default_hierarchy=None):
     return rows, "table"
 
 
-def _resolve_upsert(conn, uuid_in, text, stats):
-    """uuid for (uuid_in, text), updating identity-keyed text. A known uuid keeps
-    its identity and its text is REPLACED by `text` (unless that text already
-    belongs to another objective -- UNIQUE(text) -- in which case it's left and
-    counted as a conflict). Otherwise intern by text, else create."""
+def _resolve_upsert(conn, course, uuid_in, text, stats):
+    """uuid for (course, text); objectives are course-owned. A uuid_in that names
+    an objective IN THIS COURSE keeps its identity and its text is REPLACED by
+    `text` (unless that text already belongs to another objective in the course --
+    UNIQUE(course, text) -- left as-is, counted as a conflict). A uuid_in owned by
+    a DIFFERENT course is re-minted (never shared). Otherwise intern by
+    (course, text), else create."""
     if uuid_in:
-        row = conn.execute("SELECT text FROM objectives WHERE uuid=?", (uuid_in,)).fetchone()
+        row = conn.execute("SELECT course, text FROM objectives WHERE uuid=?",
+                           (uuid_in,)).fetchone()
         if row:
-            if row[0] != text:
-                clash = conn.execute("SELECT 1 FROM objectives WHERE text=? AND uuid<>?",
-                                     (text, uuid_in)).fetchone()
-                if clash:
-                    stats["text_conflicts"] += 1
-                else:
-                    conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (text, uuid_in))
-                    stats["text_updated"] += 1
-            return uuid_in
-    row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
+            o_course, o_text = row
+            if o_course == course:
+                if o_text != text:
+                    clash = conn.execute(
+                        "SELECT 1 FROM objectives WHERE course=? AND text=? AND uuid<>?",
+                        (course, text, uuid_in)).fetchone()
+                    if clash:
+                        stats["text_conflicts"] += 1
+                    else:
+                        conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (text, uuid_in))
+                        stats["text_updated"] += 1
+                return uuid_in
+            uuid_in = None   # belongs to another course -> re-mint below
+    row = conn.execute("SELECT uuid FROM objectives WHERE course=? AND text=?",
+                       (course, text)).fetchone()
     if row:
         return row[0]
     u = uuid_in or str(uuidlib.uuid4())
-    conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
+    conn.execute("INSERT INTO objectives(uuid, course, text) VALUES (?, ?, ?)", (u, course, text))
     stats["objectives_new"] += 1
     return u
 
@@ -127,7 +135,7 @@ def upsert(db_path, course, rows):
         known_cache, dangling, placements = {}, {}, {}
         for uuid_in, text, hierarchy, node in rows:
             stats["read"] += 1
-            uuid = _resolve_upsert(conn, uuid_in, text, stats)
+            uuid = _resolve_upsert(conn, course, uuid_in, text, stats)
             if not conn.execute("SELECT 1 FROM course_objectives WHERE course=? AND uuid=?",
                                 (course, uuid)).fetchone():
                 conn.execute("INSERT INTO course_objectives(course, uuid, position)"
@@ -158,6 +166,43 @@ def upsert(db_path, course, rows):
     finally:
         conn.close()
     return stats, {h: sorted(s) for h, s in dangling.items()}
+
+
+def copy_objectives(db_path, src_course, dst_course):
+    """Copy the source course's pool objectives into the destination as NEW,
+    independent objectives: same text, re-interned per-course (fresh uuids, unless
+    the destination already has that text -- then it's reused, not duplicated).
+    Placements are NOT copied (the destination's outline/references differ).
+    Appended to the destination pool in the source's pool order. Returns the count
+    newly added to the destination."""
+    conn = sqlite3.connect(db_path)
+    try:
+        apply_schema(conn)
+        texts = [r[0] for r in conn.execute(
+            "SELECT o.text FROM objectives o JOIN course_objectives co"
+            " ON co.uuid=o.uuid AND co.course=? ORDER BY co.position, o.text", (src_course,))]
+        pos = conn.execute("SELECT COALESCE(MAX(position), -1)+1 FROM course_objectives"
+                           " WHERE course=?", (dst_course,)).fetchone()[0]
+        added = 0
+        for text in texts:
+            row = conn.execute("SELECT uuid FROM objectives WHERE course=? AND text=?",
+                               (dst_course, text)).fetchone()
+            if row:
+                uuid = row[0]
+            else:
+                uuid = str(uuidlib.uuid4())
+                conn.execute("INSERT INTO objectives(uuid, course, text) VALUES (?, ?, ?)",
+                             (uuid, dst_course, text))
+            if not conn.execute("SELECT 1 FROM course_objectives WHERE course=? AND uuid=?",
+                                (dst_course, uuid)).fetchone():
+                conn.execute("INSERT INTO course_objectives(course, uuid, position)"
+                             " VALUES (?, ?, ?)", (dst_course, uuid, pos))
+                pos += 1
+                added += 1
+        conn.commit()
+        return added
+    finally:
+        conn.close()
 
 
 def main():

@@ -152,7 +152,7 @@ _SAVE_ENDPOINTS = {"export", "outline_source"}
 # express, and they deserve a meaningful one-off commit.
 _IMMEDIATE_OPS = {"course_new", "course_delete", "course_import",
                   "hierarchy_load_course", "hierarchy_delete",
-                  "objectives_upload", "hierarchy_upload"}
+                  "objectives_upload", "hierarchy_upload", "objectives_import_from"}
 
 
 def _autosave_write(handle, course):
@@ -900,13 +900,9 @@ def course_delete(course):
         if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
         for tbl in ("coverage", "node_attr", "node_duration", "nodes",
-                    "hierarchy_targets", "hierarchies", "course_objectives"):
+                    "hierarchy_targets", "course_objectives", "objectives", "hierarchies"):
             conn.execute(f"DELETE FROM {tbl} WHERE course=?", (course,))
         conn.execute("DELETE FROM courses WHERE course=?", (course,))
-        # Objectives are course-agnostic (interned by text); drop only those now
-        # belonging to no course at all.
-        conn.execute("DELETE FROM objectives WHERE uuid NOT IN "
-                     "(SELECT uuid FROM course_objectives)")
     commit_structural(course, f"Delete course {course}", drop_course=True)
     flash(f"Deleted course {course!r}.")
     return redirect(url_for("index"))
@@ -1187,10 +1183,12 @@ def node_objectives_bulk(course, hierarchy, node_id):
                 # Token wins: the edited text is the source of truth -> adopt it.
                 conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (text, uuid))
             else:
-                row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
+                row = conn.execute("SELECT uuid FROM objectives WHERE course=? AND text=?",
+                                   (course, text)).fetchone()
                 uuid = row["uuid"] if row else str(uuidlib.uuid4())
                 if not row:
-                    conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (uuid, text))
+                    conn.execute("INSERT INTO objectives(uuid, course, text) VALUES (?, ?, ?)",
+                                 (uuid, course, text))
                     known.append(uuid)
             if uuid in seen:        # a repeated token/text collapses to one placement
                 continue
@@ -1314,8 +1312,12 @@ def objectives(course):
             for cell in o["cells"].values():
                 cell["tags"].sort(key=lambda t: t["ord"])
     rows = sorted(objs.values(), key=lambda o: o["sort"])
+    with db() as conn:
+        other_courses = [r["course"] for r in conn.execute(
+            "SELECT course FROM courses WHERE course<>? ORDER BY course", (course,))]
     return render_template("objectives.html", course=course, objectives=rows,
                            hierarchies=cols, total=len(rows),
+                           other_courses=other_courses,
                            page_title=f"{course.upper()} objectives")
 
 
@@ -1409,6 +1411,26 @@ def objectives_upload(course):
     return back
 
 
+@app.route("/<course>/objectives/import-from", methods=["POST"])
+def objectives_import_from(course):
+    """Copy another course's pool objectives into this one as new, independent
+    objectives (re-interned per-course -- see import_objectives.copy_objectives)."""
+    src = (request.form.get("source") or "").strip()
+    back = redirect(url_for("objectives", course=course))
+    with db() as conn:
+        if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+            abort(404)
+        ok_src = src and src != course and conn.execute(
+            "SELECT 1 FROM courses WHERE course=?", (src,)).fetchone()
+    if not ok_src:
+        flash("Pick a different existing course to import objectives from.")
+        return back
+    n = import_objectives.copy_objectives(db_path(), src, course)
+    commit_structural(course, f"Import objectives from {src} into {course}")
+    flash(f"Imported {n} objective(s) from {src.upper()}.")
+    return back
+
+
 def _back(course):
     """Redirect to the posting page, re-anchored to a node if `anchor` was sent.
 
@@ -1467,10 +1489,12 @@ def objective_new(course):
         with db() as conn:
             R = active_ref()
             # Intern by text: reuse the existing objective, or create a new one.
-            row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (text,)).fetchone()
+            row = conn.execute("SELECT uuid FROM objectives WHERE course=? AND text=?",
+                               (course, text)).fetchone()
             u = row[0] if row else str(uuidlib.uuid4())
             if not row:
-                conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (u, text))
+                conn.execute("INSERT INTO objectives(uuid, course, text) VALUES (?, ?, ?)",
+                             (u, course, text))
             conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid) VALUES (?, ?)",
                          (course, u))
             if node and R:
@@ -1496,8 +1520,8 @@ def objective_edit(course, uuid):
         with db() as conn:
             # Text is the natural key: refuse an edit that would duplicate another
             # objective (the user should map both to a node, not retype the text).
-            clash = conn.execute("SELECT 1 FROM objectives WHERE text=? AND uuid<>?",
-                                 (text, uuid)).fetchone()
+            clash = conn.execute("SELECT 1 FROM objectives WHERE course=? AND text=? AND uuid<>?",
+                                 (course, text, uuid)).fetchone()
             if clash:
                 if request.headers.get("HX-Request"):
                     return ("an objective with that text already exists", 409)

@@ -18,6 +18,16 @@
         <input type="file" name="file" hidden onchange="this.form.submit()">
       </label>
     </form>
+    {% if can_edit and other_courses %}
+    <form method="post" action="{{ url_for('objectives_import_from', course=course) }}"
+          class="objimport" title="Copy another course's objectives into this one as new, independent objectives">
+      <select name="source" aria-label="Import objectives from another course"
+              onchange="if (this.value) this.form.submit()">
+        <option value="" selected>Import from…</option>
+        {% for c in other_courses %}<option value="{{ c }}">{{ c|upper }}</option>{% endfor %}
+      </select>
+    </form>
+    {% endif %}
   </div>
 
   <p class="objcount"><b id="obj-count">{{ total }}</b> objectives</p>

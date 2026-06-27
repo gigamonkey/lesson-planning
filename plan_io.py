@@ -222,12 +222,14 @@ def _resolve_bullets(conn, course, outline, bullets, known_uuids):
             # Token wins: markdown text is the source of truth -> adopt it.
             conn.execute("UPDATE objectives SET text=? WHERE uuid=?", (otext, uuid))
         else:
-            row = conn.execute("SELECT uuid FROM objectives WHERE text=?", (otext,)).fetchone()
+            row = conn.execute("SELECT uuid FROM objectives WHERE course=? AND text=?",
+                               (course, otext)).fetchone()
             if row:
                 uuid = row[0]
             else:
                 uuid = _new_uuid()
-                conn.execute("INSERT INTO objectives(uuid, text) VALUES (?, ?)", (uuid, otext))
+                conn.execute("INSERT INTO objectives(uuid, course, text) VALUES (?, ?, ?)",
+                             (uuid, course, otext))
                 known_uuids.append(uuid)
         conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid, position)"
                      " VALUES (?, ?, ?)", (course, uuid, pos))
@@ -277,7 +279,7 @@ def read_course(db_path, course_dir):
         # Scoped reset: every hierarchy-scoped table carries `course`, so dropping
         # this course's rows is a flat per-table delete.
         for tbl in ("coverage", "node_attr", "node_duration", "nodes",
-                    "hierarchy_targets", "course_objectives", "hierarchies"):
+                    "hierarchy_targets", "course_objectives", "objectives", "hierarchies"):
             conn.execute(f"DELETE FROM {tbl} WHERE course=?", (course,))
         conn.execute(
             "INSERT INTO courses(course, title, primary_outline, calendar)"
@@ -321,15 +323,24 @@ def read_course(db_path, course_dir):
         # Resolve against THIS course's registry only (tokens are the shortest
         # prefix unique within the course); newly minted uuids join it.
         reg = _read_objectives_tsv(course_dir)        # [(uuid, text)]
+        # Objectives are course-owned now. A uuid already claimed by ANOTHER course
+        # (a corpus saved while objectives were still shared) is re-minted for this
+        # course; `remap` then rewrites this course's coverage.tsv references to it.
+        remap = {}
         for uuid, text in reg:
-            conn.execute("INSERT OR IGNORE INTO objectives(uuid, text) VALUES (?, ?)",
-                         (uuid, text))
-        _resolve_bullets(conn, course, outline, bullets, [u for u, _ in reg])
+            owner = conn.execute("SELECT course FROM objectives WHERE uuid=?", (uuid,)).fetchone()
+            if owner and owner[0] != course:
+                remap[uuid] = uuid = _new_uuid()
+            conn.execute("INSERT OR IGNORE INTO objectives(uuid, course, text) VALUES (?, ?, ?)",
+                         (uuid, course, text))
+        _resolve_bullets(conn, course, outline, bullets,
+                         [remap.get(u, u) for u, _ in reg])
 
         # Reference coverage edges (many-to-many across hierarchies). The row order
         # within each (hierarchy, node_id) in coverage.tsv is the per-node order.
         ref_pos = {}
         for uuid, hid, node_id in _read_coverage_tsv(course_dir):
+            uuid = remap.get(uuid, uuid)
             p = ref_pos.get((hid, node_id), 0)
             ref_pos[(hid, node_id)] = p + 1
             conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position)"

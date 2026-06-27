@@ -233,8 +233,11 @@ On **load**, the token is resolved by prefix-matching against the uuids in
 - Resolves to exactly one uuid → that objective; the bullet's text is adopted as
   the objective's text (so a reword preserves identity, and therefore coverage).
 - No token, or a token matching zero or more than one uuid → intern by exact text
-  (reuse an objective with that text, else mint a fresh uuid). This is how a
-  hand-typed bullet, or a cleared token, becomes a new objective.
+  *within this course* (reuse the course's objective with that text, else mint a
+  fresh uuid). This is how a hand-typed bullet, or a cleared token, becomes a new
+  objective. Objectives are course-owned: identical text in another course is a
+  separate objective, and a uuid already owned by another course is re-minted on
+  load.
 
 **No full uuids ever appear in markdown.**
 

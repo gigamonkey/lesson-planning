@@ -54,28 +54,29 @@ get **different** uuids.
 
 ### Schema (`schema.sql`, bump `PRAGMA user_version`)
 
-Recommended — fold the pool into `objectives` and drop `course_objectives`:
+**DECISION (implemented): keep `course_objectives`, add `course` to
+`objectives`.** The fold was rejected during implementation: `read_course` and
+`load_plan_text` reset the pool (`DELETE course_objectives`) while deliberately
+*keeping* `objectives`, because reference-hierarchy coverage points at those rows
+and must survive a pool rebuild. Folding the pool into `objectives` would mean
+deleting objective rows that coverage still needs, plus orphan-cleanup logic and
+careful ordering — real risk for a cosmetic gain. So:
 
 ```sql
 CREATE TABLE objectives (
-  uuid     TEXT PRIMARY KEY,
-  course   TEXT NOT NULL REFERENCES courses(course),
-  text     TEXT NOT NULL,
-  position INTEGER,                 -- per-course pool order (was course_objectives.position)
-  status   TEXT NOT NULL DEFAULT 'active',
+  uuid   TEXT PRIMARY KEY,
+  course TEXT NOT NULL REFERENCES courses(course),
+  text   TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
   UNIQUE (course, text)            -- interning key is now per-course
 );
+-- course_objectives unchanged: still the pool (membership + order).
 ```
 
-`coverage` is unchanged (still `uuid REFERENCES objectives(uuid)`; it already
-carries `course`). `course_objectives` goes away — membership is now
-`objectives.course`, and `position` moves onto `objectives`.
-
-Lower-churn alternative (if we want to minimize query rewrites): keep
-`course_objectives` and only add `course` to `objectives`, changing
-`UNIQUE(text)` → `UNIQUE(course, text)`. This leaves `objectives.course` and
-`course_objectives.course` redundant (always equal) — workable but confusing.
-Recommendation: do the fold; it removes the redundancy and a JOIN.
+`coverage` is unchanged (`uuid REFERENCES objectives(uuid)`). The mild redundancy
+(`objectives.course` always equals `course_objectives.course`) is the price of
+the simple, safe reset flow. `objectives.course` carries OWNERSHIP/identity (the
+interning key); `course_objectives` carries pool membership + order.
 
 Rejected alternative: composite key `(course, uuid)`. More FK churn across
 `coverage`/tokens for no real benefit, since we re-mint uuids on collision anyway

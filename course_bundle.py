@@ -18,6 +18,7 @@ self-contained file (move it between databases, or delete-and-restore one course
 import argparse
 import json
 import sqlite3
+import uuid as uuidlib
 
 BUNDLE_VERSION = "1.2.0"   # 1.1.0: coverage.position; 1.2.0: node_duration + course calendar
 FORMAT_MAJOR = 1
@@ -115,19 +116,16 @@ def import_course(conn, doc, course=None):
     conn.execute("UPDATE courses SET primary_outline=?, calendar=? WHERE course=?",
                  (doc["course"].get("primary_outline"), doc["course"].get("calendar"), cid))
 
+    # Objectives are course-owned: the imported course gets its own copies. The
+    # bundle's uuids are kept when free, re-minted when already taken (by another
+    # course), and coverage is remapped through `uuid_map`.
     uuid_map = {}
     for o in doc["objectives"]:
-        if conn.execute("SELECT 1 FROM objectives WHERE uuid=?", (o["uuid"],)).fetchone():
-            uid = o["uuid"]
-        else:
-            trow = conn.execute("SELECT uuid FROM objectives WHERE text=?",
-                                (o["text"],)).fetchone()
-            if trow:
-                uid = trow[0]
-            else:
-                conn.execute("INSERT INTO objectives(uuid, text, status) VALUES (?, ?, ?)",
-                             (o["uuid"], o["text"], o.get("status") or "active"))
-                uid = o["uuid"]
+        uid = o["uuid"]
+        if conn.execute("SELECT 1 FROM objectives WHERE uuid=?", (uid,)).fetchone():
+            uid = str(uuidlib.uuid4())
+        conn.execute("INSERT INTO objectives(uuid, course, text, status) VALUES (?, ?, ?, ?)",
+                     (uid, cid, o["text"], o.get("status") or "active"))
         uuid_map[o["uuid"]] = uid
         conn.execute("INSERT OR IGNORE INTO course_objectives(course, uuid, position)"
                      " VALUES (?, ?, ?)", (cid, uid, o.get("position")))

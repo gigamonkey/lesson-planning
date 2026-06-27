@@ -21,7 +21,7 @@
 -- stamps every db with this version (PRAGMA user_version) and, on startup,
 -- discards + rebuilds-from-corpus any db whose stamp doesn't match -- so a stale
 -- db.db from an older schema heals itself instead of 500ing.
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 
 -- Courses are the top-level organizing principle: a short human id (also the
 -- /<course> URL) and a title. Every hierarchy belongs to a course.
@@ -70,18 +70,26 @@ CREATE TABLE IF NOT EXISTS nodes (
   FOREIGN KEY (course, hierarchy) REFERENCES hierarchies(course, hierarchy)
 );
 
--- RAW objectives: the atoms the teacher drafted. Course-agnostic text; a raw
--- objective can belong to >1 course. Text is the natural key (UNIQUE): importers
--- and the app intern by text -- find-or-create -- so identical text never yields
--- two objectives (they share one uuid and accumulate coverage edges).
+-- RAW objectives: the atoms the teacher drafted, OWNED by one course. Text is the
+-- per-course natural key (UNIQUE(course, text)): importers and the app intern by
+-- (course, text) -- find-or-create within the course -- so the same text in two
+-- courses is two INDEPENDENT objectives (distinct uuids), and editing one never
+-- touches the other. A uuid that would collide across courses is re-minted on load
+-- (see plan_io / import_objectives). uuid stays globally unique (coverage keys off
+-- it). To copy objectives between courses, re-intern them (course_bundle / the
+-- "import from another course" action), never share a row.
 CREATE TABLE IF NOT EXISTS objectives (
   uuid   TEXT PRIMARY KEY,
-  text   TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL DEFAULT 'active'  -- reserved hook (soft-delete/archive); always 'active' today
+  course TEXT NOT NULL REFERENCES courses(course),
+  text   TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',  -- reserved hook (soft-delete/archive); always 'active' today
+  UNIQUE (course, text)
 );
 
--- The raw-objective pool, course-scoped (membership + pool order). Plan placement
--- is NOT here -- it is a coverage edge into the course's outline hierarchy.
+-- The raw-objective pool: membership + per-course pool order. (Membership now
+-- coincides with objectives.course; this table carries the pool ORDER and the
+-- "is it currently pooled" flag, which the outline-reset flow clears and rebuilds
+-- without touching the objective rows reference coverage depends on.)
 CREATE TABLE IF NOT EXISTS course_objectives (
   course   TEXT NOT NULL,
   uuid     TEXT NOT NULL REFERENCES objectives(uuid),
