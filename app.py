@@ -1038,8 +1038,9 @@ def place(course, hierarchy):
     with db() as conn:
         # A stale tab can POST to a renamed/removed hierarchy; refuse rather than
         # write orphan coverage under a slug that no longer exists.
-        if not conn.execute("SELECT 1 FROM hierarchies WHERE hierarchy=? AND course=?",
-                            (hierarchy, course)).fetchone():
+        hrow = conn.execute("SELECT editable FROM hierarchies WHERE hierarchy=? AND course=?",
+                            (hierarchy, course)).fetchone()
+        if not hrow:
             abort(409, "hierarchy no longer exists -- reload the page")
         conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND uuid=?",
                      (course, hierarchy, uuid))
@@ -1056,9 +1057,12 @@ def place(course, hierarchy):
                 conn.execute("UPDATE course_objectives SET position=? "
                              "WHERE course=? AND uuid=?", (i, course, u))
         conn.commit()
-    # Distinguish the two things this one endpoint does, for the commit message.
-    g.action_phrase = (f"moved objectives to the {course} pool" if to == "pool"
-                       else f"placed objectives in {course}")
+    # Name the hierarchy (not just the course) in the commit message, and
+    # distinguish mapping into it from unmapping back to the pool. The editable
+    # outline reads best as "the <course> outline"; references go by slug.
+    where = f"the {course} outline" if hrow["editable"] else f"{course}/{hierarchy}"
+    g.action_phrase = (f"removed objectives from {where}" if to == "pool"
+                       else f"placed objectives in {where}")
     return ("", 204)
 
 
