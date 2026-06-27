@@ -137,6 +137,12 @@
 </style>
 {% endblock %}
 
+{% block titlebtn %}
+  <a class="calicon" href="{{ url_for('plan', course=course) }}"
+     title="Outline view">
+    <i class="bi bi-diagram-3"></i></a>
+{% endblock %}
+
 {% block body %}
   {% if error %}
     <div class="cal-warn">{{ error }}</div>

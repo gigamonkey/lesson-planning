@@ -46,6 +46,9 @@
           hx-on::after-request="window.focusNewUnit && window.focusNewUnit()">
       <button type="submit" class="addunit" title="Add a unit">+</button>
     </form>
+    <a class="calicon" href="{{ url_for('calendar', course=course) }}"
+       title="Calendar view of the outline">
+      <i class="bi bi-calendar3"></i></a>
     <a class="editmd" href="{{ url_for('outline_edit', course=course) }}"
        title="Edit the outline as Markdown (plan.md)">
       <i class="bi bi-pencil-square"></i>&nbsp;Edit as Markdown</a>
