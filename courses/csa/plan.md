@@ -6,7 +6,7 @@ calendar: bhs-2026-2027
 targets: ced, book
 ---
 
-# Unit: Introduction (1 week)
+# Unit: Introduction
 
 ## What is programming? What is Java?
 

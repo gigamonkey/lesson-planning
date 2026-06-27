@@ -160,11 +160,14 @@ def _week_cells(week, assign, labels):
     return cells
 
 
-def _consume(weeks, idx, unit):
+def _consume(weeks, idx, unit, greedy=False):
     """Consume the teaching weeks one unit gets, starting at weeks[idx]. A unit with
     an explicit `weeks` count takes that many TEACHING weeks (breaks pass through,
     uncounted). A unit with no count takes just enough teaching weeks to hold its
-    lessons' days (min one). Returns (unit_weeks, next_idx, derived)."""
+    lessons' days (min one) -- unless `greedy`, in which case it takes ALL remaining
+    weeks to the end of the year (the last outline unit, so a no-week-count final
+    unit becomes a real, lesson-holding "rest of the year" catch-all). Returns
+    (unit_weeks, next_idx, derived)."""
     taken, derived = [], False
     if unit["weeks"]:
         remaining = unit["weeks"]
@@ -177,8 +180,9 @@ def _consume(weeks, idx, unit):
         derived = True
         need = max(1, sum(L["days"] for L in unit["lessons"]))
         have = 0
-        # Always take at least one teaching week; keep going until the lessons fit.
-        while idx < len(weeks) and (have == 0 or have < need):
+        # Greedy (last unit): take everything left. Otherwise take at least one
+        # teaching week and keep going until the lessons fit.
+        while idx < len(weeks) and (greedy or have == 0 or have < need):
             w = weeks[idx]; idx += 1
             taken.append(w)
             have += 0 if w["is_break"] else len(w["days"])
@@ -205,9 +209,11 @@ def build_calendar(bs, data, units):
             | {break_section: True, rows: [{kind:'break', ...}]}]}  # breaks BETWEEN
                                                                    # units, own section
 
-    After the real units, all teaching weeks left before the end of the year are
-    emitted as ONE `unplanned: True` pseudo-unit (its `weeks` is the leftover
-    count), so the calendar runs to June.
+    The last outline unit, if it carries no explicit week count, greedily takes all
+    remaining weeks to year-end (a real, lesson-holding catch-all). Otherwise any
+    weeks the units leave unclaimed are emitted as ONE `unplanned: True` pseudo-unit
+    (its `weeks` is the leftover count, no `node_id`), so the calendar still runs to
+    June.
     """
     start = _d(data["firstDay"])
     end = _d(data["lastDay"])
@@ -238,8 +244,8 @@ def build_calendar(bs, data, units):
         if lead:
             out_units.append({"break_section": True, "rows": [_break_row(w) for w in lead]})
 
-    def emit_unit(unit, unplanned=False):
-        taken, idx[0], derived = _consume(weeks, idx[0], unit)
+    def emit_unit(unit, unplanned=False, greedy=False):
+        taken, idx[0], derived = _consume(weeks, idx[0], unit, greedy=greedy)
         # Labeled days (exams etc.) aren't bookable -- exclude them so lessons
         # flow onto the unit's plain school days only.
         sdays = [d for w in taken if not w["is_break"] for d in w["days"] if d not in labels]
@@ -282,12 +288,18 @@ def build_calendar(bs, data, units):
                           "weeks": unit["weeks"], "derived": derived, "overflow": overflow,
                           "free_days": len(sdays) - i, "rows": rows})
 
-    for unit in units:
+    for i, unit in enumerate(units):
         emit_leading_breaks()
-        emit_unit(unit)
+        # The last outline unit, if it has no explicit week count, absorbs all the
+        # remaining weeks to year-end -- a first-class, lesson-holding catch-all
+        # ("Unplanned") rather than the synthetic tail below.
+        last = i == len(units) - 1
+        emit_unit(unit, greedy=last and not unit["weeks"])
 
-    # Run the calendar out to the end of the year: all remaining teaching weeks go
-    # in ONE "Unplanned" section (its header shows the week count).
+    # Run the calendar out to the end of the year: any teaching weeks the units
+    # didn't claim go in ONE synthetic "Unplanned" section (header shows the count).
+    # A greedy last unit will have eaten them, so this only fires when the final unit
+    # had an explicit week count that left a tail.
     emit_leading_breaks()
     remaining = sum(1 for w in weeks[idx[0]:] if not w["is_break"])
     if remaining:
