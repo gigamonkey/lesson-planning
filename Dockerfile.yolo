@@ -1,0 +1,109 @@
+# Dockerfile.yolo
+#
+# Customizes the `yolo` sandbox container for this repo by baking in Playwright +
+# Chromium and the system libraries a headless Chromium needs, so browser-based
+# verification (e.g. driving the calendar's drag-and-drop, or screenshotting the
+# rendered UI) works out of the box instead of costing a mid-session apt install
+# of ~a dozen shared libraries plus a ~190 MB browser download.
+#
+#     playwright --version                    # Chromium pre-installed
+#     uv run --with 'playwright==1.61.0' python verify.py   # from Python (see below)
+#
+# The image is purely additive: it FROMs the yolo base image (Node 24, git, the
+# `claude` user, Claude Code itself) and layers Playwright on top. There is NO
+# SBCL/Lisp toolchain here (unlike the bhs-cs Dockerfile this was adapted from) --
+# this repo is pure Python (uv) + a server-rendered Flask/htmx frontend.
+#
+# Use it with yolo, which recognizes the `ARG YOLO_BASE` / `FROM ${YOLO_BASE}`
+# pair below: yolo builds its own default image first and passes the tag in as the
+# YOLO_BASE build arg, so this file always layers on the *current* yolo base:
+#
+#     yolo --dockerfile ./Dockerfile.yolo          # one run
+#     yolo config --dockerfile ./Dockerfile.yolo   # persist it for this project
+#
+# The default value is only for a manual `docker build -f Dockerfile.yolo .`
+# (yolo overrides it); point it at a real base when building by hand.
+#
+# NB: yolo builds with an EMPTY Docker context (only this Dockerfile) as a
+# security guard, so this file can never COPY files from the repo -- only network
+# fetches (apt, npm) work.
+
+ARG YOLO_BASE=claude-yolo:latest
+
+FROM ${YOLO_BASE}
+
+# The non-root user the yolo base runs as. The browser build is cached under this
+# user's home, which is Playwright's default lookup path at runtime.
+ARG APP_USER=claude
+
+# Pin Playwright so the cached browser build stays matched to the package; bump
+# both together. Node and Python Playwright of the SAME version use the SAME
+# browser revision, so a browser baked via the Node CLI here is reused by a
+# version-matched Python run at runtime -- see "Using it from Python" below.
+ARG PLAYWRIGHT_VERSION=1.61.0
+
+# --- Chromium runtime libraries (root) --------------------------------------
+# Normally `playwright install-deps chromium` installs these, but it refuses on
+# OS releases Playwright doesn't yet recognize (the current yolo base is newer
+# than any Playwright-supported LTS), so we apt-install the runtime set directly.
+# This is the standard Chromium-on-Debian/Ubuntu library set; it's deterministic
+# and base-version-independent. (libasound2t64 is the post-time_t-transition name
+# used on Ubuntu 24.04+.) If a future base IS Playwright-supported, this whole
+# block can be replaced with `playwright install-deps chromium`.
+USER root
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates \
+      libglib2.0-0 \
+      libnss3 \
+      libnspr4 \
+      libdbus-1-3 \
+      libatk1.0-0 \
+      libatk-bridge2.0-0 \
+      libcups2 \
+      libdrm2 \
+      libxcb1 \
+      libxkbcommon0 \
+      libatspi2.0-0 \
+      libx11-6 \
+      libxcomposite1 \
+      libxdamage1 \
+      libxext6 \
+      libxfixes3 \
+      libxrandr2 \
+      libgbm1 \
+      libpango-1.0-0 \
+      libcairo2 \
+      libasound2t64 \
+ && rm -rf /var/lib/apt/lists/*
+
+# --- Playwright CLI (root, global) ------------------------------------------
+# npm's prefix here is the root-owned /usr, so the global install must run as
+# root; it puts the `playwright` CLI on everyone's PATH (/usr/bin/playwright).
+RUN npm install -g playwright@${PLAYWRIGHT_VERSION}
+
+# --- Chromium browser build (app user) --------------------------------------
+# Downloaded as the app user so it lands in ~/.cache/ms-playwright, Playwright's
+# default runtime lookup path.
+#
+# PLAYWRIGHT_HOST_PLATFORM_OVERRIDE: Playwright gates `install` on a hard-coded
+# list of supported OS releases and refuses outright on anything newer. Pinning
+# the platform to the most recent supported Ubuntu LTS gets past that gate; the
+# downloaded build runs fine against the libraries installed above (Chromium's
+# Linux deps are stable across these releases). It's set as a persistent ENV so
+# install and runtime agree on the platform. Arm64 matches the Apple-Silicon
+# host; change it if building for amd64. Remove this ENV once the base image is a
+# Playwright-supported release.
+ENV PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-arm64
+
+USER ${APP_USER}
+RUN playwright install chromium \
+ && playwright --version
+
+# Using it from Python (this repo's runtime is uv, not Node):
+#   uv run --with 'playwright==1.61.0' python your_verify_script.py
+# Pin the SAME version as PLAYWRIGHT_VERSION above so it resolves to the browser
+# revision already cached here -- otherwise the first run re-downloads Chromium.
+
+# Leave the final user as the app user, matching the yolo base.
+USER ${APP_USER}
