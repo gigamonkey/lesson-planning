@@ -20,13 +20,13 @@ default_courses_repo="../bhs-cs-courses"
 # git repo (a checkout of the courses repo) and autosaves + commits edits to it
 # (see app.py). Default to a sibling ../bhs-cs-courses checkout when present; else
 # fall back to the bundled examples/ demo, which app.py copies into a throwaway git
-# repo so edits still commit (to disposable git). Override with LESSON_CORPUS_DIR.
+# repo so edits still commit (to disposable git). Override with LESSON_COURSES_DIR.
 
-if [ -z "${LESSON_CORPUS_DIR:-}" ]; then
+if [ -z "${LESSON_COURSES_DIR:-}" ]; then
   if [ -d "$default_courses_repo" ]; then
-    export LESSON_CORPUS_DIR="$(cd "$default_courses_repo" && pwd)"
+    export LESSON_COURSES_DIR="$(cd "$default_courses_repo" && pwd)"
   else
-    export LESSON_CORPUS_DIR="examples"
+    export LESSON_COURSES_DIR="examples"
   fi
 fi
 LOG="${LESSON_LOG:-/tmp/lesson-planning.log}"

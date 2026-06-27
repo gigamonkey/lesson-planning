@@ -54,7 +54,7 @@ uv run load_nodes.py examples/widgets/widgets-ced.md db.db \
 Or do it all in the browser:
 
 ```bash
-LESSON_CORPUS_DIR=examples uv run app.py          # http://localhost:5001
+LESSON_COURSES_DIR=examples uv run app.py          # http://localhost:5001
 ```
 
 The app boots an empty database from `schema.sql`, then loads any course in the
@@ -134,14 +134,14 @@ uv run course_bundle.py import db.db <course>.json [--as <new-id>]
 ## Running & the corpus
 
 Point the app at a **corpus** — a directory whose subdirectories are course
-directories — via `LESSON_CORPUS_DIR`, and it populates a blank database
+directories — via `LESSON_COURSES_DIR`, and it populates a blank database
 automatically. In single-user mode the corpus must be a **git repo** (a checkout
 of your courses repo): edits autosave + commit there, on the checked-out branch,
 with no remote push. `serve.sh` defaults it to a sibling `../bhs-cs-courses`
 checkout when present.
 
 ```bash
-LESSON_CORPUS_DIR=../bhs-cs-courses uv run app.py   # or just ./serve.sh -d
+LESSON_COURSES_DIR=../bhs-cs-courses uv run app.py   # or just ./serve.sh -d
 ```
 
 To try it without a courses repo, point it at the bundled synthetic demo. A plain
@@ -149,7 +149,7 @@ To try it without a courses repo, point it at the bundled synthetic demo. A plai
 still autosave + commit — just to disposable git, discarded when you're done:
 
 ```bash
-LESSON_CORPUS_DIR=examples uv run app.py        # the "Intro to Widgets" demo
+LESSON_COURSES_DIR=examples uv run app.py        # the "Intro to Widgets" demo
 ```
 
 Each course directory carries everything the loader needs (its `plan.md` front

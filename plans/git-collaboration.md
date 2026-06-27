@@ -54,7 +54,7 @@ Everything below assumes this correction.
 ## Repository split
 
 Today `courses/` is the default corpus and `examples/` is a sample corpus; the
-app already reads `LESSON_CORPUS_DIR`. Step one is to stop committing course
+app already reads `LESSON_COURSES_DIR`. Step one is to stop committing course
 content into *this* repo:
 
 - Create a separate repo, e.g. `lesson-courses`, whose top level is a corpus
@@ -62,7 +62,7 @@ content into *this* repo:
   hierarchies, `objectives.tsv`, `coverage.tsv` — the `plan_io` layout).
 - Keep `examples/` here as the format demo / test fixture. Drop or empty
   `courses/` in this repo (it already ships empty).
-- The app no longer points `LESSON_CORPUS_DIR` at an in-repo path; it points at
+- The app no longer points `LESSON_COURSES_DIR` at an in-repo path; it points at
   a **clone of `lesson-courses`** on the fly volume.
 
 This keeps "the engine" (this repo) and "the content" (the courses repo)
@@ -343,7 +343,7 @@ worktree)`; viewer → `(shared main db, read-only)`.
 ## Phased rollout
 
 1. **Repo split.** Create `lesson-courses`; move content out of this repo; point
-   `LESSON_CORPUS_DIR` at a clone. Verify the app runs unchanged against it
+   `LESSON_COURSES_DIR` at a clone. Verify the app runs unchanged against it
    (still single global db — no behavior change yet).
 2. **Auth + roles.** GitHub OAuth login, signed sessions, real `secret_key`, the
    static allowlist with editor/viewer roles. No per-user state yet — everyone

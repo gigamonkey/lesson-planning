@@ -54,7 +54,7 @@ DB_PATH = os.environ.get(
 # course). See FORMAT.md / plan_io.py. In single-user mode it must be a git repo (a
 # checkout of your courses repo) so edits autosave + commit there -- COURSES_ROOT is
 # resolved below (a plain dir, like the bundled examples/ demo, is copied into a
-# throwaway repo). Collab mode manages its own clone, so LESSON_CORPUS_DIR is
+# throwaway repo). Collab mode manages its own clone, so LESSON_COURSES_DIR is
 # single-user only.
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 # Where the calendar view reads bells calendar JSONs (e.g. 'bhs-2025-2026.json').
@@ -90,7 +90,7 @@ def _is_corpus_repo(d):
 # single-user analogue of collab. A plain (non-repo) corpus dir -- the bundled
 # examples/ demo -- is copied into a throwaway tmp git repo at startup so edits
 # still commit (to disposable git, never into this engine repo). Off only in collab
-# mode (collab owns git). Set LESSON_CORPUS_DIR to your courses-repo checkout.
+# mode (collab owns git). Set LESSON_COURSES_DIR to your courses-repo checkout.
 def _ensure_git_corpus(d):
     """Resolve the single-user corpus to a git repo. If `d` is already the top of
     its own repo, use it in place (real local-git mode). Otherwise (a plain dir,
@@ -114,14 +114,14 @@ def _ensure_git_corpus(d):
 
 
 if collab.enabled():
-    COURSES_ROOT, LOCAL_GIT, DEMO_CORPUS = None, False, False
+    COURSES_ROOT, LOCAL_GIT, DEMO_MODE = None, False, False
 else:
-    _corpus = os.environ.get("LESSON_CORPUS_DIR")
+    _corpus = os.environ.get("LESSON_COURSES_DIR")
     if not _corpus or not os.path.isdir(_corpus):
-        sys.exit("LESSON_CORPUS_DIR must point at a courses git repo (or a plain "
+        sys.exit("LESSON_COURSES_DIR must point at a courses git repo (or a plain "
                  "directory to run as a throwaway demo, e.g. "
-                 "LESSON_CORPUS_DIR=examples). See README.")
-    COURSES_ROOT, DEMO_CORPUS = _ensure_git_corpus(os.path.abspath(_corpus))
+                 "LESSON_COURSES_DIR=examples). See README.")
+    COURSES_ROOT, DEMO_MODE = _ensure_git_corpus(os.path.abspath(_corpus))
     LOCAL_GIT = True
 LOCAL_AUTOSAVE_SECONDS = int(os.environ.get("LESSON_AUTOSAVE_SECONDS", "2"))
 
@@ -2041,7 +2041,7 @@ if collab.enabled():
     collab.startup()
 else:
     ensure_schema()
-    if DEMO_CORPUS:
+    if DEMO_MODE:
         print(f"demo mode: edits autosave + commit to a throwaway git repo at "
               f"{COURSES_ROOT} (not your original corpus)", file=sys.stderr)
     # Unattended population: load any course in the corpus directory that doesn't
