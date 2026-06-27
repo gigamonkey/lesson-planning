@@ -9,18 +9,18 @@
 
   {% if not courses %}
   <div class="note">This database is empty. Create a course with <b>+</b> in the
-     sidebar, or click <b>Sync</b> to load every course from the corpus
+     sidebar, or click <b>Sync</b> to load every course from git
      (<code>{{ export_dir }}</code>).</div>
   {% endif %}
 
   <h2>Sync</h2>
-  <p>The <b>Sync</b> button in the sidebar reloads every course from the corpus
+  <p>The <b>Sync</b> button in the sidebar reloads every course from git
      (<code>{{ export_dir }}</code>) — its markdown + <code>.tsv</code> files on
      disk. {% if collab_enabled %}On the collaborative server it instead merges the
      latest from <code>main</code> into your sandbox.{% endif %}</p>
 
   <div class="note">Edits autosave and commit to git automatically
-     {% if collab_enabled %}(to your sandbox branch){% else %}(to the corpus repo
+     {% if collab_enabled %}(to your sandbox branch){% else %}(to the git repo
      at <code>{{ export_dir }}</code>){% endif %} — there's no manual Save or
      Export. Each course's <code>plan.md</code> + <code>objectives.tsv</code> /
      <code>coverage.tsv</code> are written for you; reference hierarchy markdown is

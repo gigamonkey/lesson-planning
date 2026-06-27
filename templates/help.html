@@ -86,7 +86,7 @@
   </dl>
   <p>And in the sidebar footer, two course-independent pages: <b>Help</b> (this
      page) and <b><a href="{{ url_for('data') }}">Settings</a></b>. The sidebar
-     <b>Sync</b> button reloads every course from the corpus. Create a course with
+     <b>Sync</b> button reloads every course from git. Create a course with
      <b>+</b> next to the title; each course in the sidebar has its own controls
      (see below).</p>
 
@@ -110,7 +110,7 @@
 
   <div class="note">
     Edits go to the live database immediately and are <b>autosaved + committed</b> to
-    the corpus git repo for you (debounced a couple of seconds) — the course's
+    the git repo for you (debounced a couple of seconds) — the course's
     git-diffable <code>plan.md</code> (the outline) plus <code>objectives.tsv</code> /
     <code>coverage.tsv</code>. There are no Save buttons.
   </div>
@@ -147,11 +147,11 @@
 
   <h2>Saving &amp; version control</h2>
   <p>The database (<code>db.db</code>) is the live working copy and is not checked
-     in. The committed state is the <b>corpus</b>: a directory of course
-     directories, each holding its hierarchy markdown, <code>plan.md</code>, and
-     <code>objectives.tsv</code> / <code>coverage.tsv</code>. The corpus is a git repo
-     and your edits are autosaved + committed to it automatically. Starting the app with no database creates an empty one and
-     loads any course already in the corpus; the sidebar <b>Sync</b> button reloads
+     in. The committed state is a <b>git repo</b> of course directories, each holding
+     its hierarchy markdown, <code>plan.md</code>, and
+     <code>objectives.tsv</code> / <code>coverage.tsv</code>.
+     Your edits are autosaved + committed to it automatically. Starting the app with no database creates an empty one and
+     loads any course already in the repo; the sidebar <b>Sync</b> button reloads
      every course from disk — so the whole thing is reproducible from
      version-controlled markdown.
      (<code>uv run rebuild_db.py</code> does the same from a terminal, rebuilding
@@ -167,11 +167,11 @@
   <div class="note">
     <b>Keep both, and let the app merge them.</b> Don't try to hand-pick a winning
     id or hand-edit the files. Just resolve the git merge by keeping both copies.
-    The next time the course is loaded from the corpus — the sidebar
+    The next time the course is loaded from git — the sidebar
     <b>Sync</b> button, a course <b>refresh</b>, or an app restart /
     <code>rebuild_db</code> — the app <b>unifies</b> objectives that share the same
     text onto one id and rewrites every placement and coverage link to it. The
-    cleaned-up files are autosaved + committed back to the corpus the next time the
+    cleaned-up files are autosaved + committed back to git the next time the
     course is touched.
   </div>
   <p>The one thing the app <i>can't</i> decide for you: if the two people placed

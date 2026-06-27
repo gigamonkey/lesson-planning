@@ -502,10 +502,10 @@ def sync_courses():
         dirs = seed_module.course_dirs(corpus_dir())
         seed_module.load_corpus(db_path(), corpus_dir())
     except (OSError, ValueError) as e:
-        flash(f"Couldn't sync from the corpus: {e}")
+        flash(f"Couldn't reload from git: {e}")
         return back
     names = ", ".join(os.path.basename(d) for d in dirs) or "none"
-    flash(f"Synced {len(dirs)} course(s) from the corpus: {names}")
+    flash(f"Reloaded {len(dirs)} course(s) from git: {names}")
     return back
 
 

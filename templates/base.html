@@ -567,12 +567,12 @@
         {% endif %}
       </div>
       {% if not collab_enabled and can_edit %}
-      {# Single-user analogue of collab Sync: reload every course from the corpus
-         files on disk (git-tracked). Replaces the per-course Refresh buttons. #}
+      {# Single-user analogue of collab Sync: reload every course from the
+         git-tracked course files on disk. Replaces the per-course Refresh buttons. #}
       <div class="collabbar">
         <div class="collabacts">
           <form method="post" action="{{ url_for('sync_courses') }}" class="collabsync">
-            <button type="submit" title="Reload all courses from the corpus files on disk">
+            <button type="submit" title="Reload courses from git">
               <i class="bi bi-arrow-repeat"></i> Sync</button>
           </form>
         </div>
