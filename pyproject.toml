@@ -8,7 +8,7 @@ dependencies = [
     # calendar data, both published to PyPI. To develop the libraries alongside
     # this app, add a `[tool.uv.sources]` path/editable source for either.
     "bell-schedule>=0.7.0",
-    "bhs-calendars>=2.9.1",
+    "bhs-calendars>=2.9.2",
     "flask",
     # Production WSGI server (the fly deploy). Run with a single threaded worker
     # only -- the app keeps live in-process state (push queue, timers, SQLite
