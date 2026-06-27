@@ -119,11 +119,18 @@
      to a tiny size so a whole week fits across ~375px without horizontal scroll. */
   @media (max-width: 48rem) {
     .cal-unit { width: auto; max-width: 100%; }
-    .cal-days { grid-template-columns: repeat(5, 1fr); gap: .15rem; }
+    /* Fill the width after the date label with five EQUAL columns: the day grid
+       grows into the remaining flex space (it's `flex: none` on desktop), and
+       minmax(0, 1fr) lets each track shrink below its content's intrinsic width
+       (the lesson-title input) so the columns stay equal instead of blowing out
+       and breaking the grid alignment. */
+    .cal-days { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .15rem;
+                flex: 1 1 0; min-width: 0; }
     .cal-week { gap: .25rem; }
     .cal-when { flex: 0 0 3.4rem; font-size: .6rem; }
     .cal-cell { min-height: 2.8rem; font-size: .58rem; padding: .15rem .1rem; gap: .1rem; }
-    .cal-cell.lesson .cal-lessonname input { font-size: .55rem; padding: .02rem; }
+    /* min-width: 0 so the input doesn't impose its intrinsic width on the track. */
+    .cal-cell.lesson .cal-lessonname input { font-size: .55rem; padding: .02rem; min-width: 0; }
     .cal-dayhdr { font-size: .52rem; letter-spacing: 0; }
     .cal-break { font-size: .72rem; min-height: 2.6rem; }
   }
