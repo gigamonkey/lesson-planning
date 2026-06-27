@@ -134,7 +134,6 @@ _ACTION_PHRASES = {
     "node_duration_set": "set a duration in {course}",
     "objective_new": "added an objective to {course}",
     "objective_edit": "edited an objective in {course}",
-    "objectives_upload": "imported objectives into {course}",
     "outline_import": "rebuilt the {course} outline from a reference",
     "hierarchy_load_course": "uploaded a reference hierarchy to {course}",
     "hierarchy_delete": "removed a reference hierarchy from {course}",
@@ -152,7 +151,8 @@ _SAVE_ENDPOINTS = {"export", "outline_source"}
 # add/remove whole courses or reference files, which a single write_course can't
 # express, and they deserve a meaningful one-off commit.
 _IMMEDIATE_OPS = {"course_new", "course_delete", "course_import",
-                  "hierarchy_load_course", "hierarchy_delete"}
+                  "hierarchy_load_course", "hierarchy_delete",
+                  "objectives_upload", "hierarchy_upload"}
 
 
 def _autosave_write(handle, course):
@@ -1230,6 +1230,7 @@ def hierarchy_upload(course, hierarchy):
         flash(f"Upload failed: {e}")
         return back
     stats, dangling = import_objectives.upsert(db_path(), course, rows)
+    commit_structural(course, f"Import objectives into {course}/{hierarchy}")
     msg = _upsert_msg(f.filename, stats)
     unknown = dangling.get(hierarchy, [])
     if unknown:
@@ -1394,6 +1395,7 @@ def objectives_upload(course):
         flash(f"Upload failed: {e}")
         return back
     stats, dangling = import_objectives.upsert(db_path(), course, rows)
+    commit_structural(course, f"Import objectives into {course}")
     msg = _upsert_msg(f.filename, stats)
     if dangling:
         n = sum(len(v) for v in dangling.values())
