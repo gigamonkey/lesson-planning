@@ -35,16 +35,21 @@
         <span class="cal-badge">{{ u.weeks }} {{ 'week' if u.weeks == 1 else 'weeks' }}</span>
       {% else %}
         {# Click-to-edit weeks pill. htmx posts the save and swaps just #cal-content
-           with the re-laid-out calendar, keeping the scroll position. #}
-        <form class="cal-weeks autosave" method="post"
+           with the re-laid-out calendar, keeping the scroll position. A derived span
+           (no explicit count -- auto-sized to lessons, or the greedy last unit) shows
+           the actual week count as a lighter "auto" pill; an explicit count fills the
+           field. Editing an auto pill (typing a number) pins it. #}
+        <form class="cal-weeks {{ 'derived' if u.derived }} autosave" method="post"
               action="{{ url_for('node_duration_set', course=course, node_id=u.node_id) }}"
               hx-post="{{ url_for('node_duration_set', course=course, node_id=u.node_id) }}"
               hx-target="#cal-content" hx-swap="innerHTML">
           <input type="hidden" name="view" value="calendar">
           <label><input type="number" name="amount" min="0" step="0.5"
-                 value="{{ u.weeks|int if (u.weeks and u.weeks == u.weeks|int) else (u.weeks or '') }}"
-                 placeholder="auto" title="Weeks this unit spans (blank = auto)" aria-label="Weeks"
-                 ><span class="cal-weeks-unit">{{ 'week' if u.weeks == 1 else 'weeks' }}</span></label>
+                 value="{{ '' if u.derived else (u.weeks|int if u.weeks == u.weeks|int else u.weeks) }}"
+                 placeholder="{{ u.weeks_shown }}"
+                 title="{{ 'Auto — type a number to pin it' if u.derived else 'Weeks this unit spans (blank = auto)' }}"
+                 aria-label="Weeks"
+                 ><span class="cal-weeks-unit">{{ 'week' if (u.weeks_shown if u.derived else u.weeks) == 1 else 'weeks' }}</span></label>
         </form>
         {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
       {% endif %}

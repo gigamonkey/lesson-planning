@@ -66,12 +66,19 @@
             hx-post="{{ url_for('unit_rename', course=course, unit_id=u.id) }}" hx-swap="none">
         <input type="text" name="title" value="{{ u.label }}" placeholder="Unit title…">
       </form>
-      <form class="durform autosave" method="post"
+      {# Weeks pill. An explicit count fills the field; an auto-sized span (no count --
+         derived from lessons, or the greedy last unit) shows the actual week count as
+         a lighter "derived" pill, matching the calendar. Needs the bound calendar to
+         know the number; falls back to a plain "—" placeholder without one. #}
+      {% set uw = (unit_weeks if unit_weeks is defined else {}).get(u.id) %}
+      <form class="durform {{ 'derived' if uw and uw.derived }} autosave" method="post"
             action="{{ url_for('node_duration_set', course=course, node_id=u.id) }}"
             hx-post="{{ url_for('node_duration_set', course=course, node_id=u.id) }}" hx-swap="none">
         <input class="durinput" type="number" name="amount" min="0" step="0.5"
-               value="{{ durations.get(u.id, '') }}" placeholder="—"
-               title="Weeks this unit spans" aria-label="Weeks">
+               value="{{ durations.get(u.id, '') }}"
+               placeholder="{{ uw.weeks_shown if uw else '—' }}"
+               title="{{ 'Auto — type a number to pin it' if (uw and uw.derived) else 'Weeks this unit spans' }}"
+               aria-label="Weeks">
         <span class="durunit">wk</span>
       </form>
       <form method="post" action="{{ url_for('lesson_new', course=course) }}"

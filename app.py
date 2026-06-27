@@ -1186,6 +1186,9 @@ def hierarchy_view(course, hierarchy):
                                     else r["amount"])
                      for r in conn.execute("SELECT node_id, amount FROM node_duration"
                                            " WHERE course=? AND hierarchy=?", (course, hierarchy))}
+        # Only the editable outline shows unit week pills; compute their actual spans
+        # from the bound calendar so they match the calendar view.
+        unit_weeks = _outline_unit_weeks(conn, course) if h["editable"] else {}
     # The outline's stored title is the generic "Course outline"; qualify it with
     # the course (like the objectives page) so the page title isn't ambiguous.
     # Reference titles already include the course (e.g. "WIDGETS CED").
@@ -1194,7 +1197,7 @@ def hierarchy_view(course, hierarchy):
         "workspace.html", course=course, ref=hierarchy,
         page_title=title,
         editable=bool(h["editable"]), los=los, pool=pool,
-        durations=durations,
+        durations=durations, unit_weeks=unit_weeks,
         tree=build_tree(nodes, by_node, set()),
         stats=workspace_stats(nodes, by_node, pool))
 
@@ -1569,6 +1572,26 @@ def _back(course):
     return redirect(target)
 
 
+def _outline_unit_weeks(conn, course):
+    """Map each outline unit's node_id -> {weeks_shown, derived}, by laying the outline
+    on the course's bound calendar (calendar_view.build_calendar). Lets the outline's
+    week pills show the same actual span as the calendar -- including auto-sized units
+    and the greedy last unit, flagged `derived`. Empty when no calendar is bound or it
+    won't load (the pills then fall back to a plain placeholder)."""
+    crow = conn.execute("SELECT calendar FROM courses WHERE course=?", (course,)).fetchone()
+    cal_id = crow["calendar"] if crow else None
+    if not cal_id:
+        return {}
+    try:
+        bs, data = calendar_view.load_calendar(cal_id, CALENDAR_DIR, CALENDAR_EXTRAS_DIR)
+    except (OSError, ValueError):
+        return {}
+    view = calendar_view.build_calendar(bs, data, _outline_units(conn, course))
+    return {u["node_id"]: {"weeks_shown": u["weeks_shown"], "derived": u["derived"]}
+            for u in view["units"]
+            if not u.get("break_section") and u.get("node_id")}
+
+
 def _outline_ctx(conn, course):
     """Render context for the editable outline units partial (_outline_units.html):
     the unit/lesson tree plus the inline durations and learning objectives. Shared
@@ -1584,6 +1607,7 @@ def _outline_ctx(conn, course):
                  for r in conn.execute("SELECT node_id, amount FROM node_duration"
                                        " WHERE course=? AND hierarchy=?", (course, O))}
     return dict(course=course, ref=O, editable=True, los=los, durations=durations,
+                unit_weeks=_outline_unit_weeks(conn, course),
                 tree=build_tree(nodes, by_node, set()))
 
 

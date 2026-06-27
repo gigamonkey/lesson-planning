@@ -286,6 +286,7 @@ def build_calendar(bs, data, units):
         out_units.append({"break_section": False, "unplanned": unplanned,
                           "node_id": unit.get("node_id"), "title": unit["title"],
                           "weeks": unit["weeks"], "derived": derived, "overflow": overflow,
+                          "weeks_shown": sum(1 for w in taken if not w["is_break"]),
                           "free_days": len(sdays) - i, "rows": rows})
 
     for i, unit in enumerate(units):

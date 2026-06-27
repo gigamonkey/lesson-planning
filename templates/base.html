@@ -266,6 +266,20 @@
     .durinput:hover { border-color: var(--line); }
     .durinput:focus { border-color: #bcd; background: #fff; outline: none; }
     .durunit { font-size: .7rem; color: var(--muted); }
+    /* Unit weeks pill: a filled pill like the calendar's. A "derived" span (auto-sized
+       or the greedy last unit) is a lighter pill showing the actual week count via the
+       placeholder; an explicit count fills the field. The pill carries the chrome, so
+       the inner input stays borderless. */
+    .unithead .durform { background: #eef1f4; border: 1px solid #e0e4e8; border-radius: 8px;
+            padding: 0 .25rem; }
+    .unithead .durform:hover { border-color: #cfd6dd; }
+    .unithead .durform:focus-within { background: #fff; border-color: #bcd; }
+    .unithead .durform.derived { background: #f7f9fb; border-color: #eceff2; }
+    .unithead .durform.derived .durinput, .unithead .durform.derived .durunit { color: #9aa3ad; }
+    .unithead .durform.derived .durinput::placeholder { color: #9aa3ad; opacity: 1; }
+    .unithead .durform.derived:focus-within { background: #fff; border-color: #bcd; }
+    .unithead .durinput, .unithead .durinput:hover, .unithead .durinput:focus {
+            border-color: transparent; background: transparent; }
     ul.sortable { list-style: none; margin: .4rem 0 0; padding: .15rem;
             min-height: 2rem; border: 1px dashed var(--line); border-radius: 5px;
             background: var(--bg); }

@@ -38,6 +38,12 @@
                border: 1px solid #e0e4e8; }
   .cal-weeks:hover { border-color: #cfd6dd; }
   .cal-weeks:focus-within { background: #fff; border-color: #bcd; }
+  /* Auto-derived span (no explicit week count): a lighter pill showing the actual
+     number. The placeholder (the number) is kept fully legible, not faded. */
+  .cal-weeks.derived { background: #f7f9fb; border-color: #eceff2; }
+  .cal-weeks.derived input, .cal-weeks.derived .cal-weeks-unit { color: #9aa3ad; }
+  .cal-weeks.derived input::placeholder { color: #9aa3ad; opacity: 1; }
+  .cal-weeks.derived:focus-within { background: #fff; border-color: #bcd; }
   /* The label is the click target: clicking anywhere in the pill focuses the input. */
   .cal-weeks label { display: inline-flex; align-items: baseline; gap: .25rem; cursor: text; }
   /* field-sizing makes the input hug its value/placeholder -- no leading whitespace. */

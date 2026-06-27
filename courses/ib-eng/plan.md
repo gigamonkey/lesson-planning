@@ -6,6 +6,10 @@ calendar: bhs-2026-2027
 targets: syllabus
 ---
 
+# Unit: Intro
+
+# Unit: Unplanned
+
 ## Pool — not yet placed
 
 - Describe the notional instruction register (IR)  (#2ea0)
