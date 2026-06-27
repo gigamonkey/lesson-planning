@@ -1,0 +1,20 @@
+Here's a list of what I think should be small todo items. Please do them all,
+committing as needed but at least once per item.
+
+- Change the header line for each course in the sidebar to be the title rather
+  than the slug.
+
+- In the header line there should be four icons, from left to right:
+  bi-diagram-3, bi-calendar, bi-list-check, and bi-gear linking to the course
+  outline, the course calendar, the course objectives, and the course settings.
+  The separate course outline and objectives links in the sidebar go away. But
+  add a "References" header about the reference hierarchies.
+
+- On the calendar page, put a grey text "No school" in the boxes representing
+  non-school days.
+
+- On the calendar page, make it so clicking an empty day box makes it into a
+  lesson box with an editable title and number of days pill. Focus should start
+  in the title.
+
+- Delete this file when everything above is done.
