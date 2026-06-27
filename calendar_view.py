@@ -48,6 +48,12 @@ def _d(s):
     return date.fromisoformat(s) if isinstance(s, str) else s
 
 
+def _fmt_num(n):
+    """Drop a trailing '.0' so whole numbers read cleanly (40.0 -> '40'), but keep
+    a real fraction (1.5 -> '1.5')."""
+    return str(int(n)) if isinstance(n, float) and n.is_integer() else str(n)
+
+
 def _fmt_year(year):
     """'2026-2027' -> '2026-27'; passes through anything unexpected."""
     parts = (year or "").split("-")
@@ -321,7 +327,7 @@ def build_calendar(bs, data, units):
     requested = sum(u["weeks"] for u in units if u["weeks"])
     if requested > teaching_total:
         warnings.append(f"Units ask for more weeks than the year has "
-                        f"({requested} vs {teaching_total} teaching weeks).")
+                        f"({_fmt_num(requested)} vs {teaching_total} teaching weeks).")
     for u in out_units:
         if u.get("overflow"):   # break sections have no overflow
             n = sum(o["days"] - o["fit"] for o in u["overflow"])
