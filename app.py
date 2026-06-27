@@ -1961,6 +1961,12 @@ else:
 
 
 if __name__ == "__main__":
+    # Local dev only: Flask's built-in (Werkzeug) server with the auto-reloader.
+    # Production serves the WSGI app object (app:app) under gunicorn -- see the
+    # Dockerfile and plans/production-wsgi-server.md -- so this block does not run
+    # there. The module-level startup above (collab.startup() / seed) runs on
+    # import either way.
+    #
     # In a yolo container the app must bind 0.0.0.0 to be reachable from the host
     # browser (127.0.0.1 inside the container isn't); on a normal machine keep the
     # safer localhost default. yolo marks the container with YOLO_SESSION set to a

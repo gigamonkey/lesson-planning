@@ -25,13 +25,24 @@ COPY . /app
 # Pre-build the virtualenv into the image.
 RUN uv sync --frozen || uv sync
 
-# Production settings: no Flask reloader (collab.startup runs once), bind all
-# interfaces, listen on fly's internal port.
+# Production settings.
 ENV FLASK_DEBUG=0 \
-    HOST=0.0.0.0 \
     PORT=8080 \
     LESSON_DATA_DIR=/data \
     LESSON_COLLAB_CONFIG=/data/collab.json
 
 EXPOSE 8080
-CMD ["uv", "run", "app.py"]
+
+# Production WSGI server (gunicorn), not Flask's dev server.
+#
+# EXACTLY ONE worker -- the app keeps live in-process state (collab.startup()'s
+# push queue + worker thread + refresh/autosave timers, the per-handle SQLite
+# caches, the single git clone). Concurrency comes from --threads, never from
+# more workers. Do NOT add --preload: it would import the app (and run
+# collab.startup()) in the master, then fork workers where those threads are
+# dead -- requests would serve but pushes would silently never drain. Importing
+# app:app in the one worker keeps the threads in the process that serves.
+# See plans/production-wsgi-server.md.
+CMD ["uv", "run", "gunicorn", \
+     "--workers", "1", "--threads", "8", "--worker-class", "gthread", \
+     "--bind", "0.0.0.0:8080", "--timeout", "120", "app:app"]

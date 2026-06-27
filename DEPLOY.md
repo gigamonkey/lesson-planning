@@ -296,3 +296,16 @@ every `main_refresh_seconds` (default 5 min) and right after a merge.
   is pushed). The volume is a cache + working area; losing it loses only
   unpushed commits and in-flight sandboxes, which rebuild from the repo on next
   login.
+
+- **The app is served by gunicorn, with exactly one worker.** The image's `CMD`
+  runs `gunicorn --workers 1 --threads 8 -k gthread … app:app` (a real WSGI
+  server, not Flask's dev server). The single-worker rule is **load-bearing, not
+  a default**: the app keeps live state in one process's memory — the background
+  push queue + worker thread, the refresh/autosave timers, the per-handle SQLite
+  caches, and the single git clone on the volume. Scale concurrency by raising
+  `--threads`, **never** `--workers` (matching `fly.toml`'s single-machine rule).
+  Do **not** add `--preload`: it would run `collab.startup()` in the master and
+  fork workers where its threads are dead, so requests would serve but pushes
+  would silently never drain. No reverse proxy (nginx) is needed in the container
+  — fly's edge proxy already terminates TLS and fronts the app. See
+  `plans/production-wsgi-server.md` for the full rationale.
