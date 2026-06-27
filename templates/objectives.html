@@ -32,6 +32,7 @@
 
   <p class="objcount"><b id="obj-count">{{ total }}</b> objectives</p>
 
+  <div class="objtable-wrap">
   <table class="objtable">
     <thead>
       <tr>
@@ -64,6 +65,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 
   <script>
     const tbody = document.querySelector('table.objtable tbody');

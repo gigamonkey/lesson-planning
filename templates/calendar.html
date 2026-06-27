@@ -112,6 +112,21 @@
   .cal-break .when { color: #b0a47e; }
   /* Unplanned tail chunks: greyed header, the text "Unplanned". */
   .cal-unplanned .cal-unit-head { color: #b0b0b0; border-bottom-color: #ececec; }
+
+  /* Phone: shrink the calendar to fit the viewport rather than scroll it. The
+     five-column week is kept (it's what makes the grid legible) but the columns
+     go fluid, the date label and boxes shrink, and the per-day lesson text drops
+     to a tiny size so a whole week fits across ~375px without horizontal scroll. */
+  @media (max-width: 48rem) {
+    .cal-unit { width: auto; max-width: 100%; }
+    .cal-days { grid-template-columns: repeat(5, 1fr); gap: .15rem; }
+    .cal-week { gap: .25rem; }
+    .cal-when { flex: 0 0 3.4rem; font-size: .6rem; }
+    .cal-cell { min-height: 2.8rem; font-size: .58rem; padding: .15rem .1rem; gap: .1rem; }
+    .cal-cell.lesson .cal-lessonname input { font-size: .55rem; padding: .02rem; }
+    .cal-dayhdr { font-size: .52rem; letter-spacing: 0; }
+    .cal-break { font-size: .72rem; min-height: 2.6rem; }
+  }
 </style>
 {% endblock %}
 

@@ -466,10 +466,60 @@
     .help .note { background: #fffbe6; border: 1px solid #f0e0a0; border-radius: 6px;
             padding: .5rem .8rem; margin: .8rem 0; font-size: .92rem; }
     .help table.report td { font-size: .92rem; }
+
+    /* Mobile top bar + off-canvas sidebar drawer. Both are hidden on desktop;
+       the @media block below reveals them and turns the sidebar into a drawer. */
+    .topbar { display: none; align-items: center; gap: .5rem; position: sticky; top: 0;
+              z-index: 40; background: #fff; border-bottom: 1px solid var(--line);
+              padding: .45rem .7rem; }
+    .topbar .hamburger { font-size: 1.5rem; line-height: 1; background: none; border: none;
+              color: #333; cursor: pointer; padding: .15rem .4rem; }
+    .topbar .topbar-title { font-weight: 700; font-size: 1rem; min-width: 0;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-backdrop { display: none; position: fixed; inset: 0; z-index: 45;
+              background: rgba(0,0,0,.35); }
+
+    /* Phone / narrow tablet: sidebar becomes a slide-in drawer, content goes
+       full width, multi-column boards stack. Everything here is gated behind the
+       breakpoint, so the desktop layout above is untouched. */
+    @media (max-width: 48rem) {
+      :root { --content-max: 22rem; }   /* narrower reading width on a phone */
+      .topbar { display: flex; }
+      body.nav-open .nav-backdrop { display: block; }
+      .layout { display: block; }
+      .sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: min(85vw, 345px);
+                 z-index: 50; transform: translateX(-100%); transition: transform .2s ease;
+                 box-shadow: 0 0 30px rgba(0,0,0,.18); }
+      body.nav-open .sidebar { transform: none; }
+      main { padding: 1rem; }
+      /* Stack the two-column boards; the raw-objectives pool flows below. */
+      .board, .workspace-board { grid-template-columns: 1fr; }
+      .board .pool, .workspace-board .pool { position: static; }
+      /* Objectives: let the toolbar wrap and the matrix scroll sideways. */
+      .objbar { flex-wrap: wrap; }
+      .objnew, .objsearch { max-width: none; }
+      .objtable-wrap { overflow-x: auto; }
+    }
+
+    /* Touch devices have no hover, so reveal the hover-gated controls (reorder
+       handle, row trash, inline-edit save) and grow the tiny icon hit areas.
+       Scoped to (hover: none) so a narrow desktop window keeps the hover UI. */
+    @media (hover: none) {
+      .sidebar ul.hiers li.hieritem .hdel,
+      .sidebar ul.hiers li.hieritem .draghandle { visibility: visible; }
+      .objedit button { visibility: visible; }
+      .miniadd, .coursehead .gear, .draghandle { padding: .3rem; }
+    }
   </style>
   {% block head %}{% endblock %}
 </head>
 <body>
+  <header class="topbar">
+    <button type="button" id="nav-toggle" class="hamburger" aria-label="Open menu">
+      <i class="bi bi-list"></i></button>
+    <span class="topbar-title">{{ page_title or 'Lesson Planning' }}</span>
+  </header>
+  <div id="nav-backdrop" class="nav-backdrop"></div>
   <div class="layout">
     <aside class="sidebar">
       <div class="brandrow">
@@ -666,6 +716,22 @@
     </main>
   </div>
   <script>
+    // Mobile nav drawer: the hamburger toggles `body.nav-open` (CSS slides the
+    // sidebar in over a backdrop). Tapping the backdrop, or any link inside the
+    // sidebar (i.e. navigating to a page), closes it again so the content shows.
+    (function () {
+      const body = document.body;
+      const burger = document.getElementById('nav-toggle');
+      const backdrop = document.getElementById('nav-backdrop');
+      const sidebar = document.querySelector('.sidebar');
+      const close = function () { body.classList.remove('nav-open'); };
+      if (burger) burger.addEventListener('click', function () { body.classList.toggle('nav-open'); });
+      if (backdrop) backdrop.addEventListener('click', close);
+      if (sidebar) sidebar.addEventListener('click', function (e) {
+        if (e.target.closest('a')) close();
+      });
+    })();
+
     // Sidebar "+": toggle the inline new-course form and focus its id field.
     (function () {
       const btn = document.getElementById('addcourse-btn');
