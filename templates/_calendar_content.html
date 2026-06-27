@@ -91,11 +91,13 @@
                            ><span class="cal-lessondays-unit">{{ 'day' if c.lesson_days == 1 else 'days' }}</span></label>
                   </form>
                 </div>
-              {% elif c.kind == 'free' and u.node_id %}
-                {# An empty school day: click it to drop a new lesson into this unit.
-                   The lesson lands in the unit's first free slot and opens with its
-                   title focused (see lesson_new's calendar branch + the afterSwap JS). #}
-                <div class="cal-cell free" style="grid-column: span {{ c.days }}"
+              {% elif c.kind == 'free' and c.addable %}
+                {# The unit's first empty day: click it to drop a new lesson into this
+                   unit. Lessons flow front-to-back, so the new one lands on exactly
+                   this day and opens with its title focused (see lesson_new's calendar
+                   branch + the afterSwap JS). Only the first free box is clickable --
+                   a lesson can't be placed past a gap. #}
+                <div class="cal-cell free free-add" style="grid-column: span {{ c.days }}"
                      title="Click to add a lesson"
                      hx-post="{{ url_for('lesson_new', course=course) }}"
                      hx-vals='{"unit": "{{ u.node_id }}", "view": "calendar"}'

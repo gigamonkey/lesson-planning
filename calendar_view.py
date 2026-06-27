@@ -266,6 +266,17 @@ def build_calendar(bs, data, units):
                                                             for d in w["days"])),
                              "grading_close": grading.get(str(w["number"])),
                              "cells": _week_cells(w, assign, labels)})
+        # A real unit (one with a node_id) with leftover school days: mark its FIRST
+        # free cell `addable` -- clicking it in the calendar drops a new lesson into
+        # the unit, which (lessons flow front-to-back) lands on exactly that day. The
+        # later free cells aren't marked: a lesson can't be placed past a gap, so only
+        # the first free box honestly previews where a new lesson would go.
+        if unit.get("node_id"):
+            for w in rows:
+                first = next((c for c in w.get("cells", []) if c["kind"] == "free"), None)
+                if first:
+                    first["addable"] = True
+                    break
         out_units.append({"break_section": False, "unplanned": unplanned,
                           "node_id": unit.get("node_id"), "title": unit["title"],
                           "weeks": unit["weeks"], "derived": derived, "overflow": overflow,
