@@ -13,13 +13,17 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export HOST="${HOST:-0.0.0.0}"
 export PORT="${PORT:-5001}"
+
+default_courses_repo="../bhs-cs-courses"
+
 # Corpus: a directory of course directories. If it's a checkout of the courses
 # repo, single-user mode autosaves + commits edits to it (see LOCAL_GIT in
-# app.py). Default to a sibling ../lesson-courses checkout when present, else the
-# in-repo courses/. Override with LESSON_CORPUS_DIR=... .
+# app.py). Default to a sibling ../bhs-cs-courses checkout when present, else
+# the in-repo courses/. Override with LESSON_CORPUS_DIR=... .
+
 if [ -z "${LESSON_CORPUS_DIR:-}" ]; then
-  if [ -d ../lesson-courses ]; then
-    export LESSON_CORPUS_DIR="$(cd ../lesson-courses && pwd)"
+  if [ -d "$default_courses_repo" ]; then
+    export LESSON_CORPUS_DIR="$(cd "$default_courses_repo" && pwd)"
   else
     export LESSON_CORPUS_DIR="courses"
   fi
