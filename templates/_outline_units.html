@@ -8,6 +8,8 @@
 {% macro lessoncard(L) %}
 <li class="lessoncard" data-lesson-id="{{ L.id }}">
   <div class="lessonhead">
+    <button type="button" class="lessontoggle" title="Collapse / expand this lesson"
+            aria-label="Collapse / expand this lesson"><i class="bi bi-caret-down-fill"></i></button>
     <form method="post" class="edit autosave"
           action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
           hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
@@ -51,8 +53,10 @@
 {% endmacro %}
 
 {% for u in tree if u.level == 'unit' %}
-  <section class="unit">
+  <section class="unit" data-unit-id="{{ u.id }}">
     <div class="unithead">
+      <button type="button" class="unittoggle" title="Collapse / expand this unit"
+              aria-label="Collapse / expand this unit"><i class="bi bi-caret-down-fill"></i></button>
       <form method="post" class="edit autosave"
             action="{{ url_for('unit_rename', course=course, unit_id=u.id) }}"
             hx-post="{{ url_for('unit_rename', course=course, unit_id=u.id) }}" hx-swap="none">
@@ -105,8 +109,10 @@
     </ul>
   </section>
 {% endfor %}
-<section class="unit unassigned">
+<section class="unit unassigned" data-unit-id="none">
   <div class="unithead">
+    <button type="button" class="unittoggle" title="Collapse / expand this section"
+            aria-label="Collapse / expand this section"><i class="bi bi-caret-down-fill"></i></button>
     <span class="unitlabel">Unassigned lessons</span>
     <form method="post" action="{{ url_for('lesson_new', course=course) }}"
           hx-post="{{ url_for('lesson_new', course=course) }}"

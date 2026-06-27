@@ -1096,7 +1096,7 @@ def level_counts(nodes):
         tag = n["level"]
         counts[tag] = counts.get(tag, 0) + 1
         depths.setdefault(tag, depth(n["node_id"]))
-    return [{"count": counts[t], "label": pluralize_tag(t, counts[t])}
+    return [{"count": counts[t], "label": pluralize_tag(t, counts[t]), "tag": t}
             for t in sorted(counts, key=lambda t: depths[t])]
 
 

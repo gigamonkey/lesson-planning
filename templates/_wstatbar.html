@@ -2,7 +2,7 @@
 <div class="wstats"{% if id %} id="{{ id }}"{% endif %}
      title="{{ stats.covered }}/{{ stats.leaves }} leaves have an objective · {{ stats.placed }}/{{ stats.total }} objectives placed · {{ stats.pool }} in the pool">
   <span class="wstats-note"></span>
-  {% if stats.levels %}<span class="wstats-counts">{% for l in stats.levels %}<b>{{ l.count }}</b> {{ l.label }}{% if not loop.last %}<span class="sep">·</span>{% endif %}{% endfor %}</span>{% endif %}
+  {% if stats.levels %}<span class="wstats-counts">{% for l in stats.levels %}<span class="wstats-level" data-level="{{ l.tag }}"><b>{{ l.count }}</b> {{ l.label }}</span>{% if not loop.last %}<span class="sep">·</span>{% endif %}{% endfor %}</span>{% endif %}
   <span class="wstats-figures"><b>{{ stats.pct }}%</b> leaf coverage<span class="sep">·</span><b>{{ stats.placed_pct }}%</b> objectives placed</span>
 </div>
 {% endmacro %}

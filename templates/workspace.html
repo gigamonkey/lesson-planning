@@ -292,6 +292,78 @@
       if (last) { last.focus(); last.select(); }
     };
 
+    // Collapse: a caret in a unit/lesson head folds it down to just its head row.
+    // Collapsed ids live in JS (not the DOM) so the state survives the htmx swaps
+    // that re-render the whole outline region on a structural edit.
+    const collapsedUnits = new Set();
+    const collapsedLessons = new Set();
+    function setUnitCollapsed(unit, collapsed) {
+      const id = unit.dataset.unitId;
+      unit.classList.toggle('collapsed', collapsed);
+      if (id) { collapsed ? collapsedUnits.add(id) : collapsedUnits.delete(id); }
+    }
+    function setLessonCollapsed(card, collapsed) {
+      const id = card.dataset.lessonId;
+      card.classList.toggle('collapsed', collapsed);
+      if (id) { collapsed ? collapsedLessons.add(id) : collapsedLessons.delete(id); }
+    }
+    function initCollapse(root) {
+      if (!editable) return;
+      root.querySelectorAll('section.unit').forEach(function (unit) {
+        if (collapsedUnits.has(unit.dataset.unitId)) unit.classList.add('collapsed');
+        const tri = unit.querySelector('.unittoggle');
+        if (tri && !tri.dataset.collapseInit) {
+          tri.dataset.collapseInit = '1';
+          tri.addEventListener('click', function () {
+            setUnitCollapsed(unit, !unit.classList.contains('collapsed'));
+          });
+        }
+      });
+      root.querySelectorAll('li.lessoncard').forEach(function (card) {
+        if (collapsedLessons.has(card.dataset.lessonId)) card.classList.add('collapsed');
+        const tri = card.querySelector('.lessontoggle');
+        if (tri && !tri.dataset.collapseInit) {
+          tri.dataset.collapseInit = '1';
+          tri.addEventListener('click', function () {
+            setLessonCollapsed(card, !card.classList.contains('collapsed'));
+          });
+        }
+      });
+      wireCollapseAll();
+    }
+    // The "N units" / "M lessons" counts in the stat bar are collapse-all toggles.
+    // Units: if any unit is open, fold them all; else unfold them all. Lessons: if
+    // any lesson is open, drop to a two-level view (units open, lessons folded);
+    // else expand everything. The stat bar is re-rendered on every stats refresh,
+    // so this re-wires after each swap.
+    function wireCollapseAll() {
+      if (!editable) return;
+      const unitsEl = document.querySelector('.wstats-level[data-level="unit"]');
+      if (unitsEl && !unitsEl.dataset.collapseAllInit) {
+        unitsEl.dataset.collapseAllInit = '1';
+        unitsEl.classList.add('clickable');
+        unitsEl.title = 'Collapse / expand all units';
+        unitsEl.addEventListener('click', function () {
+          const units = Array.from(document.querySelectorAll('section.unit'));
+          const anyOpen = units.some(u => !u.classList.contains('collapsed'));
+          units.forEach(u => setUnitCollapsed(u, anyOpen));
+        });
+      }
+      const lessonsEl = document.querySelector('.wstats-level[data-level="lesson"]');
+      if (lessonsEl && !lessonsEl.dataset.collapseAllInit) {
+        lessonsEl.dataset.collapseAllInit = '1';
+        lessonsEl.classList.add('clickable');
+        lessonsEl.title = 'Collapse / expand all lessons';
+        lessonsEl.addEventListener('click', function () {
+          const cards = Array.from(document.querySelectorAll('li.lessoncard'));
+          const anyOpen = cards.some(c => !c.classList.contains('collapsed'));
+          // Always reveal the units so the (un)folded lessons are visible.
+          document.querySelectorAll('section.unit').forEach(u => setUnitCollapsed(u, false));
+          cards.forEach(c => setLessonCollapsed(c, anyOpen));
+        });
+      }
+    }
+
     // Wire every interactive piece within `root`. Idempotent (each helper guards
     // already-initialized elements), so it's safe to run on the whole document at
     // load and again on just the htmx-swapped outline region.
@@ -300,6 +372,7 @@
       initLessonSortables(root);
       initAddObj(root);
       initBulk(root);
+      initCollapse(root);
       autosizeTitles(root);
     }
     initWorkspace(document);
@@ -316,7 +389,7 @@
     // Skip the stats refresh's own swap to avoid an infinite loop.
     document.body.addEventListener('htmx:afterSwap', function (e) {
       var path = (e.detail && e.detail.requestConfig && e.detail.requestConfig.path) || '';
-      if (path.indexOf('/stats') !== -1) return;
+      if (path.indexOf('/stats') !== -1) { wireCollapseAll(); return; }
       var target = e.detail && e.detail.target;
       if (target && target.id === 'outline-units') initWorkspace(target);
       refreshStats();
