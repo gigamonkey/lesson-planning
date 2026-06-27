@@ -355,11 +355,18 @@
         lessonsEl.classList.add('clickable');
         lessonsEl.title = 'Collapse / expand all lessons';
         lessonsEl.addEventListener('click', function () {
+          const units = Array.from(document.querySelectorAll('section.unit'));
           const cards = Array.from(document.querySelectorAll('li.lessoncard'));
-          const anyOpen = cards.some(c => !c.classList.contains('collapsed'));
+          // Toggle between the two-level view (units open, lessons folded) and
+          // fully expanded. Only expand the lessons when we're *already* exactly
+          // in the two-level view; anything else (units collapsed, or some lessons
+          // open) drops to two-level -- so this stays a clean two-state toggle no
+          // matter what was hidden behind a collapsed unit.
+          const inTwoLevel = units.every(u => !u.classList.contains('collapsed'))
+            && cards.length && cards.every(c => c.classList.contains('collapsed'));
           // Always reveal the units so the (un)folded lessons are visible.
-          document.querySelectorAll('section.unit').forEach(u => setUnitCollapsed(u, false));
-          cards.forEach(c => setLessonCollapsed(c, anyOpen));
+          units.forEach(u => setUnitCollapsed(u, false));
+          cards.forEach(c => setLessonCollapsed(c, !inTwoLevel));
         });
       }
     }
