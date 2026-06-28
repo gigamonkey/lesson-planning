@@ -324,7 +324,18 @@ def build_calendar(bs, data, units):
     emit_leading_breaks()   # any trailing breaks
 
     warnings = []
-    requested = sum(u["weeks"] for u in units if u["weeks"])
+    # Teaching weeks the units ask for. An explicit count is its demand; an
+    # auto-sized (no-count) unit still needs ~ceil(lesson-days / 5) weeks to hold
+    # its lessons (5 = a full teaching week, so this is the FEWEST it could need --
+    # conservative, no false alarms). The last no-count unit is greedy (it absorbs
+    # whatever's left), so it never over-asks and is skipped.
+    requested = 0
+    for i, u in enumerate(units):
+        if u["weeks"]:
+            requested += u["weeks"]
+        elif i < len(units) - 1:
+            days = sum(int(L["days"]) for L in u["lessons"] if int(L["days"]) > 0)
+            requested += max(1, -(-days // 5))
     if requested > teaching_total:
         warnings.append(f"Units ask for more weeks than the year has "
                         f"({_fmt_num(requested)} vs {teaching_total} teaching weeks).")
