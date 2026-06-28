@@ -40,12 +40,6 @@
 
 {% block titlebtn %}
   {% if editable and can_edit %}
-    <form method="post" action="{{ url_for('unit_new', course=course) }}" class="addunit-form"
-          hx-post="{{ url_for('unit_new', course=course) }}"
-          hx-target="#outline-units" hx-swap="innerHTML"
-          hx-on::after-request="window.focusNewUnit && window.focusNewUnit()">
-      <button type="submit" class="addunit" title="Add a unit">+</button>
-    </form>
     <a class="calicon" href="{{ url_for('calendar', course=course) }}"
        title="Calendar view of the outline">
       <i class="bi bi-calendar3"></i></a>
@@ -63,7 +57,8 @@
 
   <dialog id="help-dialog" class="help-dialog">
     {% if editable %}
-      <p>Build the course outline: add <b>units</b> with the <b>+</b> by the title, add
+      <p>Build the course outline: add <b>units</b> with the <b>+</b> that appears
+         between units (or the <b>Add a unit here</b> button at the end), add
          <b>lessons</b>, and drag raw objectives from the pool into a lesson — or use a
          lesson's <b>+</b> to edit its objectives as <code>plan.md</code>-style bullets
          (reword the text freely; leave each trailing <code>(#token)</code> to keep an

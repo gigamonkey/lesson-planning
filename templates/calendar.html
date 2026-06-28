@@ -181,9 +181,31 @@
   <a class="calicon" href="{{ url_for('plan', course=course) }}"
      title="Outline view">
     <i class="bi bi-diagram-3"></i></a>
+  {% if can_edit %}
+  <a class="editmd" href="{{ url_for('outline_edit', course=course) }}"
+     title="Edit the outline as Markdown (plan.md)">
+    <i class="bi bi-pencil-square"></i>&nbsp;Edit as Markdown</a>
+  {% endif %}
+  <button type="button" class="helpbtn" title="Help"
+          onclick="document.getElementById('help-dialog').showModal()">
+    <i class="bi bi-question-circle"></i></button>
 {% endblock %}
 
 {% block body %}
+  <dialog id="help-dialog" class="help-dialog">
+    <p>This lays the course <b>outline</b> across the school year. Each <b>unit</b>
+       spans a number of teaching weeks, and its <b>lessons</b> fill the school days
+       in order, flowing around holidays and exam days. A unit with no week count is
+       auto-sized to hold its lessons (at least one week); set a unit to <b>0 weeks</b>
+       to drop it from the calendar.</p>
+    <p>Edit in place: click a unit title to rename it; type in a unit's <b>weeks</b>
+       field to pin its span (blank = auto); click an empty day to add a lesson there.
+       Drag a lesson by its handle to reorder it or move it to another unit, and drag a
+       unit by its grip to reorder units — every change saves to the outline.</p>
+    <p>The school year, its holidays, and exam days come from the calendar bound in the
+       outline's <code>plan.md</code> (the <code>calendar:</code> key).</p>
+    <menu><button type="button" onclick="this.closest('dialog').close()">Close</button></menu>
+  </dialog>
   {% if error %}
     <div class="cal-warn">{{ error }}</div>
   {% endif %}
