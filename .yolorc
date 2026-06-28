@@ -1,7 +1,6 @@
-# pyproject's bells path source is ../bells (a sibling of the repo), which doesn't
-# exist in a git worktree -- link it to the real lib (a sibling of the main
-# checkout, found via the common git dir) so uv can resolve it. The guard makes it
-# a no-op in the main checkout, where ../bells already resolves. Needs sudo because
-# the worktrees parent dir is root-owned.
-[ -e ../bells ] || sudo ln -s "$(realpath "$(git rev-parse --git-common-dir)/../../bells")" ../bells
+# Start the app at container startup. `bell-schedule` and `bhs-calendars` are
+# PyPI deps now (see pyproject.toml -- no `[tool.uv.sources]`), so `uv run`
+# resolves them from the registry; no `../bells` symlink is needed. To develop
+# the library alongside the app, add a path/editable source under
+# `[tool.uv.sources]` -- not here.
 ./serve.sh -d
