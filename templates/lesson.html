@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{# Read-only lesson plan: the eight free-text parts (rendered markdown) plus the
+   raw objectives placed in the lesson. Context: course, page_title (the lesson
+   title), unit, duration, parts ([(display, key, html)]), objectives ([text]). #}
+{% block head %}
+<style>
+  .lessonview { max-width: var(--content-max); }
+  /* A meta line under the title: a link back to the outline, the unit, the days. */
+  .lessonview .lessonmeta { color: var(--muted); font-size: .85rem; margin: -.4rem 0 1.3rem; }
+  .lessonview .lessonmeta a { color: #2b6cb0; text-decoration: none; }
+  .lessonview .lessonmeta a:hover { text-decoration: underline; }
+  .lessonview .lessonmeta .sep { opacity: .45; margin: 0 .4rem; }
+  .lessonpart { margin: 0 0 1.4rem; }
+  .lessonpart > h2 { font-size: 1.05rem; border-bottom: 1px solid var(--line);
+        padding-bottom: .2rem; margin: 1.5rem 0 .5rem; color: #333; }
+  .lessonpart .partbody { color: #333; }
+  .lessonpart .partbody > :first-child { margin-top: 0; }
+  .lessonpart .partbody > :last-child { margin-bottom: 0; }
+  .lessonpart .partbody ul, .lessonpart .partbody ol { padding-left: 1.4rem; }
+  .lessonpart .partbody pre { background: #f6f6f6; border: 1px solid var(--line);
+        border-radius: 6px; padding: .6rem .8rem; overflow-x: auto; }
+  .lessonpart .partbody pre code { background: none; padding: 0; }
+  /* The learning objective reads as the lesson's aim — set it apart, italic. */
+  .lessonpart.lo .partbody { font-style: italic; color: #444; }
+  .lessonempty { color: var(--muted); font-style: italic; }
+  /* "Objectives addressed": the placed raw objectives this plan distills. */
+  .lessonobjs { margin: 1.8rem 0 0; padding: .8rem 1rem; background: #fff;
+        border: 1px solid var(--line); border-radius: 6px; }
+  .lessonobjs h2 { font-size: .72rem; margin: 0 0 .4rem; border: none; padding: 0;
+        color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+  .lessonobjs ul { margin: 0; padding-left: 1.3rem; }
+  .lessonobjs li { margin: .15rem 0; color: #333; }
+</style>
+{% endblock %}
+{% block body %}
+<div class="lessonview">
+  <div class="lessonmeta">
+    <a href="{{ url_for('plan', course=course) }}">{{ course|upper }} outline</a>
+    {% if unit %}<span class="sep">›</span>{{ unit }}{% endif %}
+    {% if duration %}<span class="sep">·</span>{{ duration }}{% endif %}
+  </div>
+
+  {% if not parts %}
+  <p class="lessonempty">This lesson plan has no content yet.</p>
+  {% endif %}
+
+  {% for disp, key, body in parts %}
+  <section class="lessonpart {{ 'lo' if key == 'learning_objective' else '' }}">
+    <h2>{{ disp }}</h2>
+    <div class="partbody">{{ body }}</div>
+  </section>
+  {% endfor %}
+
+  {% if objectives %}
+  <div class="lessonobjs">
+    <h2>Objectives addressed</h2>
+    <ul>
+      {% for o in objectives %}<li>{{ o|inline }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

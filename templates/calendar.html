@@ -164,6 +164,11 @@
      .iconbtn styling, shrunk to fit the small cell. */
   .cal-lessondel { position: absolute; top: 0; right: 0; margin: 0; z-index: 1; }
   .cal-lessondel button.iconbtn { padding: 0 .15rem; font-size: .8rem; line-height: 1; }
+  /* "Open this lesson plan" link, just left of the trash. */
+  .cal-lessonopen { position: absolute; top: 0; right: 1.05rem; z-index: 1;
+              color: #8aa0bd; text-decoration: none; font-size: .76rem; line-height: 1.2;
+              padding: 0 .15rem; }
+  .cal-lessonopen:hover { color: #2b6cb0; }
 
   /* Learning objective (whiteboard statement): a quiet secondary line under the
      title, shown only while the box is in edit mode (cells are small). Mirrors the
@@ -279,6 +284,8 @@
       if (e.target.closest && e.target.closest('.cal-draghandle')) return;
       // Clicking the delete-lesson trash must submit the form, not enter edit mode.
       if (e.target.closest && e.target.closest('.cal-lessondel')) return;
+      // Clicking the "open lesson plan" link must navigate, not enter edit mode.
+      if (e.target.closest && e.target.closest('.cal-lessonopen')) return;
       if (!cell || cell.classList.contains('editing')) return;
       // First click anywhere in a box -> edit the days count (even if the click
       // landed on the title text). preventDefault stops the title from taking

@@ -15,4 +15,5 @@ dependencies = [
     # caches, the git clone); never scale to multiple workers. See
     # plans/production-wsgi-server.md.
     "gunicorn",
+    "markdown>=3.10.2",
 ]

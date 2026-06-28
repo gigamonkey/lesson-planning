@@ -31,6 +31,7 @@ import threading
 import uuid as uuidlib
 from importlib.resources import files as importlib_files
 
+import markdown
 from flask import (Flask, Response, abort, flash, g, jsonify, make_response,
                    redirect, render_template, request, session, url_for)
 from markupsafe import Markup
@@ -779,6 +780,19 @@ def _inline(text):
 @app.template_filter("inline")
 def inline(text):
     return Markup(_inline(text))
+
+
+# Block-level markdown for lesson-plan part content (multi-paragraph free text:
+# paragraphs, lists, sub-headings, fenced code, tables). One reusable converter,
+# reset() per call. Authored by the course's own teachers (trusted), like the help
+# page, so raw HTML in the source is passed through rather than sanitized.
+_MD = markdown.Markdown(extensions=["extra", "sane_lists"], output_format="html5")
+
+
+def render_markdown(text):
+    """Render a block of markdown to HTML (safe Markup for templates)."""
+    _MD.reset()
+    return Markup(_MD.convert(text or ""))
 
 
 @app.route("/")
@@ -1956,6 +1970,48 @@ def unit_arrange(course):
 
 
 # --- Lessons ---
+
+@app.route("/<course>/lesson/<lesson_id>")
+def lesson_view(course, lesson_id):
+    """Read-only lesson plan: its free-text parts (Preview, Learning objective, …)
+    rendered from the lesson file's node_attr, plus the raw objectives placed in it
+    (the plan is a distillation of those). The eight parts render as markdown."""
+    with db() as conn:
+        O = outline_hierarchy(conn, course)
+        L = conn.execute(
+            "SELECT node_id, parent_id, text FROM nodes WHERE course=? AND hierarchy=?"
+            " AND node_id=? AND level='lesson'", (course, O, lesson_id)).fetchone() if O else None
+        if not L:
+            # Stale/renamed lesson link: fall back to the outline rather than 404
+            # (matches hierarchy_view), or hard-404 if the course is gone too.
+            if conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+                return redirect(url_for("plan", course=course))
+            abort(404, f"no course {course!r}")
+        unit = None
+        if L["parent_id"]:
+            row = conn.execute("SELECT text FROM nodes WHERE course=? AND hierarchy=?"
+                               " AND node_id=?", (course, O, L["parent_id"])).fetchone()
+            unit = row["text"] if row else None
+        attrs = {r["name"]: r["value"] for r in conn.execute(
+            "SELECT name, value FROM node_attr WHERE course=? AND hierarchy=? AND node_id=?",
+            (course, O, lesson_id))}
+        dur = conn.execute("SELECT amount, unit FROM node_duration WHERE course=?"
+                           " AND hierarchy=? AND node_id=?", (course, O, lesson_id)).fetchone()
+        objectives = [r["text"] for r in conn.execute(
+            "SELECT o.text FROM coverage cv JOIN objectives o ON o.uuid=cv.uuid"
+            " WHERE cv.course=? AND cv.hierarchy=? AND cv.node_id=? ORDER BY cv.position, o.text",
+            (course, O, lesson_id))]
+    # The parts in canonical order, each rendered to HTML; only non-empty ones.
+    parts = [(disp, key, render_markdown(attrs[key]))
+             for key, disp in plan_io.LESSON_PARTS if attrs.get(key)]
+    duration = None
+    if dur:
+        amount = int(dur["amount"]) if float(dur["amount"]).is_integer() else dur["amount"]
+        duration = f"{amount} {dur['unit']}{'' if amount == 1 else 's'}"
+    return render_template("lesson.html", course=course, page_title=L["text"],
+                           unit=unit, duration=duration, parts=parts,
+                           objectives=objectives)
+
 
 @app.route("/<course>/lesson/new", methods=["POST"])
 def lesson_new(course):

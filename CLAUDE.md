@@ -15,9 +15,10 @@ format and `plans/markdown-as-storage.md` for the design.
 ## Tech Stack
 
 - Python 3.13; third-party runtime deps: Flask, `bell-schedule` (the
-  school-calendar library, import name `bells`), and `bhs-calendars` (its bundled
-  calendar data) — both PyPI packages now. Add a `[tool.uv.sources]` path/editable
-  source for either to develop the library alongside this app.
+  school-calendar library, import name `bells`), `bhs-calendars` (its bundled
+  calendar data) — both PyPI packages now — and `markdown` (renders lesson-plan
+  part content to HTML in the lesson view). Add a `[tool.uv.sources]` path/editable
+  source for either calendar package to develop it alongside this app.
 - SQLite as a cache; a git-tracked **courses directory** of markdown + TSVs is the committed
   state
 - Package manager: `uv` (run scripts with `uv run <script>.py`)
@@ -109,6 +110,12 @@ outline) opening a CodeMirror 6 editor (`/<course>/outline/edit`) on the
 round-trippable `plan.md`. Saving posts to `/<course>/outline/source`, which runs
 `plan_io.load_plan_text` then `plan_io.write_course` — so a save updates the db
 **and** writes `plan.md` + the TSVs to disk, leaving the course clean.
+
+Each lesson links to a **read-only lesson view** (`/<course>/lesson/<uuid>`,
+`lesson_view` + `templates/lesson.html`) — its eight free-text parts rendered from
+the lesson file's `node_attr` (via `markdown`), plus the raw objectives placed in
+it (the plan distills them). A "journal" icon opens it from the outline lesson card
+and from each calendar lesson cell. (Editing the parts is not built yet.)
 
 The **Calendar** sidebar item (`/<course>/calendar`) lays the outline across the
 school year (units→weeks, lessons→days; see `calendar_view.py` and the duration

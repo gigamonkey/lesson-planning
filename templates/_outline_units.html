@@ -26,6 +26,8 @@
              ><span class="durunit">{{ 'day' if durations.get(L.id, 1) == 1 else 'days' }}</span></label>
     </form>
     <button type="button" class="addobjbtn hoverctl" title="Add or edit objectives for this lesson">+</button>
+    <a class="lessonopen hoverctl" title="Open this lesson plan"
+       href="{{ url_for('lesson_view', course=course, lesson_id=L.id) }}"><i class="bi bi-journal-text"></i></a>
     <form method="post" class="hoverctl" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
           hx-post="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
           hx-target="#outline-units" hx-swap="innerHTML">
