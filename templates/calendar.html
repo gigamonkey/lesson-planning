@@ -155,6 +155,39 @@
   /* Unplanned tail chunks: greyed header, the text "Unplanned". */
   .cal-unplanned .cal-unit-head { color: #b0b0b0; border-bottom-color: #ececec; }
 
+  /* Delete-unit trash in the unit head: hover-revealed (.hoverctl), styled like the
+     outline's iconbtn trash; sits at the end of the head after the weeks pill. */
+  .cal-unitdel { margin: 0; flex: none; align-self: center; }
+
+  /* Delete-lesson trash: hover-revealed, pinned to the lesson box's top-right --
+     opposite the left-edge drag handle so they never collide. Uses the global
+     .iconbtn styling, shrunk to fit the small cell. */
+  .cal-lessondel { position: absolute; top: 0; right: 0; margin: 0; z-index: 1; }
+  .cal-lessondel button.iconbtn { padding: 0 .15rem; font-size: .8rem; line-height: 1; }
+
+  /* Learning objective (whiteboard statement): a quiet secondary line under the
+     title, shown only while the box is in edit mode (cells are small). Mirrors the
+     title textarea -- wraps, autosizes -- but lighter and smaller. */
+  .cal-lessonlo { display: none; margin: 0; width: 100%; }
+  .cal-cell.lesson.editing .cal-lessonlo { display: block; }
+  .cal-lessonlo textarea { font: inherit; font-size: .62rem; color: #5a728d; text-align: center;
+              width: 100%; box-sizing: border-box; padding: .05rem .2rem; background: transparent;
+              border: 1px solid transparent; border-radius: 4px;
+              resize: none; overflow: hidden; line-height: 1.2;
+              white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+              field-sizing: content; }
+  .cal-lessonlo textarea:hover { border-color: #cdebd9; }
+  .cal-lessonlo textarea:focus { border-color: #bcd; background: #fff; outline: none; }
+  .cal-lessonlo textarea::placeholder { color: #9fb3cc; }
+
+  /* Append-unit affordance (mirrors the outline's "Add a unit here"). */
+  .cal-addunit { margin: .2rem 0 1rem; }
+  .cal-addunit form { margin: 0; }
+  .cal-addunit-btn { border: none; background: none; padding: .15rem .2rem;
+              color: #9aa6b2; font: inherit; font-size: .85rem; cursor: pointer;
+              display: inline-flex; align-items: center; gap: .3rem; }
+  .cal-addunit-btn:hover, .cal-addunit-btn:focus-visible { color: #2b6cb0; }
+
   /* Phone: shrink the calendar to fit the viewport rather than scroll it. The
      five-column week is kept (it's what makes the grid legible) but the columns
      go fluid, the date label and boxes shrink, and the per-day lesson text drops
@@ -244,6 +277,8 @@
       });
       // Grabbing the drag handle starts a drag, not an edit -- leave the box closed.
       if (e.target.closest && e.target.closest('.cal-draghandle')) return;
+      // Clicking the delete-lesson trash must submit the form, not enter edit mode.
+      if (e.target.closest && e.target.closest('.cal-lessondel')) return;
       if (!cell || cell.classList.contains('editing')) return;
       // First click anywhere in a box -> edit the days count (even if the click
       // landed on the title text). preventDefault stops the title from taking

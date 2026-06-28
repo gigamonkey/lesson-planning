@@ -56,6 +56,17 @@
         </form>
         {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
       {% endif %}
+      {% if u.node_id %}
+        {# Delete this unit (hover-revealed, matching the outline's trash). Its
+           lessons become unassigned and drop off the calendar. #}
+        <form method="post" class="cal-unitdel hoverctl"
+              action="{{ url_for('unit_delete', course=course, unit_id=u.node_id) }}"
+              hx-post="{{ url_for('unit_delete', course=course, unit_id=u.node_id) }}"
+              hx-target="#cal-content" hx-swap="innerHTML">
+          <input type="hidden" name="view" value="calendar">
+          <button class="iconbtn" title="Delete unit"><i class="bi bi-trash3"></i></button>
+        </form>
+      {% endif %}
     </div>
     <div class="cal-week cal-head">
       <div class="cal-when"></div>
@@ -78,7 +89,7 @@
                 {# Click-to-edit lesson: title (htmx autosave) + a days pill that
                    appears while editing (hover/focus) and re-lays-out on change.
                    A just-added lesson (focus_lesson) opens with its title focused. #}
-                <div class="cal-cell lesson{{ ' editing' if focus_lesson and c.node_id == focus_lesson else '' }}"
+                <div class="cal-cell lesson hoverhost{{ ' editing' if focus_lesson and c.node_id == focus_lesson else '' }}"
                      {% if focus_lesson and c.node_id == focus_lesson %}data-focus-title="1"{% endif %}
                      data-node-id="{{ c.node_id }}"
                      style="grid-column: span {{ c.days }}">
@@ -87,6 +98,17 @@
                      so clicks in the title/days fields never start a drag. #}
                   <span class="cal-draghandle" draggable="true" aria-hidden="true"
                         title="Drag to reorder or move this lesson"><i class="bi bi-grip-vertical"></i></span>
+                  {# Delete this lesson (hover-revealed, top-right -- opposite the
+                     left-edge drag handle so they don't collide). Matches the outline
+                     trash. A lesson can render as several cells (one per spanned week
+                     row) sharing this node_id; each trash deletes the same lesson. #}
+                  <form method="post" class="cal-lessondel hoverctl"
+                        action="{{ url_for('lesson_delete', course=course, lesson_id=c.node_id) }}"
+                        hx-post="{{ url_for('lesson_delete', course=course, lesson_id=c.node_id) }}"
+                        hx-target="#cal-content" hx-swap="innerHTML">
+                    <input type="hidden" name="view" value="calendar">
+                    <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
+                  </form>
                   <form class="cal-lessonname autosave" method="post"
                         action="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
                         hx-post="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
@@ -94,6 +116,18 @@
                     <input type="hidden" name="view" value="calendar">
                     <textarea name="title" rows="1" autocomplete="off"
                            aria-label="Lesson title" placeholder="Lesson title…">{{ c.title }}</textarea>
+                  </form>
+                  {# Learning objective (the whiteboard statement) -- the same field as
+                     the outline lesson card, posting to lesson_edit. Shown only while
+                     the box is in edit mode (compact cells); a quiet secondary line. #}
+                  <form class="cal-lessonlo autosave" method="post"
+                        action="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
+                        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
+                        hx-target="#cal-content" hx-swap="innerHTML">
+                    <input type="hidden" name="view" value="calendar">
+                    <textarea name="learning_objective" rows="1" autocomplete="off"
+                           aria-label="Learning objective"
+                           placeholder="Learning objective…">{{ los.get(c.node_id, '') }}</textarea>
                   </form>
                   <form class="cal-lessondays autosave" method="post"
                         action="{{ url_for('node_duration_set', course=course, node_id=c.node_id) }}"
@@ -134,3 +168,19 @@
   </section>
   {% endif %}
 {% endfor %}
+{# Append a unit at the end (mirrors the outline's "Add a unit here"). The new unit
+   starts empty; click an empty day in it to add lessons. #}
+<div class="cal-addunit">
+  <form method="post" action="{{ url_for('unit_new', course=course) }}"
+        hx-post="{{ url_for('unit_new', course=course) }}"
+        hx-target="#cal-content" hx-swap="innerHTML">
+    <input type="hidden" name="view" value="calendar">
+    <button type="submit" class="cal-addunit-btn"><i class="bi bi-plus-lg"></i> Add a unit here</button>
+  </form>
+</div>
+{# NON-PARITY (deliberate): raw-objective / coverage editing (the outline's
+   add-objectives "+" bulk editor and dragging raw objectives from the pool into a
+   lesson) is NOT offered here. The calendar page has no raw-objective pool, and
+   this is coverage mapping, not plan structure -- the year-grid cells are tiny and
+   a pool UI doesn't fit. The per-lesson LEARNING OBJECTIVE (whiteboard statement)
+   above IS editable here; only pool-driven coverage stays outline-only. #}

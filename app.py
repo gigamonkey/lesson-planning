@@ -1813,15 +1813,21 @@ def _calendar_ctx(conn, course):
     bound / it can't load."""
     crow = conn.execute("SELECT calendar FROM courses WHERE course=?", (course,)).fetchone()
     cal_id = crow["calendar"] if crow else None
+    # Learning objectives (the per-lesson "whiteboard statement"), keyed by node_id,
+    # so the calendar's lesson box can show/edit it like the outline card does.
+    O = outline_hierarchy(conn, course)
+    los = {r["node_id"]: r["value"] for r in conn.execute(
+        "SELECT node_id, value FROM node_attr "
+        "WHERE course=? AND hierarchy=? AND name='learning_objective'", (course, O))} if O else {}
     if not cal_id:
-        return {"calendar_id": None, "view": None, "error": None}
+        return {"calendar_id": None, "view": None, "error": None, "los": los}
     try:
         bs, data = calendar_view.load_calendar(cal_id, CALENDAR_DIR, CALENDAR_EXTRAS_DIR)
     except (OSError, ValueError) as e:
         return {"calendar_id": cal_id, "view": None,
-                "error": f"Couldn't load calendar {cal_id!r}: {e}"}
+                "error": f"Couldn't load calendar {cal_id!r}: {e}", "los": los}
     view = calendar_view.build_calendar(bs, data, _outline_units(conn, course))
-    return {"calendar_id": cal_id, "view": view, "error": None}
+    return {"calendar_id": cal_id, "view": view, "error": None, "los": los}
 
 
 @app.route("/<course>/calendar")
@@ -1882,6 +1888,11 @@ def unit_new(course):
                      " ordinal, text) VALUES (?, ?, ?, NULL, 'unit', 0, ?, ?)",
                      (course, O, str(uuidlib.uuid4()), pos, title))
         conn.commit()
+        # From the calendar's append-unit affordance: re-lay-out and swap #cal-content
+        # (a new unit has no lesson to focus, so just re-render).
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   **_calendar_ctx(conn, course))
         if request.headers.get("HX-Request"):
             return _outline_swap(conn, course)
     return redirect(url_for("hierarchy_view", course=course, hierarchy=O, focus_new_unit=1))
@@ -1914,6 +1925,11 @@ def unit_delete(course, unit_id):
         conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=? AND node_id=?", (course, O, unit_id))
         conn.commit()
         msg = "Deleted unit; lessons moved to Unassigned, rough raws back in the pool."
+        # From the calendar: re-lay-out and swap #cal-content (the deleted unit's
+        # lessons become unassigned, so they drop off the calendar).
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   **_calendar_ctx(conn, course))
         if request.headers.get("HX-Request"):
             return _outline_swap(conn, course, msg)
     flash(msg)
@@ -2017,6 +2033,10 @@ def lesson_delete(course, lesson_id):
         conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=? AND node_id=?", (course, O, lesson_id))
         conn.commit()
         msg = "Deleted lesson; its raws returned to the pool."
+        # From the calendar: re-lay-out and swap #cal-content.
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   **_calendar_ctx(conn, course))
         if request.headers.get("HX-Request"):
             return _outline_swap(conn, course, msg)
     flash(msg)
