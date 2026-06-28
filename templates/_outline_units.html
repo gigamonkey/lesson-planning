@@ -20,10 +20,10 @@
     <form class="durform autosave" method="post"
           action="{{ url_for('node_duration_set', course=course, node_id=L.id) }}"
           hx-post="{{ url_for('node_duration_set', course=course, node_id=L.id) }}" hx-swap="none">
-      <input class="durinput" type="number" name="amount" min="0" step="0.5"
+      <label><input class="durinput" type="number" name="amount" min="0" step="0.5"
              value="{{ durations.get(L.id, '') }}" placeholder="1"
-             title="Days this lesson takes (default 1)" aria-label="Days">
-      <span class="durunit">d</span>
+             title="Days this lesson takes (default 1)" aria-label="Days"
+             ><span class="durunit">{{ 'day' if durations.get(L.id, 1) == 1 else 'days' }}</span></label>
     </form>
     <button type="button" class="addobjbtn" title="Add or edit objectives for this lesson">+</button>
     <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
@@ -71,15 +71,16 @@
          a lighter "derived" pill, matching the calendar. Needs the bound calendar to
          know the number; falls back to a plain "—" placeholder without one. #}
       {% set uw = (unit_weeks if unit_weeks is defined else {}).get(u.id) %}
+      {% set wknum = uw.weeks_shown if (uw and uw.derived) else durations.get(u.id, '') %}
       <form class="durform {{ 'derived' if uw and uw.derived }} autosave" method="post"
             action="{{ url_for('node_duration_set', course=course, node_id=u.id) }}"
             hx-post="{{ url_for('node_duration_set', course=course, node_id=u.id) }}" hx-swap="none">
-        <input class="durinput" type="number" name="amount" min="0" step="0.5"
+        <label><input class="durinput" type="number" name="amount" min="0" step="0.5"
                value="{{ durations.get(u.id, '') }}"
                placeholder="{{ uw.weeks_shown if uw else '—' }}"
                title="{{ 'Auto — type a number to pin it' if (uw and uw.derived) else 'Weeks this unit spans' }}"
-               aria-label="Weeks">
-        <span class="durunit">wk</span>
+               aria-label="Weeks"
+               ><span class="durunit">{{ 'week' if wknum == 1 else 'weeks' }}</span></label>
       </form>
       <form method="post" action="{{ url_for('lesson_new', course=course) }}"
             hx-post="{{ url_for('lesson_new', course=course) }}"

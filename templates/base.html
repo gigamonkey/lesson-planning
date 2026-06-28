@@ -246,31 +246,32 @@
     .lessonctl { display: flex; gap: .2rem; }
     .lessonctl form { margin: 0; }
     .lessonctl button { padding: .1rem .4rem; }
-    /* Inline duration field on a unit/lesson (weeks / days), autosaved. Looks like
-       plain muted text until hovered/focused, like the other inline edits. */
-    .durform { display: inline-flex; align-items: center; gap: .12rem; margin: 0; flex: none; }
-    .durinput { width: 2.4rem; text-align: right; font: inherit; font-size: .82rem;
-            padding: .1rem .25rem; color: #555; background: transparent; border-radius: 4px;
-            border: 1px solid transparent; -moz-appearance: textfield; appearance: textfield; }
+    /* Inline duration pill on a unit/lesson (weeks / days), autosaved. A filled pill
+       that mirrors the calendar view's week/day pills exactly (same chrome, label as
+       click target, field-sizing input). A "derived" unit (auto-sized to its lessons,
+       or the greedy last unit) is a lighter pill showing the actual week count via the
+       placeholder; an explicit count fills the field. */
+    .durform { display: inline-flex; margin: 0; flex: none;
+            font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+            padding: .05rem .4rem; border-radius: 8px; background: #eef1f4; color: #555;
+            border: 1px solid #e0e4e8; }
+    .durform:hover { border-color: #cfd6dd; }
+    .durform:focus-within { background: #fff; border-color: #bcd; }
+    .durform.derived { background: #f7f9fb; border-color: #eceff2; }
+    .durform.derived .durinput, .durform.derived .durunit { color: #9aa3ad; }
+    .durform.derived .durinput::placeholder { color: #9aa3ad; opacity: 1; }
+    .durform.derived:focus-within { background: #fff; border-color: #bcd; }
+    /* The label is the click target: clicking anywhere in the pill focuses the input. */
+    .durform label { display: inline-flex; align-items: baseline; gap: .25rem; cursor: text; }
+    /* field-sizing makes the input hug its value/placeholder -- no leading whitespace. */
+    .durinput { font: inherit; font-size: .65rem; font-weight: 700; text-transform: uppercase;
+            color: #444; background: transparent; border: none; padding: 0;
+            field-sizing: content; box-sizing: content-box;
+            -moz-appearance: textfield; appearance: textfield; }
     .durinput::-webkit-outer-spin-button, .durinput::-webkit-inner-spin-button {
             -webkit-appearance: none; margin: 0; }
-    .durinput:hover { border-color: var(--line); }
-    .durinput:focus { border-color: #bcd; background: #fff; outline: none; }
-    .durunit { font-size: .7rem; color: var(--muted); }
-    /* Unit weeks pill: a filled pill like the calendar's. A "derived" span (auto-sized
-       or the greedy last unit) is a lighter pill showing the actual week count via the
-       placeholder; an explicit count fills the field. The pill carries the chrome, so
-       the inner input stays borderless. */
-    .unithead .durform { background: #eef1f4; border: 1px solid #e0e4e8; border-radius: 8px;
-            padding: 0 .25rem; }
-    .unithead .durform:hover { border-color: #cfd6dd; }
-    .unithead .durform:focus-within { background: #fff; border-color: #bcd; }
-    .unithead .durform.derived { background: #f7f9fb; border-color: #eceff2; }
-    .unithead .durform.derived .durinput, .unithead .durform.derived .durunit { color: #9aa3ad; }
-    .unithead .durform.derived .durinput::placeholder { color: #9aa3ad; opacity: 1; }
-    .unithead .durform.derived:focus-within { background: #fff; border-color: #bcd; }
-    .unithead .durinput, .unithead .durinput:hover, .unithead .durinput:focus {
-            border-color: transparent; background: transparent; }
+    .durinput:focus { outline: none; }
+    .durunit { color: #8a929b; }
     ul.sortable { list-style: none; margin: .4rem 0 0; padding: .15rem;
             min-height: 2rem; border: 1px dashed var(--line); border-radius: 5px;
             background: var(--bg); }
