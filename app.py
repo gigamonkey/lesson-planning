@@ -49,6 +49,7 @@ import import_objectives  # noqa: E402
 import load_nodes  # noqa: E402
 import plan_io  # noqa: E402
 import rebuild_db  # noqa: E402
+import version  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
@@ -636,6 +637,12 @@ def _pin_slug(text, slug):
         return text
     body = [l for l in lines[1:end] if l.split(":", 1)[0].strip() != "slug"]
     return "".join([lines[0], f"slug: {slug}\n"] + body + lines[end:])
+
+
+@app.context_processor
+def inject_version():
+    """The git SHA the server was built from, for the sidebar footer."""
+    return {"git_sha": version.git_sha()}
 
 
 @app.context_processor

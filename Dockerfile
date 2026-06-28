@@ -27,6 +27,12 @@ COPY . /app
 # Pre-build the virtualenv into the image.
 RUN uv sync --frozen || uv sync
 
+# The git commit this image was built from, surfaced in the UI (sidebar footer).
+# The `.git` dir is excluded from the build context (.dockerignore), so the SHA
+# is passed in at build time -- `make deploy` supplies `--build-arg GIT_SHA=...`.
+ARG GIT_SHA=""
+ENV GIT_SHA=$GIT_SHA
+
 # Production settings.
 ENV FLASK_DEBUG=0 \
     PORT=8080 \

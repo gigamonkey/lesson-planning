@@ -6,10 +6,15 @@
 # App name read from fly.toml so it isn't duplicated here.
 app := $(shell sed -n 's/^app = "\(.*\)"/\1/p' fly.toml)
 
+# The commit being shipped, baked into the image so the running server can show
+# it (the .git dir is excluded from the Docker build context). `-dirty` marks an
+# image built with uncommitted changes.
+git_sha := $(shell git describe --always --dirty --abbrev=7)
+
 .PHONY: deploy secrets logs ssh restart
 
 deploy: secrets
-	fly deploy
+	fly deploy --build-arg GIT_SHA=$(git_sha)
 
 secrets:
 	./set-secrets.sh

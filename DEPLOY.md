@@ -241,8 +241,15 @@ ships the app:
 make deploy
 ```
 
-(That's `./set-secrets.sh && fly deploy`. Use plain `fly deploy` to ship without
-re-staging secrets, or `make secrets` to stage them without deploying.)
+(That's `./set-secrets.sh && fly deploy --build-arg GIT_SHA=$(git describe
+--always --dirty --abbrev=7)`. Use plain `fly deploy` to ship without re-staging
+secrets, or `make secrets` to stage them without deploying.)
+
+`make deploy` bakes the commit being shipped into the image as the `GIT_SHA`
+build-arg (the `.git` dir is excluded from the Docker build context), and the app
+shows that abbreviated SHA in the sidebar footer so you can tell which build is
+live. A plain `fly deploy` skips the build-arg, so the footer SHA just won't
+appear; locally the app falls back to `git rev-parse` against its own checkout.
 
 After the first deploy, do step 5b (write `/data/collab.json`), then restart:
 

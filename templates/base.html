@@ -174,6 +174,8 @@
     .sidebar-foot a { color: #2b6cb0; text-decoration: none; }
     .sidebar-foot a.active { font-weight: 700; color: #222; }
     .sidebar-foot button { font-size: .8rem; padding: .2rem .5rem; }
+    .sidebar-foot .footver { display: block; margin-top: .5rem; font-size: .7rem;
+      color: #999; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     .pill { font-size: .58rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
             padding: .04rem .32rem; border-radius: 8px; flex: none;
             background: #eef1f4; color: #555; border: 1px solid #e0e4e8; }
@@ -726,6 +728,9 @@
           <a href="{{ url_for('data') }}"
              class="{{ 'active' if request.endpoint == 'data' else '' }}">Settings</a>
         </span>
+        {% if git_sha %}
+        <span class="footver" title="Server build (git commit)">{{ git_sha }}</span>
+        {% endif %}
       </div>
     </aside>
     <main>
