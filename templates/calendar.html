@@ -19,10 +19,12 @@
   .cal-unit-head { display: flex; align-items: baseline; gap: .5rem;
                    border-bottom: 2px solid var(--line); padding-bottom: .2rem; margin-bottom: .35rem; }
   .cal-unit-head .name { font-weight: 700; font-size: 1.05rem; flex: 1 1 auto; min-width: 0; }
-  /* Grip to drag-reorder a unit (like the outline): revealed on head hover/drag. */
+  /* Grip to drag-reorder a unit (like the outline). Hide/show is the shared
+     .hoverctl utility (no reserved space when hidden; revealed on head
+     hover/focus and during a unit drag via body.cal-dragging); this only carries
+     its chrome. */
   .cal-unithandle { flex: none; color: #c4c4c4; cursor: grab; font-size: .9rem;
-                    align-self: center; opacity: 0; transition: opacity .1s; }
-  .cal-unit-head:hover .cal-unithandle, body.cal-dragging .cal-unithandle { opacity: 1; }
+                    align-self: center; }
   .cal-unithandle:hover { color: #2b6cb0; }
   .cal-unit-ghost { opacity: .4; }
   /* Click-to-edit unit title: looks like .name, gets a field outline on hover/focus. */

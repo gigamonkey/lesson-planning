@@ -7,10 +7,10 @@
 {# An outline lesson: title + learning objective + its raws (editable). #}
 {% macro lessoncard(L) %}
 <li class="lessoncard" data-lesson-id="{{ L.id }}">
-  <div class="lessonhead">
+  <div class="lessonhead hoverhost">
     <button type="button" class="lessontoggle" title="Collapse / expand this lesson"
             aria-label="Collapse / expand this lesson"><i class="bi bi-caret-down-fill"></i></button>
-    <span class="draghandle lessonhandle" title="Drag to reorder or move this lesson"
+    <span class="draghandle lessonhandle hoverctl" title="Drag to reorder or move this lesson"
           aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>
     <form method="post" class="edit autosave"
           action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
@@ -25,8 +25,8 @@
              title="Days this lesson takes (default 1)" aria-label="Days"
              ><span class="durunit">{{ 'day' if durations.get(L.id, 1) == 1 else 'days' }}</span></label>
     </form>
-    <button type="button" class="addobjbtn" title="Add or edit objectives for this lesson">+</button>
-    <form method="post" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
+    <button type="button" class="addobjbtn hoverctl" title="Add or edit objectives for this lesson">+</button>
+    <form method="post" class="hoverctl" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
           hx-post="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
           hx-target="#outline-units" hx-swap="innerHTML">
       <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
@@ -66,10 +66,10 @@
     </form>
   </div>
   <section class="unit" data-unit-id="{{ u.id }}">
-    <div class="unithead">
+    <div class="unithead hoverhost">
       <button type="button" class="unittoggle" title="Collapse / expand this unit"
               aria-label="Collapse / expand this unit"><i class="bi bi-caret-down-fill"></i></button>
-      <span class="draghandle unithandle" title="Drag to reorder this unit"
+      <span class="draghandle unithandle hoverctl" title="Drag to reorder this unit"
             aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>
       <form method="post" class="edit autosave"
             action="{{ url_for('unit_rename', course=course, unit_id=u.id) }}"
@@ -92,13 +92,13 @@
                aria-label="Weeks"
                ><span class="durunit">{{ 'week' if wknum == 1 else 'weeks' }}</span></label>
       </form>
-      <form method="post" action="{{ url_for('lesson_new', course=course) }}"
+      <form method="post" class="hoverctl" action="{{ url_for('lesson_new', course=course) }}"
             hx-post="{{ url_for('lesson_new', course=course) }}"
             hx-target="#outline-units" hx-swap="innerHTML">
         <input type="hidden" name="unit" value="{{ u.id }}">
         <button type="submit" class="addlesson" title="Add a lesson to this unit">+</button>
       </form>
-      <div class="lessonctl">
+      <div class="lessonctl hoverctl">
         <form method="post" action="{{ url_for('unit_delete', course=course, unit_id=u.id) }}"
               hx-post="{{ url_for('unit_delete', course=course, unit_id=u.id) }}"
               hx-target="#outline-units" hx-swap="innerHTML">
@@ -131,11 +131,11 @@
   </form>
 </div>
 <section class="unit unassigned" data-unit-id="none">
-  <div class="unithead">
+  <div class="unithead hoverhost">
     <button type="button" class="unittoggle" title="Collapse / expand this section"
             aria-label="Collapse / expand this section"><i class="bi bi-caret-down-fill"></i></button>
     <span class="unitlabel">Unassigned lessons</span>
-    <form method="post" action="{{ url_for('lesson_new', course=course) }}"
+    <form method="post" class="hoverctl" action="{{ url_for('lesson_new', course=course) }}"
           hx-post="{{ url_for('lesson_new', course=course) }}"
           hx-target="#outline-units" hx-swap="innerHTML">
       <button type="submit" class="addlesson" title="Add an unassigned lesson">+</button>

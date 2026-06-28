@@ -20,9 +20,9 @@
   {% else %}
   <section class="cal-unit {{ 'cal-unplanned' if u.unplanned }}"
            {% if u.node_id %}data-unit-id="{{ u.node_id }}"{% endif %}>
-    <div class="cal-unit-head">
+    <div class="cal-unit-head hoverhost">
       {% if u.node_id %}
-        <span class="cal-unithandle" title="Drag to reorder this unit"
+        <span class="cal-unithandle hoverctl" title="Drag to reorder this unit"
               aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>
         {# Click-to-edit unit title (htmx autosave on blur/Enter, like the outline). #}
         <form class="cal-name autosave" method="post"

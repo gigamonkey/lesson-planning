@@ -108,15 +108,29 @@
                 text-transform: uppercase; color: var(--muted); margin: .35rem 0 .1rem; }
     /* Per-hierarchy row controls: an upload (+) and a hover trash. */
     .sidebar ul.hiers li.hieritem { gap: .25rem; }
-    /* Drag handle to reorder references; revealed on row hover, like the trash. */
+
+    /* === Shared hover-revealed control utility =============================
+       `.hoverctl` is the ONE pattern for a control that should be invisible
+       AND take up no layout space until you hover (or keyboard-focus) the
+       thing it belongs to -- drag handles, the outline's +/trash icons, etc.
+       Use `display:none`, NOT `visibility:hidden` or `opacity:0`, so a hidden
+       control reserves no width (no permanent gap on a collapsed head/row).
+
+       Pair it with a `.hoverhost` ancestor (the row/head you hover): the
+       generic rules below reveal every `.hoverctl` inside a hovered or
+       focus-within `.hoverhost`. During a drag (`body.dragging` for the
+       outline's SortableJS, `body.cal-dragging` for the calendar) handles stay
+       revealed so you can see where you're dragging. Revealed controls become
+       `inline-flex` (works for the grip spans and the icon buttons alike). */
+    .hoverctl { display: none; align-items: center; }
+    .hoverhost:hover .hoverctl,
+    .hoverhost:focus-within .hoverctl,
+    body.dragging .hoverctl,
+    body.cal-dragging .hoverctl { display: inline-flex; }
+
+    /* Drag handle to reorder references; revealed on row hover (.hoverctl). */
     .draghandle { color: #ccc; cursor: grab; font-size: .8rem; line-height: 1; flex: none;
-                  visibility: hidden; margin-left: -.15rem; }
-    .sidebar ul.hiers li.hieritem:hover .draghandle { visibility: visible; }
-    /* The same grip reorders units/lessons, revealed on head hover -- but here it
-       takes no space until shown (display, not visibility), so collapsed heads
-       don't carry a permanent gap. */
-    .unithandle, .lessonhandle { display: none; visibility: visible; align-items: center; }
-    .unithead:hover .unithandle, .lessonhead:hover .lessonhandle { display: inline-flex; }
+                  margin-left: -.15rem; }
     .draghandle:active { cursor: grabbing; }
     .sortable-ghost { opacity: .4; }
     .objadd { margin: 0; display: inline-flex; flex: none; }
@@ -137,8 +151,9 @@
     .oimport-dialog select { display: block; width: 100%; margin-top: .25rem; padding: .35rem .45rem;
             font: inherit; border: 1px solid var(--line); border-radius: 4px; }
     .oimport-dialog menu { display: flex; justify-content: flex-end; gap: .5rem; margin: 0; padding: 0; }
-    .hdel { margin: 0; display: inline-flex; flex: none; visibility: hidden; }
-    .sidebar ul.hiers li.hieritem:hover .hdel { visibility: visible; }
+    /* The hierarchy-row trash: hide/show is the shared .hoverctl utility; this only
+       carries its layout/chrome. */
+    .hdel { margin: 0; flex: none; }
     .hdel button { border: none; background: none; cursor: pointer; color: #c4c4c4;
              font-size: .76rem; line-height: 1; padding: 0; }
     .hdel button:hover { color: var(--gap); }
@@ -564,12 +579,12 @@
       .objtable-wrap { overflow-x: auto; }
     }
 
-    /* Touch devices have no hover, so reveal the hover-gated controls (reorder
-       handle, row trash, inline-edit save) and grow the tiny icon hit areas.
-       Scoped to (hover: none) so a narrow desktop window keeps the hover UI. */
+    /* Touch devices have no hover, so reveal the hover-gated controls (every
+       .hoverctl: drag handles, the outline's +/trash icons, the row trash) plus
+       the inline-edit save, and grow the tiny icon hit areas. Scoped to
+       (hover: none) so a narrow desktop window keeps the hover UI. */
     @media (hover: none) {
-      .sidebar ul.hiers li.hieritem .hdel,
-      .sidebar ul.hiers li.hieritem .draghandle { visibility: visible; }
+      .hoverctl { display: inline-flex; }
       .objedit button { visibility: visible; }
       .miniadd, .coursehead .gear, .draghandle { padding: .3rem; }
     }
@@ -677,10 +692,10 @@
           {% endif %}
           <ul class="hiers" data-course="{{ c.course }}">
             {% for h in c.hierarchies %}
-              <li class="hieritem {{ 'active' if c.course == nav_course and h.hierarchy == active_hierarchy else '' }}"
+              <li class="hieritem hoverhost {{ 'active' if c.course == nav_course and h.hierarchy == active_hierarchy else '' }}"
                   data-hierarchy="{{ h.hierarchy }}">
                 {% if can_edit %}
-                <span class="draghandle" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
+                <span class="draghandle hoverctl" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
                 {% endif %}
                 <a href="{{ url_for('hierarchy_view', course=c.course, hierarchy=h.hierarchy) }}"
                    title="{{ h.label }}">{{ h.label }}</a>
@@ -693,7 +708,7 @@
                     <input type="file" name="file" accept=".tsv,.txt,.csv" hidden onchange="this.form.submit()">
                   </label>
                 </form>
-                <form method="post" class="hdel"
+                <form method="post" class="hdel hoverctl"
                       action="{{ url_for('hierarchy_delete', course=c.course, hierarchy=h.hierarchy) }}"
                       onsubmit="return confirm('Delete {{ h.hierarchy }} and its coverage edges?');">
                   <button type="submit" title="Delete hierarchy"><i class="bi bi-trash"></i></button>
