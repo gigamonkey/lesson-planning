@@ -1250,10 +1250,6 @@ def hierarchy_view(course, hierarchy):
                 return redirect(url_for("tree", course=course))
             abort(404, f"no course {course!r}")
         nodes, by_node, pool = workspace_data(conn, course, hierarchy)
-        los = {r["node_id"]: r["value"] for r in conn.execute(
-            "SELECT node_id, value FROM node_attr "
-            "WHERE course=? AND hierarchy=? AND name='learning_objective'",
-            (course, hierarchy))} if h["editable"] else {}
         # node_id -> amount (the duration's number; the unit is implied by the
         # node's level -- weeks on units, days on lessons). Drives the inline
         # duration fields on the editable outline.
@@ -1271,7 +1267,7 @@ def hierarchy_view(course, hierarchy):
     return render_template(
         "workspace.html", course=course, ref=hierarchy,
         page_title=title,
-        editable=bool(h["editable"]), los=los, pool=pool,
+        editable=bool(h["editable"]), pool=pool,
         durations=durations, unit_weeks=unit_weeks,
         tree=build_tree(nodes, by_node, set()),
         stats=workspace_stats(nodes, by_node, pool))
@@ -1669,19 +1665,16 @@ def _outline_unit_weeks(conn, course):
 
 def _outline_ctx(conn, course):
     """Render context for the editable outline units partial (_outline_units.html):
-    the unit/lesson tree plus the inline durations and learning objectives. Shared
-    by the structural-edit routes so each can return just that region for an htmx
-    in-place swap (no full reload, scroll preserved)."""
+    the unit/lesson tree plus the inline durations. Shared by the structural-edit
+    routes so each can return just that region for an htmx in-place swap (no full
+    reload, scroll preserved)."""
     O = ensure_outline(conn, course)
     nodes, by_node, _pool = workspace_data(conn, course, O)
-    los = {r["node_id"]: r["value"] for r in conn.execute(
-        "SELECT node_id, value FROM node_attr "
-        "WHERE course=? AND hierarchy=? AND name='learning_objective'", (course, O))}
     durations = {r["node_id"]: (int(r["amount"]) if float(r["amount"]).is_integer()
                                 else r["amount"])
                  for r in conn.execute("SELECT node_id, amount FROM node_duration"
                                        " WHERE course=? AND hierarchy=?", (course, O))}
-    return dict(course=course, ref=O, editable=True, los=los, durations=durations,
+    return dict(course=course, ref=O, editable=True, durations=durations,
                 unit_weeks=_outline_unit_weeks(conn, course),
                 tree=build_tree(nodes, by_node, set()))
 
@@ -1828,21 +1821,15 @@ def _calendar_ctx(conn, course):
     bound / it can't load."""
     crow = conn.execute("SELECT calendar FROM courses WHERE course=?", (course,)).fetchone()
     cal_id = crow["calendar"] if crow else None
-    # Learning objectives (the per-lesson "whiteboard statement"), keyed by node_id,
-    # so the calendar's lesson box can show/edit it like the outline card does.
-    O = outline_hierarchy(conn, course)
-    los = {r["node_id"]: r["value"] for r in conn.execute(
-        "SELECT node_id, value FROM node_attr "
-        "WHERE course=? AND hierarchy=? AND name='learning_objective'", (course, O))} if O else {}
     if not cal_id:
-        return {"calendar_id": None, "view": None, "error": None, "los": los}
+        return {"calendar_id": None, "view": None, "error": None}
     try:
         bs, data = calendar_view.load_calendar(cal_id, CALENDAR_DIR)
     except (OSError, ValueError) as e:
         return {"calendar_id": cal_id, "view": None,
-                "error": f"Couldn't load calendar {cal_id!r}: {e}", "los": los}
+                "error": f"Couldn't load calendar {cal_id!r}: {e}"}
     view = calendar_view.build_calendar(bs, data, _outline_units(conn, course))
-    return {"calendar_id": cal_id, "view": view, "error": None, "los": los}
+    return {"calendar_id": cal_id, "view": view, "error": None}
 
 
 @app.route("/<course>/calendar")
@@ -2149,24 +2136,14 @@ def lesson_new(course):
 
 @app.route("/<course>/lesson/<lesson_id>/edit", methods=["POST"])
 def lesson_edit(course, lesson_id):
-    """Edit a lesson's title and/or learning objective (only sent fields change)."""
+    """Edit a lesson's title (the outline/calendar inline title field). The learning
+    objective is a lesson-plan part now -- edited on the lesson view, not here."""
     with db() as conn:
         O = outline_hierarchy(conn, course)
         if "title" in request.form:
             conn.execute("UPDATE nodes SET text=? WHERE course=? AND hierarchy=? AND node_id=? "
                          "AND level='lesson'",
                          ((request.form.get("title") or "").strip(), course, O, lesson_id))
-        if "learning_objective" in request.form:
-            lo = (request.form.get("learning_objective") or "").strip()
-            if lo:
-                conn.execute(
-                    "INSERT INTO node_attr(course, hierarchy, node_id, name, value) "
-                    "VALUES (?, ?, ?, 'learning_objective', ?) "
-                    "ON CONFLICT(course, hierarchy, node_id, name) DO UPDATE SET value=excluded.value",
-                    (course, O, lesson_id, lo))
-            else:
-                conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=? AND node_id=? "
-                             "AND name='learning_objective'", (course, O, lesson_id))
         conn.commit()
         # From the calendar's lesson box: a lesson can span several week-boxes that
         # share this node_id, so re-render the calendar content for htmx to swap in

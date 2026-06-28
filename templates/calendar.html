@@ -170,21 +170,6 @@
               padding: 0 .15rem; }
   .cal-lessonopen:hover { color: #2b6cb0; }
 
-  /* Learning objective (whiteboard statement): a quiet secondary line under the
-     title, shown only while the box is in edit mode (cells are small). Mirrors the
-     title textarea -- wraps, autosizes -- but lighter and smaller. */
-  .cal-lessonlo { display: none; margin: 0; width: 100%; }
-  .cal-cell.lesson.editing .cal-lessonlo { display: block; }
-  .cal-lessonlo textarea { font: inherit; font-size: .62rem; color: #5a728d; text-align: center;
-              width: 100%; box-sizing: border-box; padding: .05rem .2rem; background: transparent;
-              border: 1px solid transparent; border-radius: 4px;
-              resize: none; overflow: hidden; line-height: 1.2;
-              white-space: normal; overflow-wrap: anywhere; word-break: break-word;
-              field-sizing: content; }
-  .cal-lessonlo textarea:hover { border-color: #cdebd9; }
-  .cal-lessonlo textarea:focus { border-color: #bcd; background: #fff; outline: none; }
-  .cal-lessonlo textarea::placeholder { color: #9fb3cc; }
-
   /* Append-unit affordance (mirrors the outline's "Add a unit here"). */
   .cal-addunit { margin: .2rem 0 1rem; }
   .cal-addunit form { margin: 0; }

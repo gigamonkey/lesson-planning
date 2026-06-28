@@ -121,18 +121,6 @@
                     <textarea name="title" rows="1" autocomplete="off"
                            aria-label="Lesson title" placeholder="Lesson title…">{{ c.title }}</textarea>
                   </form>
-                  {# Learning objective (the whiteboard statement) -- the same field as
-                     the outline lesson card, posting to lesson_edit. Shown only while
-                     the box is in edit mode (compact cells); a quiet secondary line. #}
-                  <form class="cal-lessonlo autosave" method="post"
-                        action="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
-                        hx-post="{{ url_for('lesson_edit', course=course, lesson_id=c.node_id) }}"
-                        hx-target="#cal-content" hx-swap="innerHTML">
-                    <input type="hidden" name="view" value="calendar">
-                    <textarea name="learning_objective" rows="1" autocomplete="off"
-                           aria-label="Learning objective"
-                           placeholder="Learning objective…">{{ los.get(c.node_id, '') }}</textarea>
-                  </form>
                   <form class="cal-lessondays autosave" method="post"
                         action="{{ url_for('node_duration_set', course=course, node_id=c.node_id) }}"
                         hx-post="{{ url_for('node_duration_set', course=course, node_id=c.node_id) }}"
