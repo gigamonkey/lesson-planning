@@ -45,6 +45,7 @@ import seed as seed_module  # noqa: E402
 import import_objectives  # noqa: E402
 import load_nodes  # noqa: E402
 import plan_io  # noqa: E402
+import rebuild_db  # noqa: E402
 
 DB_PATH = os.environ.get(
     "LESSON_DB", os.path.join(os.path.dirname(__file__), "db.db")
@@ -2046,17 +2047,27 @@ if collab.enabled():
     # lazily from their worktree; bring up the clone, push worker, and main view.
     collab.startup()
 else:
-    ensure_schema()
     if DEMO_MODE:
         print(f"demo mode: edits autosave + commit to a throwaway git repo at "
               f"{COURSES_ROOT} (not your original courses directory)", file=sys.stderr)
-    # Unattended population: load any course in the courses directory that doesn't
-    # already exist (see seed.py). Safe to run every boot; never fatal.
+    # The db is a disposable cache; the courses directory is the source of truth
+    # (CLAUDE.md). So rebuild the db from disk on EVERY boot -- delete it, re-apply
+    # schema.sql, reload every course (rebuild_db.rebuild). This guarantees a
+    # restart picks up whatever is currently on disk -- external edits, a git pull,
+    # a freshly-mounted courses directory -- rather than serving a stale cache (the
+    # old create-if-absent `seed` skipped courses already in the db). Edits the
+    # running app made are autosaved to the courses directory (debounced), so a
+    # normal restart loses nothing; anything not yet flushed is intentionally
+    # discarded in favor of what's on disk. Never fatal: a broken rebuild still
+    # leaves a valid (empty) db so the app boots.
     if os.path.isdir(COURSES_ROOT):
         try:
-            seed_module.seed(DB_PATH, COURSES_ROOT)
+            rebuild_db.rebuild(DB_PATH, SCHEMA_PATH, COURSES_ROOT)
         except Exception as e:  # a broken courses directory must not stop the app booting
-            print(f"seed: failed: {e}", file=sys.stderr)
+            print(f"rebuild: failed ({e}); falling back to an empty db", file=sys.stderr)
+            ensure_schema()
+    else:
+        ensure_schema()
 
 
 if __name__ == "__main__":
