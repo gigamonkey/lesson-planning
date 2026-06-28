@@ -45,6 +45,13 @@ EXPOSE 8080
 # dead -- requests would serve but pushes would silently never drain. Importing
 # app:app in the one worker keeps the threads in the process that serves.
 # See plans/production-wsgi-server.md.
+# --access-logfile - writes per-request access logs to stdout (off by default in
+# gunicorn) so they show up in `fly logs`. --forwarded-allow-ips + the %({x-...}i)s
+# field log the real client IP from fly's X-Forwarded-For (the socket peer is just
+# fly's proxy). Errors/startup already go to stderr.
 CMD ["uv", "run", "gunicorn", \
      "--workers", "1", "--threads", "8", "--worker-class", "gthread", \
-     "--bind", "0.0.0.0:8080", "--timeout", "120", "app:app"]
+     "--bind", "0.0.0.0:8080", "--timeout", "120", \
+     "--access-logfile", "-", "--forwarded-allow-ips", "*", \
+     "--access-logformat", "%({x-forwarded-for}i)s %(t)s \"%(r)s\" %(s)s %(b)s %(L)ss", \
+     "app:app"]
