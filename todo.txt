@@ -1,0 +1,22 @@
+Here's a list of what I think should be small todo items. Please do them all,
+committing as needed but at least once per item.
+
+- Change "teaching weeks" in code to "school weeks" since arguably exam weeks
+  are not teaching weeks.
+
+- Make sure all drag handles that appear on hover also take up on space when
+  they are hidden. (The handles added to th ecalendar to make units draggable
+  are taking up space; there may be others.) See if there's a way to factor out
+  the CSS and JS for this so we don't have to fix this every time we add a new
+  drag handle somewhere.
+
+- Make + and trash icons on outline view normally not display but appear on
+  hover.
+
+- Get to parity between outline and calendar view: All the manipulations of the
+  course plan that can be done on the outline view should be doable on the
+  calendar view and vice versa. In some cases the mechanism will be different.
+  For instance, in the calendar we add a lesson by clicking an empty day whereas
+  on the Outline view we use the + in the unit header. But everything should be
+  possible and where the mechanism is the same the look and feel should be
+  identical.
