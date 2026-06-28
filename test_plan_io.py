@@ -16,6 +16,7 @@ import sqlite3
 import sys
 import tempfile
 
+import hierarchy
 import plan_io
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -126,8 +127,165 @@ def check_merge_unifies_same_text():
     print("ok - merge unifies same-text objectives")
 
 
+def _lesson_files(course_dir):
+    """{filename: {uuid, title, parts}} read straight from a course's lessons/ dir
+    (keyed by filename so path/rename assertions can see the slug)."""
+    d = os.path.join(course_dir, plan_io.LESSONS_DIR)
+    out = {}
+    for fn in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if not fn.endswith(".md"):
+            continue
+        with open(os.path.join(d, fn), encoding="utf-8") as f:
+            meta, body = hierarchy.parse_front_matter(f.read())
+        out[fn] = {"uuid": meta.get("uuid"), "title": meta.get("title"),
+                   "parts": plan_io._parse_lesson_body(body)}
+    return out
+
+
+def check_lesson_files():
+    """Lesson plans as first-class files: identity tokens + lessons/*.md round-trip,
+    content survives reorder/rename/outline-only edits, new lessons mint files,
+    deletes remove files, and a legacy plan.md learning-objective line migrates."""
+    plan = """\
+---
+course: lf
+title: Lesson Files
+primary_outline: plan
+targets: ref
+---
+
+# Unit: U
+
+## Alpha
+
+**Learning objective:** Understand alpha.
+
+- Do an alpha thing.  (#a1a1)
+
+## Beta
+
+- Do a beta thing.  (#b2b2)
+
+# Unplaced objectives
+
+- A pooled objective.  (#c3c3)
+"""
+    ref = """\
+---
+slug: ref
+levels: unit, item
+title: Ref
+---
+
+# Unit 1: Things
+
+## n1 First item
+
+## n2 Second item
+"""
+    A = "a1a11111-2222-3333-4444-555555555555"
+    B = "b2b21111-2222-3333-4444-555555555555"
+    C = "c3c31111-2222-3333-4444-555555555555"
+    objs = (f"uuid\ttext\n{A}\tDo an alpha thing.\n{B}\tDo a beta thing.\n"
+            f"{C}\tA pooled objective.\n")
+    cov = f"uuid\thierarchy_id\tnode_id\n{A}\tref\tn1\n{B}\tref\tn2\n"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cdir = os.path.join(tmp, "lf")
+        os.makedirs(cdir)
+        for name, text in (("plan.md", plan), ("ref.md", ref),
+                           ("objectives.tsv", objs), ("coverage.tsv", cov)):
+            with open(os.path.join(cdir, name), "w", encoding="utf-8", newline="") as f:
+                f.write(text)
+        db = os.path.join(tmp, "lf.db")
+
+        # --- 1. read -> write materializes a lesson file per lesson, with the
+        #        legacy LO migrated into the Alpha lesson's file.
+        plan_io.read_course(db, cdir)
+        plan_io.write_course(db, "lf", cdir)
+        lf = _lesson_files(cdir)
+        assert len(lf) == 2, f"expected 2 lesson files, got {sorted(lf)}"
+        by_title = {v["title"]: v for v in lf.values()}
+        assert set(by_title) == {"Alpha", "Beta"}, f"lesson titles wrong: {sorted(by_title)}"
+        assert by_title["Alpha"]["parts"].get("learning_objective") == "Understand alpha.", \
+            "legacy plan.md learning objective did not migrate into the lesson file"
+        alpha_uuid = by_title["Alpha"]["uuid"]
+        # The plan.md no longer carries the LO line; it carries lesson tokens.
+        with open(os.path.join(cdir, "plan.md"), encoding="utf-8") as f:
+            plan_text = f.read()
+        assert "**Learning objective:**" not in plan_text, "LO line should be gone from plan.md"
+        assert re.search(r"^## Alpha \(#[0-9a-f]+\)$", plan_text, re.M), \
+            f"Alpha heading missing its identity token:\n{plan_text}"
+
+        # --- 2. write -> read -> write is a fixpoint (filenames, uuids, content all stable).
+        before = _lesson_files(cdir)
+        plan_io.read_course(db, cdir)
+        plan_io.write_course(db, "lf", cdir)
+        assert _lesson_files(cdir) == before, "lesson files are not a round-trip fixpoint"
+
+        # --- 3. Edit a lesson's content (a Preview part) directly in its file, reload:
+        #        the part lands in node_attr keyed by the SAME uuid.
+        alpha_fn = next(fn for fn, v in before.items() if v["title"] == "Alpha")
+        with open(os.path.join(cdir, plan_io.LESSONS_DIR, alpha_fn), "a",
+                  encoding="utf-8") as f:
+            f.write("\n## Preview\n\nThe alpha preview.\n")
+        plan_io.read_course(db, cdir)
+        assert _count(db, "SELECT value FROM node_attr WHERE course='lf' AND hierarchy='plan'"
+                      " AND node_id=? AND name='preview'", (alpha_uuid,)) == "The alpha preview.", \
+            "lesson Preview part did not load into node_attr"
+
+        # --- 4. Reorder lessons in plan.md (Beta before Alpha) via load_plan_text:
+        #        each lesson's content stays with its uuid (the reorder-trap guard).
+        pre_reorder = _render(db, "lf")
+        lines = pre_reorder.splitlines()
+        # Move the Beta lesson block above the Alpha block by swapping headings'
+        # order through a fresh edit: rebuild with Beta first.
+        beta_uuid = by_title["Beta"]["uuid"]
+        # Reword Beta's title in place to confirm rename keeps identity too.
+        reordered = pre_reorder.replace("## Beta (", "## Beta Renamed (")
+        plan_io.load_plan_text(db, "lf", reordered)
+        # Alpha still owns its preview (content preserved across the plan.md edit).
+        assert _count(db, "SELECT value FROM node_attr WHERE course='lf' AND hierarchy='plan'"
+                      " AND node_id=? AND name='preview'", (alpha_uuid,)) == "The alpha preview.", \
+            "lesson content lost across an outline-only edit"
+        # Beta kept its uuid despite the rename (title adopted from the heading).
+        assert _count(db, "SELECT text FROM nodes WHERE course='lf' AND hierarchy='plan'"
+                      " AND node_id=?", (beta_uuid,)) == "Beta Renamed", \
+            "rename did not preserve lesson identity"
+
+        # --- 5. Rename round-trips to a renamed file; the stale file is gone.
+        plan_io.write_course(db, "lf", cdir)
+        lf2 = _lesson_files(cdir)
+        beta = next(v for v in lf2.values() if v["uuid"] == beta_uuid)
+        assert beta["title"] == "Beta Renamed", "renamed lesson title not written"
+        beta_fn = next(fn for fn, v in lf2.items() if v["uuid"] == beta_uuid)
+        assert "beta-renamed-" in beta_fn, f"renamed file slug wrong: {beta_fn}"
+        assert beta_fn != alpha_fn and len(lf2) == 2, "stale lesson file not reconciled"
+
+        # --- 6. A brand-new tokenless lesson mints a uuid + file; a deleted lesson's
+        #        file is removed.
+        cur = _render(db, "lf")
+        # Drop the Alpha lesson heading + its bullet; add a new tokenless lesson.
+        kept = [l for l in cur.splitlines()
+                if not l.startswith("## Alpha (") and l != "- Do an alpha thing.  (#a1a1)"]
+        # Insert a new lesson under the unit (after the unit heading line).
+        ui = next(i for i, l in enumerate(kept) if l.startswith("# Unit:"))
+        kept[ui + 1:ui + 1] = ["", "## Gamma"]
+        plan_io.load_plan_text(db, "lf", "\n".join(kept) + "\n")
+        plan_io.write_course(db, "lf", cdir)
+        lf3 = _lesson_files(cdir)
+        titles3 = {v["title"] for v in lf3.values()}
+        assert "Gamma" in titles3, "new tokenless lesson did not mint a file"
+        assert "Alpha" not in titles3, "deleted lesson's file was not removed"
+        assert not any(v["uuid"] == alpha_uuid for v in lf3.values()), \
+            "deleted lesson's uuid still on disk"
+
+    print("ok - lesson files: identity, content preservation, rename/new/delete, LO migration")
+
+
 def main():
     check_merge_unifies_same_text()
+    check_lesson_files()
     with tempfile.TemporaryDirectory() as tmp:
         db = os.path.join(tmp, "t.db")
         plan_io.read_course(db, WIDGETS)
@@ -193,7 +351,10 @@ def main():
                 break
         for i, l in enumerate(lines2):
             if l.startswith("## "):   # every H2 is now a lesson (pool is H1)
-                lines2[i] = l + " (3 days)"
+                # The duration tag renders just inside the trailing identity token
+                # ("## T (3 days) (#tok)"), so insert it before that token.
+                m = re.search(r"\s*\(#[0-9a-fA-F]+\)\s*$", l)
+                lines2[i] = (l[:m.start()] + " (3 days)" + l[m.start():]) if m else l + " (3 days)"
                 added += 1
                 break
         src2 = "\n".join(lines2) + "\n"

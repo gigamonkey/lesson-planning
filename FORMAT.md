@@ -23,9 +23,11 @@ my-courses/              # the courses root (a git repo; load source AND export 
     plan.md              # the outline + course wiring in front matter
     objectives.tsv       # (uuid, text)                 — machine-maintained
     coverage.tsv         # (uuid, hierarchy_id, node_id) — machine-maintained
+    lessons/             # one markdown file per outline lesson (the lesson plans)
+      what-is-a-widget-c37d8baf.md
 ```
 
-Three file roles:
+Four file roles:
 
 - **Reference hierarchy markdown** — one file per external standard (a CED, an IB
   syllabus, a book). Loaded read-only (`hierarchies.editable = 0`); the app and
@@ -38,6 +40,11 @@ Three file roles:
 
 - **The two TSVs** — the normalized connective tissue (objective identity and the
   many-to-many coverage that cannot live inline in any one file).
+
+- **The `lessons/` directory** — one markdown file per outline lesson, holding that
+  lesson plan's free-text parts (see [Lesson plans](#lesson-plans)). A lesson is a
+  first-class entity with a stable uuid; the file is its content, the `plan.md`
+  heading its place in the outline.
 
 ### Slugs (hierarchy identity)
 
@@ -129,11 +136,14 @@ lesson.)
 bullets) extended in three ways. The file's presence of a `course:` front-matter
 key is what marks it as the course descriptor/outline.
 
-Unlike a reference hierarchy, the outline's headings carry **no ids** — a unit is
-`# Unit: TITLE` and a lesson is `## TITLE` (the title alone). The positional ids
-(`1`, `1.1`, …) are regenerated from heading order on each load (see §3 below), so
-they are never written. A legacy `# Unit N:` / `## N.M …` heading is still read
-(its number discarded), but exports always use the id-free form.
+A **unit** heading carries no id — `# Unit: TITLE` — and its positional id (`1`,
+`2`, …) is regenerated from heading order on each load. A **lesson** heading is
+`## TITLE` plus a trailing **identity token** `(#abcd)` (the same abbreviated-uuid
+token objectives use): the lesson is a first-class entity with a stable uuid (its
+content lives in `lessons/`, see [Lesson plans](#lesson-plans)), and the token is
+how the heading points at it. A legacy `# Unit N:` / `## N.M …` heading is still
+read (its number discarded), and a tokenless `## TITLE` is read as a new lesson
+(it gets a fresh uuid + lesson file on the next save).
 
 ```markdown
 ---
@@ -145,16 +155,14 @@ targets: widgets-ced
 
 # Unit: Widget Basics
 
-## What Is a Widget
-
-**Learning objective:** Describe a widget and name its parts.
+## What Is a Widget (#c37d)
 
 - Name the two main parts of a widget.  (#faf3)
 - Explain what the frobnicator does.  (#221a)
 
 # Unassigned lessons
 
-## A lesson not yet in a unit
+## A lesson not yet in a unit (#9a02)
 
 # Unplaced objectives
 
@@ -190,8 +198,12 @@ Course-level facts that live in no single hierarchy:
 
 ### 2. Per-lesson learning objective
 
-A `**Learning objective:** …` line directly under a lesson heading. Stored as the
-lesson's `learning_objective` node attribute.
+The learning objective is **part of the lesson plan**, so it lives in the lesson
+file (the `## Learning objective` section — see [Lesson plans](#lesson-plans)), not
+in `plan.md`. It is still stored as the lesson's `learning_objective` node
+attribute (which the outline and calendar read), just sourced from the lesson file.
+A legacy `**Learning objective:** …` line under a `plan.md` lesson heading is still
+read on load and migrated into the lesson file on the next save.
 
 ### 3. Objective bullets are placements
 
@@ -208,11 +220,12 @@ pool order. So an objective can sit third in the master list yet first in its
 lesson; both orders round-trip (the master from overall document order, the
 per-node from the order of bullets under each heading).
 
-The outline hierarchy's own nodes are therefore only **units and lessons**, with
-positional ids (`1`, `1.1`, `1.2`, …) regenerated from heading order on each load
-— the markdown carries titles only. Placement and the learning objective are
-structural (they sit under their headings), so they survive an export → reload
-round-trip even as positional ids are renumbered.
+The outline hierarchy's own nodes are therefore only **units and lessons**. A
+**unit** has a positional id (`1`, `2`, …) regenerated from heading order each load
+— the markdown carries its title only. A **lesson** has a **stable uuid** node id,
+carried by the heading's `(#token)` and pinned in its lesson file, so a lesson's
+content survives reordering or retitling (its placements, being structural bullets,
+round-trip as before).
 
 ### 4. Durations
 
@@ -221,16 +234,70 @@ Any node's heading may end with a **duration tag**: `(N weeks)`, `(N days)`, or
 kept in `node_duration`, then re-emitted on save.
 
 - In the **outline**, units carry weeks and lessons carry days
-  (`# Unit: Selection (2 weeks)`, `## Hello, world (3 days)`); these drive the
-  calendar view. A lesson with no tag is one day (`(1 day)` is the default and is
-  never written).
+  (`# Unit: Selection (2 weeks)`, `## Hello, world (3 days) (#abcd)`); these drive
+  the calendar view. A lesson with no tag is one day (`(1 day)` is the default and
+  is never written). On a lesson heading the duration tag sits just **before** the
+  identity token, which is always the final group.
 - In a **reference**, the tag rides the node heading too — the IB syllabi already
   use it (`## A1 Computer fundamentals (18 hours)`). Reference durations are stored
   for reporting, not laid on the calendar.
 
-Only the **last** parenthesized group on the line is the tag, and only when it
-matches `(<number> weeks|days|hours)` — an incidental `(HL only)` in a title is
-left alone.
+The tag is the **last** parenthesized group on the line (on a lesson heading, the
+last one before the identity token), and only when it matches
+`(<number> weeks|days|hours)` — an incidental `(HL only)` in a title is left alone.
+
+## Lesson plans
+
+Each outline lesson is a **lesson plan**: a first-class entity stored as its own
+markdown file under the course's `lessons/` directory. The file holds the lesson
+plan's free-text content, organized into a fixed set of **parts**; the lesson's
+placement in the outline (its unit, order, and the objectives placed in it) stays
+in `plan.md`. The lesson plan is a *distillation* of those placed objectives, so
+they are shown alongside it (in the editor) but not duplicated into the file.
+
+The filename is `lessons/<slug>-<shortid>.md`, where `<slug>` is the title
+slugified (lowercase, non-alphanumerics → `-`) and `<shortid>` is the first 8 hex
+chars of the uuid. The filename is **cosmetic**: identity is the front-matter
+`uuid:`. Two lessons in one course may share a title (the uuids differ), unlike
+objectives, which are interned by text.
+
+```markdown
+---
+uuid: c37d8baf-39d2-4688-9b18-68a23164a510
+title: What Is a Widget
+---
+
+## Preview
+
+A quick hook to get students thinking about widgets.
+
+## Learning objective
+
+Describe a widget and name its parts.
+
+## Key ideas
+
+…
+```
+
+- **`uuid:`** — the lesson's identity (authoritative, pinned). The `plan.md` lesson
+  heading's `(#token)` resolves to it by shortest-unique prefix, exactly as an
+  objective bullet's token resolves against `objectives.tsv`. A tokenless heading
+  mints a fresh uuid and a new lesson file.
+- **`title:`** — a mirror of the `plan.md` heading (the authoritative title), kept
+  in sync on save; the filename slug derives from it.
+- **The body** is the eight parts as `## <heading>` sections, in this canonical
+  order, **only the non-empty ones written**: **Preview**, **Learning objective**,
+  **Review**, **Key ideas**, **Expert thinking**, **Guided practice**, **Closure**,
+  **Independent practice**. Each is free-text markdown. Only these eight headings
+  delimit parts — any other heading is content of the current part, so a part may
+  contain its own sub-headings. Each part is stored as a `node_attr` row on the
+  lesson (`learning_objective` is the very attribute the outline/calendar already
+  read).
+
+On save, the `lessons/` directory is **reconciled**: a renamed lesson's file is
+rewritten under its new slug and the stale name removed; a lesson deleted from the
+outline has its file deleted.
 
 ## Objective identity — abbreviated uuid tokens
 

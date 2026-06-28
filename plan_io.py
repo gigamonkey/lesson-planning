@@ -13,7 +13,12 @@ holds:
   * `objectives.tsv` (uuid, text) -- the full uuid<->text registry for the pool;
   * `coverage.tsv` (uuid, hierarchy_id, node_id) -- the many-to-many coverage
     edges into the REFERENCE hierarchies (outline placement is structural in
-    plan.md, so it is NOT duplicated here).
+    plan.md, so it is NOT duplicated here);
+  * `lessons/<slug>-<shortid>.md` -- one file per outline lesson, holding the lesson
+    plan's free-text parts (the learning objective and the rest). Identity is the
+    file's front-matter `uuid:`, which the plan.md lesson heading's `(#token)`
+    resolves to by prefix; the lesson plan is a distillation of the lesson's placed
+    objectives, which stay in plan.md.
 
 `read_course` loads such a directory into the database; `write_course` serializes
 a course back out to one. The courses root is both the load source and the export
@@ -45,6 +50,39 @@ TOKEN_FLOOR = 4   # shortest token length, to limit diff churn / accidental clas
 PLAN_FILE = "plan.md"
 OBJECTIVES_TSV = "objectives.tsv"
 COVERAGE_TSV = "coverage.tsv"
+LESSONS_DIR = "lessons"
+
+# A lesson plan's free-text parts, in canonical order: (node_attr name, the `##`
+# heading used in the lesson file). Stored one row per non-empty part in node_attr
+# -- `learning_objective` is the very attr the outline/calendar already read, so
+# moving the learning objective into the lesson file changes only where it is
+# authored, not how it is consumed. plan.md no longer carries the LO line.
+LESSON_PARTS = [
+    ("preview", "Preview"),
+    ("learning_objective", "Learning objective"),
+    ("review", "Review"),
+    ("key_ideas", "Key ideas"),
+    ("expert_thinking", "Expert thinking"),
+    ("guided_practice", "Guided practice"),
+    ("closure", "Closure"),
+    ("independent_practice", "Independent practice"),
+]
+_PART_BY_HEADING = {disp.lower(): key for key, disp in LESSON_PARTS}
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def slugify(text):
+    """A filesystem-friendly slug for a lesson filename: lowercase, runs of
+    non-alphanumerics collapsed to one '-', trimmed; "lesson" when empty. Cosmetic
+    only -- a lesson's identity is the uuid, not the slug."""
+    return _SLUG_RE.sub("-", (text or "").lower()).strip("-") or "lesson"
+
+
+def lesson_shortid(uuid):
+    """The cosmetic uuid fragment in a lesson filename: the first 8 hex chars
+    (dashes dropped). Never parsed for identity -- the file's front-matter `uuid:`
+    is. Keeps same-titled lessons from colliding on disk."""
+    return uuid.replace("-", "")[:8]
 
 
 # --------------------------------------------------------------------------
@@ -96,9 +134,12 @@ def parse_plan(text):
     """Parse a plan.md into (meta, units, lessons, los, bullets).
 
     units   : [(node_id, title, duration)]       positional ids "1", "2", ...
-    lessons : [(node_id, parent_unit_id, title, duration)] ids "1.1", "1.2", ...
-    los     : {lesson_id: learning_objective_text}
-    bullets : [(text, token|None, placement_lesson_id|None)] in document order
+    lessons : [(key, parent_unit_id, token|None, title, duration)] -- `key` is a
+              positional parse handle ("1.1", "u.1") used only to wire bullets and
+              legacy LOs to their lesson; `token` is the heading's identity token
+              (the trailing "(#abcd)"), resolved to a stable uuid by the caller.
+    los     : {lesson_key: learning_objective_text}   legacy plan.md LO (migrated)
+    bullets : [(text, token|None, placement_key|None)] in document order
               (placement None == pooled / not placed in a lesson)
 
     A unit/lesson `duration` is {"amount", "unit"} from a trailing heading tag
@@ -145,14 +186,21 @@ def parse_plan(text):
                 if rest.lower().startswith("pool"):
                     cur_lesson, in_pool = None, True
                     continue
-                # The lesson heading is the title alone; its positional id ("1.1")
-                # is regenerated below, not parsed from the markdown.
-                title, duration = hierarchy.split_duration(rest.strip())
+                # The lesson heading is "TITLE (dur) (#token)": the identity token
+                # is the LAST trailing (#...) group (strip it first), then the
+                # duration tag renders just inside it. The positional `key` ("1.1")
+                # is a parse handle only -- identity is the uuid the token resolves to.
+                head = rest.strip()
+                tok = TOKEN_RE.search(head)
+                token = tok.group(1) if tok else None
+                if tok:
+                    head = TOKEN_RE.sub("", head).rstrip()
+                title, duration = hierarchy.split_duration(head)
                 # 1 day is the implicit default; don't store/round-trip it.
                 if duration == {"amount": 1.0, "unit": "day"}:
                     duration = None
                 lesson_n += 1
-                # Unassigned lessons get a distinct "u.N" id (no parent) so they
+                # Unassigned lessons get a distinct "u.N" key (no parent) so they
                 # don't collide with unit ids ("1", "2", ...).
                 if in_unassigned:
                     cur_lesson, parent = f"u.{lesson_n}", None
@@ -160,7 +208,7 @@ def parse_plan(text):
                     cur_lesson = f"{cur_unit}.{lesson_n}" if cur_unit else str(lesson_n)
                     parent = cur_unit
                 in_pool = False
-                lessons.append((cur_lesson, parent, title, duration))
+                lessons.append((cur_lesson, parent, token, title, duration))
             continue
         lo = LO_RE.match(line)
         if lo and cur_lesson:
@@ -198,11 +246,13 @@ def _set_duration(conn, course, hierarchy, node_id, duration):
                      (course, hierarchy, node_id, duration["amount"], duration["unit"]))
 
 
-def _rebuild_outline_nodes(conn, course, outline, units, lessons, los):
-    """Insert the outline's unit + lesson nodes (positional ids "1", "1.1", ...),
-    each lesson's learning-objective attr, and any unit/lesson durations. The caller
-    has already cleared the outline's nodes/node_attr/node_duration. Shared by
-    read_course and load_plan_text."""
+def _rebuild_outline_nodes(conn, course, outline, units, lessons):
+    """Insert the outline's unit nodes (positional ids "1", "2", ...) and lesson
+    nodes (stable uuid node_ids), plus any unit/lesson durations. Lesson CONTENT
+    (the node_attr parts, including the learning objective) is applied separately by
+    the caller -- loaded from the lesson files (read_course) or preserved across the
+    edit (load_plan_text). `lessons` is [(uuid, parent_unit_id, title, duration)].
+    The caller has already cleared the outline's nodes/node_attr/node_duration."""
     ordinal = 0
     unit_has_lesson = {u: False for u, _, _ in units}
     for _, parent, _, _ in lessons:
@@ -214,15 +264,11 @@ def _rebuild_outline_nodes(conn, course, outline, units, lessons, los):
                       0 if unit_has_lesson[uid] else 1, ordinal, utitle))
         _set_duration(conn, course, outline, uid, duration)
         ordinal += 1
-    for lid, parent, ltitle, duration in lessons:
+    for uuid, parent, ltitle, duration in lessons:
         conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                     (course, outline, lid, parent, "lesson", 1, ordinal, ltitle))
+                     (course, outline, uuid, parent, "lesson", 1, ordinal, ltitle))
+        _set_duration(conn, course, outline, uuid, duration)
         ordinal += 1
-        if los.get(lid):
-            conn.execute("INSERT INTO node_attr(course, hierarchy, node_id, name, value)"
-                         " VALUES (?, ?, ?, 'learning_objective', ?)",
-                         (course, outline, lid, los[lid]))
-        _set_duration(conn, course, outline, lid, duration)
 
 
 def _resolve_bullets(conn, course, outline, bullets, known_uuids, canon=None):
@@ -346,12 +392,28 @@ def read_course(db_path, course_dir):
                                  source_md=ref_text)
             n_refs += 1
 
-        # Outline hierarchy (editable=1): units + lessons as positional nodes.
+        # Outline hierarchy (editable=1): units (positional) + lessons (uuid nodes).
         conn.execute(
             "INSERT INTO hierarchies(course, hierarchy, editable, title, source)"
             " VALUES (?, ?, 1, ?, ?)",
             (course, outline, "Course outline", os.path.basename(plan_path)))
-        _rebuild_outline_nodes(conn, course, outline, units, lessons, los)
+        # Resolve each lesson heading's token against the lesson files (identity is
+        # the file's uuid); a tokenless/new heading mints a fresh uuid. Then load the
+        # lesson content into node_attr, seeding the learning-objective part from a
+        # legacy plan.md "**Learning objective:**" line when the file lacks it.
+        lesson_data = _read_lesson_files(course_dir)
+        resolved, key_to_uuid = _resolve_lessons(lessons, lesson_data.keys())
+        _rebuild_outline_nodes(conn, course, outline, units, resolved)
+        legacy_lo = {key_to_uuid[k]: v for k, v in los.items() if k in key_to_uuid}
+        for uuid, _parent, _title, _dur in resolved:
+            parts = dict(lesson_data.get(uuid, {}).get("parts", {}))
+            if "learning_objective" not in parts and legacy_lo.get(uuid):
+                parts["learning_objective"] = legacy_lo[uuid]
+            _set_lesson_content(conn, course, outline, uuid, parts)
+        # Bullets place objectives onto lessons by the positional parse key; remap to
+        # the resolved lesson uuids (a unit-rough placement key stays as the unit id).
+        bullets = [(text, token, key_to_uuid.get(pl, pl) if pl else pl)
+                   for (text, token, pl) in bullets]
 
         # Objectives: seed the uuid<->text registry, then resolve each bullet's
         # token (by prefix) to a uuid, or intern by text / mint a fresh uuid.
@@ -475,6 +537,17 @@ def load_plan_text(db_path, course, text):
         # computed the tokens against). Capture it before we clear the pool.
         known_uuids = [u for (u,) in conn.execute(
             "SELECT uuid FROM course_objectives WHERE course=? ORDER BY position", (course,))]
+        # Lesson identity set the heading tokens resolve against (the course's
+        # existing lesson nodes), plus a snapshot of all outline node_attr (lesson
+        # content) to restore for lessons that survive the edit -- plan.md is not the
+        # source of truth for lesson content, so re-deriving the outline from it must
+        # not clobber the parts the lesson files own.
+        known_lesson_uuids = [u for (u,) in conn.execute(
+            "SELECT node_id FROM nodes WHERE course=? AND hierarchy=? AND level='lesson'",
+            (course, outline))]
+        saved_attrs = {(nid, name): val for nid, name, val in conn.execute(
+            "SELECT node_id, name, value FROM node_attr WHERE course=? AND hierarchy=?",
+            (course, outline))}
 
         # Reset ONLY the outline + the pool; reference hierarchies and their
         # coverage edges are not represented in plan.md, so they stay as they are.
@@ -494,7 +567,22 @@ def load_plan_text(db_path, course, text):
             "UPDATE courses SET title=?, primary_outline=?, calendar=? WHERE course=?",
             (title, outline, meta.get("calendar"), course))
 
-        _rebuild_outline_nodes(conn, course, outline, units, lessons, los)
+        resolved, key_to_uuid = _resolve_lessons(lessons, known_lesson_uuids)
+        _rebuild_outline_nodes(conn, course, outline, units, resolved)
+        # Restore preserved content for surviving lessons; migrate a legacy plan.md
+        # learning-objective line for any lesson still missing that part.
+        new_lesson_uuids = {uuid for uuid, _p, _t, _d in resolved}
+        for (nid, name), val in saved_attrs.items():
+            if nid in new_lesson_uuids:
+                conn.execute("INSERT OR REPLACE INTO node_attr(course, hierarchy, node_id, name, value)"
+                             " VALUES (?, ?, ?, ?, ?)", (course, outline, nid, name, val))
+        legacy_lo = {key_to_uuid[k]: v for k, v in los.items() if k in key_to_uuid}
+        for uuid, lo in legacy_lo.items():
+            if uuid in new_lesson_uuids and (uuid, "learning_objective") not in saved_attrs:
+                conn.execute("INSERT OR REPLACE INTO node_attr(course, hierarchy, node_id, name, value)"
+                             " VALUES (?, ?, ?, 'learning_objective', ?)", (course, outline, uuid, lo))
+        bullets = [(text, token, key_to_uuid.get(pl, pl) if pl else pl)
+                   for (text, token, pl) in bullets]
         n_place = _resolve_bullets(conn, course, outline, bullets, known_uuids)
         # Ordered targets: the edited plan.md order for listed references, then any
         # of the course's existing references it omits (references == targets).
@@ -539,12 +627,106 @@ def _new_uuid():
 
 
 # --------------------------------------------------------------------------
+# lesson files (lessons/<slug>-<shortid>.md): one markdown file per lesson, holding
+# the lesson plan's free-text parts. Identity is the front-matter `uuid:`; the body
+# is the LESSON_PARTS as `## <heading>` sections. plan.md's heading token resolves
+# to one of these by prefix (like an objective bullet resolves against objectives.tsv).
+
+def _parse_lesson_body(body):
+    """Split a lesson file body into {part_name: text}. Only the eight known part
+    headings (LESSON_PARTS) delimit sections; any other heading is content of the
+    current part, so a part's free text may contain its own sub-headings. Empty
+    parts are dropped."""
+    parts, cur, buf = {}, None, []
+    for line in body.splitlines():
+        m = hierarchy.HEADING.match(line)
+        if m and len(m.group(1)) == 2:
+            key = _PART_BY_HEADING.get(m.group(2).strip().lower())
+            if key is not None:
+                if cur is not None:
+                    parts[cur] = "\n".join(buf).strip()
+                cur, buf = key, []
+                continue
+        if cur is not None:
+            buf.append(line)
+    if cur is not None:
+        parts[cur] = "\n".join(buf).strip()
+    return {k: v for k, v in parts.items() if v}
+
+
+def _read_lesson_files(course_dir):
+    """Load `lessons/*.md` into {uuid: {"title": str, "parts": {name: text}}}. A
+    missing directory or a file with no front-matter `uuid:` is skipped; returns {}
+    when there are no lesson files."""
+    d = os.path.join(course_dir, LESSONS_DIR)
+    if not os.path.isdir(d):
+        return {}
+    out = {}
+    for fn in sorted(os.listdir(d)):
+        path = os.path.join(d, fn)
+        if not (fn.endswith(".md") and os.path.isfile(path)):
+            continue
+        with open(path, encoding="utf-8") as f:
+            meta, body = hierarchy.parse_front_matter(f.read())
+        uuid = meta.get("uuid")
+        if not uuid:
+            print(f"warning: lesson file {fn!r} has no 'uuid:' front matter; skipped")
+            continue
+        out[uuid] = {"title": meta.get("title", ""), "parts": _parse_lesson_body(body)}
+    return out
+
+
+def _render_lesson_file(uuid, title, parts):
+    """Serialize one lesson to its file text: front matter (`uuid`, `title`) + each
+    non-empty part as a `## <heading>` section, in canonical LESSON_PARTS order."""
+    out = ["---", f"uuid: {uuid}", f"title: {title}", "---", ""]
+    for key, disp in LESSON_PARTS:
+        val = (parts.get(key) or "").strip()
+        if val:
+            out += [f"## {disp}", "", val, ""]
+    return "\n".join(out).rstrip() + "\n"
+
+
+def _resolve_lessons(parsed_lessons, known_lesson_uuids):
+    """Map each parsed lesson to a stable uuid node_id. A heading's identity token is
+    resolved by shortest-unique prefix against `known_lesson_uuids` (the lesson files
+    in read_course; the course's existing lesson nodes in load_plan_text); a
+    tokenless, ambiguous, or already-claimed token mints a fresh uuid (a new lesson).
+
+    Returns (resolved, key_to_uuid): `resolved` is [(uuid, parent, title, duration)]
+    in document order; `key_to_uuid` maps each lesson's positional parse key to its
+    uuid (to remap bullet placements and legacy learning-objective lines)."""
+    known = list(known_lesson_uuids)
+    resolved, key_to_uuid, used = [], {}, set()
+    for key, parent, token, title, duration in parsed_lessons:
+        uuid = resolve_token(token, known) if token else None
+        if uuid is None or uuid in used:
+            uuid = _new_uuid()
+            known.append(uuid)
+        used.add(uuid)
+        key_to_uuid[key] = uuid
+        resolved.append((uuid, parent, title, duration))
+    return resolved, key_to_uuid
+
+
+def _set_lesson_content(conn, course, outline, uuid, parts):
+    """Insert a lesson's non-empty parts into node_attr (one row per part). Assumes
+    the lesson's node_attr rows were already cleared."""
+    for key, _disp in LESSON_PARTS:
+        val = (parts.get(key) or "").strip()
+        if val:
+            conn.execute("INSERT OR REPLACE INTO node_attr(course, hierarchy, node_id, name, value)"
+                         " VALUES (?, ?, ?, ?, ?)", (course, outline, uuid, key, val))
+
+
+# --------------------------------------------------------------------------
 # export: database -> directory
 
 def render_course(conn, course):
     """Build a course's authored files in memory (no disk writes): returns
-    ({plan.md, objectives.tsv, coverage.tsv} -> text, n_objectives, n_coverage).
-    Raises KeyError if the course is absent. write_course writes these to disk."""
+    ({plan.md, objectives.tsv, coverage.tsv, lessons/<slug>-<shortid>.md ...} ->
+    text, n_objectives, n_coverage). Raises KeyError if the course is absent.
+    write_course writes these to disk."""
     conn.row_factory = sqlite3.Row
     crow = conn.execute("SELECT course, title, primary_outline, calendar"
                         " FROM courses WHERE course=?", (course,)).fetchone()
@@ -560,9 +742,13 @@ def render_course(conn, course):
     dur_of = {r["node_id"]: {"amount": r["amount"], "unit": r["unit"]}
               for r in conn.execute("SELECT node_id, amount, unit FROM node_duration"
                                     " WHERE course=? AND hierarchy=?", (course, outline))}
-    los = {r["node_id"]: r["value"] for r in conn.execute(
-        "SELECT node_id, value FROM node_attr WHERE course=? AND hierarchy=?"
-        " AND name='learning_objective'", (course, outline))}
+    # All lesson content (every node_attr part), for the lesson files.
+    attrs = {}    # lesson node_id -> {part_name: value}
+    for r in conn.execute("SELECT node_id, name, value FROM node_attr"
+                          " WHERE course=? AND hierarchy=?", (course, outline)):
+        attrs.setdefault(r["node_id"], {})[r["name"]] = r["value"]
+    # Stable identity tokens for the lesson headings (shortest unique uuid prefix).
+    lesson_tokens = abbrev_tokens([L["node_id"] for L in lessons])
     placed = {}   # node_id -> [uuid], in per-node coverage.position order
     for r in conn.execute("SELECT uuid, node_id, position FROM coverage WHERE course=?"
                           " AND hierarchy=? ORDER BY position, uuid", (course, outline)):
@@ -589,13 +775,16 @@ def render_course(conn, course):
     for L in lessons:
         lessons_by_unit.setdefault(L["parent_id"], []).append(L)
     def emit_lesson(L):
-        # Title only -- the positional id ("1.1") is regenerated by parse_plan on
-        # read, so it (like the opaque db node_id) never leaks into markdown.
-        out.append(f"## {L['text']}".rstrip() + hierarchy.format_duration(dur_of.get(L["node_id"])))
+        # "## TITLE (dur) (#token)": the title + an optional duration tag + the
+        # identity token. The opaque uuid node_id never leaks; only its short token
+        # does (resolved back to the uuid via the lesson file on load). The learning
+        # objective and the rest of the lesson content live in the lesson file, not
+        # here -- plan.md stays the objective-pool canvas.
+        tok = lesson_tokens.get(L["node_id"], lesson_shortid(L["node_id"]))
+        out.append(f"## {L['text']}".rstrip()
+                   + hierarchy.format_duration(dur_of.get(L["node_id"]))
+                   + f" (#{tok})")
         out.append("")
-        if los.get(L["node_id"]):
-            out.append(f"**Learning objective:** {los[L['node_id']]}")
-            out.append("")
         ps = placed.get(L["node_id"], [])   # already in per-node order
         for uuid in ps:
             out.append(bullet(uuid))
@@ -659,8 +848,16 @@ def render_course(conn, course):
     for r in cov:
         w.writerow([r["uuid"], r["hierarchy"], r["node_id"]])
 
-    return ({PLAN_FILE: plan_text, OBJECTIVES_TSV: obj_buf.getvalue(),
-             COVERAGE_TSV: cov_buf.getvalue()}, len(pool), len(cov))
+    files = {PLAN_FILE: plan_text, OBJECTIVES_TSV: obj_buf.getvalue(),
+             COVERAGE_TSV: cov_buf.getvalue()}
+    # One lesson file per lesson, named `lessons/<slug>-<shortid>.md`. Always emitted
+    # (even content-less) so the lesson's full uuid persists on disk -- the plan.md
+    # token is only a prefix, so without the file a reload could not recover identity.
+    for L in lessons:
+        uuid = L["node_id"]
+        name = f"{LESSONS_DIR}/{slugify(L['text'])}-{lesson_shortid(uuid)}.md"
+        files[name] = _render_lesson_file(uuid, L["text"], attrs.get(uuid, {}))
+    return (files, len(pool), len(cov))
 
 
 def _reference_files(conn, course):
@@ -679,10 +876,14 @@ def _reference_files(conn, course):
 
 
 def write_course(db_path, course, course_dir):
-    """Serialize a course's authored state to `course_dir`: plan.md + the two TSVs,
-    plus a markdown file for each reference hierarchy that isn't already on disk
-    (so the courses directory is self-contained / reloadable). An existing reference .md --
-    hand-authored or uploaded, same nodes but different formatting -- is left as is.
+    """Serialize a course's authored state to `course_dir`: plan.md + the two TSVs +
+    one `lessons/<slug>-<shortid>.md` per lesson, plus a markdown file for each
+    reference hierarchy that isn't already on disk (so the courses directory is
+    self-contained / reloadable). An existing reference .md -- hand-authored or
+    uploaded, same nodes but different formatting -- is left as is.
+
+    The `lessons/` directory is reconciled: a lesson removed from the outline (or
+    renamed, whose new slug yields a new filename) has its stale file deleted.
 
     Returns (plan_path, n_objectives, n_coverage).
     """
@@ -694,9 +895,23 @@ def write_course(db_path, course, course_dir):
         ref_files = _reference_files(conn, course)
     finally:
         conn.close()
+    desired_lessons = set()
     for name, text in files.items():
-        with open(os.path.join(course_dir, name), "w", encoding="utf-8", newline="") as f:
+        path = os.path.join(course_dir, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="") as f:
             f.write(text)
+        if name.startswith(LESSONS_DIR + "/"):
+            desired_lessons.add(os.path.basename(name))
+    # Reconcile lessons/: drop files for lessons no longer rendered (a delete, or the
+    # old name left behind by a retitle whose slug changed the filename).
+    ldir = os.path.join(course_dir, LESSONS_DIR)
+    if os.path.isdir(ldir):
+        for fn in os.listdir(ldir):
+            if (fn.endswith(".md") and fn not in desired_lessons
+                    and os.path.isfile(os.path.join(ldir, fn))):
+                os.remove(os.path.join(ldir, fn))
+                print(f"note: {course!r}: removed stale lesson file {LESSONS_DIR}/{fn}")
     for name, text in ref_files.items():
         path = os.path.join(course_dir, name)
         if not os.path.exists(path):   # don't churn an existing reference file

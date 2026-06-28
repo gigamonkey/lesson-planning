@@ -42,7 +42,8 @@ format and `plans/markdown-as-storage.md` for the design.
   startup so the demo still autosaves + commits.
 - `examples/` — a courses directory with one synthetic course, `examples/widgets/`:
   `widgets-ced.md` (reference hierarchy markdown), `plan.md` (the outline +
-  course wiring), `objectives.tsv`, `coverage.tsv`
+  course wiring), `objectives.tsv`, `coverage.tsv`, and `lessons/` (one markdown
+  file per lesson — the lesson plans)
 - `plans/` — implementation plans (design record). Do **not** read `plans/done/`
   unless explicitly asked — those describe the code as it was when written.
 
@@ -52,7 +53,7 @@ format and `plans/markdown-as-storage.md` for the design.
 |------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `hierarchy.py`         | The curriculum-hierarchy **markdown parser** (this repo owns it): front-matter parsing, level-1 id extraction (`parse_root_id`: a small pattern list + a generic `# ID TEXT` fallback — no "flavor"), and `to_nodes` (markdown → flat, already-tagged node-list dict). Level names come from the required `levels:` front matter. Used by `load_nodes` (references) and `plan_io` (helpers). |
 | `load_nodes.py`        | Parses a hierarchy **markdown** file (`hierarchy.to_nodes`) into the `nodes` table (keyed by `(course, hierarchy)`), registers the hierarchy and upserts its `course`. Slug/course default from the front-matter `slug:`/filename and flags; `apply_schema` applies `schema.sql`. `load_into` does it on a caller's connection. |
-| `plan_io.py`           | Read/write a course as a directory: `read_course` (references + `plan.md` outline + the two TSVs → db) and `write_course` (db → `plan.md` + `objectives.tsv` / `coverage.tsv`; reference markdown left untouched). `load_plan_text` loads an edited `plan.md` *text* (outline + pool only, tokens resolved against the live db) — the in-memory loader behind the web Markdown editor. Objective identity via abbreviated uuid tokens. |
+| `plan_io.py`           | Read/write a course as a directory: `read_course` (references + `plan.md` outline + the two TSVs + `lessons/*.md` → db) and `write_course` (db → `plan.md` + the two TSVs + `lessons/*.md`, reconciling renamed/deleted lesson files; reference markdown left untouched). `load_plan_text` loads an edited `plan.md` *text* (outline + pool only, tokens resolved against the live db; preserves lesson content) — the in-memory loader behind the web Markdown editor. Objective **and lesson** identity via abbreviated uuid tokens. Lessons are first-class: each is a uuid-identified `lessons/<slug>-<shortid>.md` holding the lesson plan's free-text parts (the learning objective + the rest); the `plan.md` lesson heading carries a `(#token)` resolving to its file. |
 | `import_objectives.py` | Imports raw objectives into a course's pool, interning by `(course, text)` — objectives are course-owned (idempotent; `parse_coverage` + `upsert`); `copy_objectives` re-interns one course's pool into another. Plain-text (pool only) or TSV (`objective`/`text`, optional `hierarchy_id`/`node_id` coverage edge, optional `uuid`). No default coverage target — a row's hierarchy is its `hierarchy_id` (bare slug; course from context) or `--hierarchy`, else pool-only. `--replace` re-seeds. |
 | `seed.py`              | Courses-directory loader: load each course directory in a courses directory (`plan_io.read_course`). `seed` skips courses already present (create-if-absent; run on startup); `load_courses`/`--all` reloads all. CLI: `uv run seed.py <courses-dir> [db]`. |
 | `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load every course in the courses directory. `--courses <dir>` (default `courses`). |
@@ -68,7 +69,7 @@ uv run rebuild_db.py --courses <courses-dir>   # deletes db.db; default courses 
 # Load a single hierarchy markdown file into a db (the step rebuild_db orchestrates).
 uv run load_nodes.py <your-hierarchy>.md db.db --course <course>
 
-# Export a course back to its courses directory (plan.md + the two TSVs).
+# Export a course back to its courses directory (plan.md + the two TSVs + lessons/).
 uv run python -c "import plan_io; plan_io.write_course('db.db', '<course>', '<courses-dir>/<course>')"
 
 # Web app (port 5001): bootstraps an empty db from schema.sql, then loads the

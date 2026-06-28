@@ -35,8 +35,9 @@ with [`uv`](https://docs.astral.sh/uv/).
 
 A synthetic example course ("Intro to Widgets") lives in `examples/widgets/` —
 a **course directory**: its reference hierarchy markdown (`widgets-ced.md`), the
-outline (`plan.md`), and the normalized `objectives.tsv` / `coverage.tsv`. Use the
-`examples/` courses directory to see the whole pipeline end to end:
+outline (`plan.md`), the normalized `objectives.tsv` / `coverage.tsv`, and the
+per-lesson plans under `lessons/`. Use the `examples/` courses directory to see the
+whole pipeline end to end:
 
 ```bash
 # Rebuild a database from the markdown courses directory (a dir of course directories).
@@ -102,8 +103,8 @@ uv run seed.py --all ../bhs-cs-courses db.db     # reload every course (non-dest
 (Single-user mode requires the courses directory to be a git repo and commits there
 automatically — there is no manual Export button; the **Settings** page offers a
 global **Sync** to re-read external edits / a `git pull`. Reference hierarchy
-markdown is a load-only input and is never rewritten — only `plan.md` and the two
-TSVs are.)
+markdown is a load-only input and is never rewritten — only `plan.md`, the two
+TSVs, and the per-lesson files under `lessons/` are.)
 
 ## Setting up courses in the app
 
