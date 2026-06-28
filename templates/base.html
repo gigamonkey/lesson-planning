@@ -79,8 +79,9 @@
     .collabpending.err { color: #8a1f1a; background: #fdecea; border-color: #f5c2c0; }
     .brandrow { display: flex; align-items: center; justify-content: space-between;
                 gap: .5rem; margin-bottom: 1rem; }
-    .brandrow .addcourse { font-size: 1.1rem; line-height: 1; padding: 0 .45rem;
-                color: #2b6cb0; }
+    .brandrow .addcourse { font-size: .82rem; line-height: 1; padding: .15rem .5rem;
+                color: #2b6cb0; border: 1px solid #cfe0f5; border-radius: 4px; background: #fff; }
+    .brandrow .addcourse:hover { background: #eef3f8; }
     .newcourse { display: flex; flex-direction: column; gap: .3rem; margin: 0 0 1rem;
                 padding: .55rem .6rem; border: 1px solid var(--line); border-radius: 6px;
                 background: #fff; }
@@ -580,7 +581,7 @@
       <div class="brandrow">
         <h1>Lesson Planning</h1>
         {% if can_edit %}
-        <button type="button" id="addcourse-btn" class="addcourse" title="New course">+</button>
+        <button type="button" id="addcourse-btn" class="addcourse" title="New course">Add course</button>
         {% endif %}
       </div>
       {% if not collab_enabled and can_edit %}
