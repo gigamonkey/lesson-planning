@@ -20,28 +20,19 @@ from datetime import date, timedelta
 import bells
 
 
-def load_calendar(calendar_id, calendar_dir, extras_dir=None):
+def load_calendar(calendar_id, calendar_dir):
     """Load a bells calendar by id from `calendar_dir`, returning
     (BellSchedule, raw_data). Raises FileNotFoundError if the JSON is absent.
 
     Exam days come from the bells calendar itself, read via
     `BellSchedule.non_class_label(date)` (bells normalizes both a named EXAMS bell
-    schedule and a raw `nonClassDays` entry to a label like "exam"). If
-    `extras_dir` is given and `<extras_dir>/<calendar_id>.json` exists, its
-    `apExams` (a {start, end} window) and `gradingPeriods` (week-number -> name)
-    are copied onto the returned data -- these augment the bells calendar with
-    info the bells repo doesn't carry. The sidecar is optional."""
+    schedule and a raw `nonClassDays` entry to a label like "exam"). The AP exam
+    window and grading-period closes are carried in the calendar's first-class
+    `annotations` field and read back via the bells annotation API (see
+    `build_calendar`), so no out-of-band sidecar is needed."""
     path = os.path.join(calendar_dir, f"{calendar_id}.json")
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    if extras_dir:
-        extras_path = os.path.join(extras_dir, f"{calendar_id}.json")
-        if os.path.exists(extras_path):
-            with open(extras_path, encoding="utf-8") as f:
-                extras = json.load(f)
-            for key in ("apExams", "gradingPeriods"):
-                if key in extras:
-                    data[key] = extras[key]
     return bells.BellSchedule([data], {"role": "student"}), data
 
 
@@ -92,7 +83,12 @@ def _weeks(bs, data, start, end):
             school_days.append(d)
         d += timedelta(days=1)
 
-    # Group school days into Monday-anchored school weeks, numbered 1..n.
+    # Group school days into Monday-anchored school weeks. The week *number* is
+    # bells' canonical school-week numbering (same Monday-anchored, break-skipping
+    # algorithm this layout uses), so "week 9" agrees with the calendar's own
+    # `weeks` annotations by construction; fall back to local 1..n if a week is
+    # somehow missing upstream. (test_calendar_view asserts the two agree.)
+    bells_number = {w["monday"]: w["number"] for w in bs.school_weeks()}
     weeks_by_key, order = {}, []
     for sd in school_days:
         key = sd.isocalendar()[:2]
@@ -102,7 +98,7 @@ def _weeks(bs, data, start, end):
             order.append(weeks_by_key[key])
         weeks_by_key[key]["days"].append(sd)
     for n, w in enumerate(order, 1):
-        w["number"] = n
+        w["number"] = bells_number.get(w["monday"], n)
 
     # Breaks: a weekend-crossing gap that is NAMED (a breakNames entry, e.g. a long
     # weekend like Presidents' Day) or long enough to be a week+ break (>=5 weekdays
@@ -205,6 +201,19 @@ def _break_row(w):
     return {"kind": "break", "name": w["name"], "days": w["days"]}
 
 
+def _week_badges(bs, number):
+    """Resolve a school week's calendar badges from the bells annotation API:
+    `(is_ap, grading_close)`. `is_ap` is True when an `apExams` range annotation
+    overlaps the week's school days; `grading_close` is the label of a `weeks[n]`
+    annotation on the week (None if absent). Both come from
+    `bs.annotations_for_week(number)`, which tags each hit with its `source`."""
+    anns = bs.annotations_for_week(number)
+    is_ap = any(a.get("source") == "range"
+                and "apExams" in (a.get("id"), a.get("kind")) for a in anns)
+    grading_close = next((a.get("label") for a in anns if a.get("source") == "week"), None)
+    return is_ap, grading_close
+
+
 def _requested_weeks(units, weeks):
     """Total school weeks the units demand -- laid out over the year's real
     school weeks at their true positions, so an auto-sized unit is sized by the
@@ -277,12 +286,11 @@ def build_calendar(bs, data, units):
             lab = bs.non_class_label(d)
             if lab:
                 labels[d] = lab
-    # AP exam window (a sidecar augmentation): any week it overlaps is badged.
-    ap = data.get("apExams") or None
-    ap_start = _d(ap["start"]) if ap else None
-    ap_end = _d(ap["end"]) if ap else None
-    # Grading periods (sidecar): school-week number -> name, labeled "<name> close".
-    grading = data.get("gradingPeriods") or {}
+    # AP-exam weeks and grading-period closes come from the calendar's first-class
+    # `annotations`, read back per school week via the bells annotation API: a week
+    # is `is_ap` when an `apExams` range annotation overlaps its school days, and its
+    # `grading_close` is the label of any `weeks[n]` annotation on it. `_week_badges`
+    # resolves both for a given school-week number.
 
     out_units = []
     idx = [0]   # boxed so the nested helpers can advance it
@@ -318,12 +326,12 @@ def build_calendar(bs, data, units):
             if w["is_break"]:
                 rows.append(_break_row(w))
             else:
+                is_ap, grading_close = _week_badges(bs, w["number"])
                 rows.append({"kind": "week", "number": w["number"],
                              "range": _fmt_range(w["days"][0], w["days"][-1]),
                              "school_days": len(w["days"]),
-                             "is_ap": bool(ap_start and any(ap_start <= d <= ap_end
-                                                            for d in w["days"])),
-                             "grading_close": grading.get(str(w["number"])),
+                             "is_ap": is_ap,
+                             "grading_close": grading_close,
                              "cells": _week_cells(w, assign, labels)})
         # A real unit (one with a node_id) with leftover school days: mark its FIRST
         # free cell `addable` -- clicking it in the calendar drops a new lesson into

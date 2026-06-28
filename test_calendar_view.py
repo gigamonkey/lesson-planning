@@ -126,8 +126,10 @@ def main():
     # Wed-Fri of week 1 are exam days, week 3 is the AP window, week 2 closes Q1.
     data6 = dict(DATA, lastDay="2025-09-26", holidays=[],
                  nonClassDays={"2025-09-03": "exam", "2025-09-04": "exam", "2025-09-05": "exam"},
-                 apExams={"start": "2025-09-15", "end": "2025-09-19"},
-                 gradingPeriods={"2": "Q1"})
+                 annotations={
+                     "ranges": {"apExams": {"start": "2025-09-15", "end": "2025-09-19",
+                                            "label": "AP Exams", "kind": "testing"}},
+                     "weeks": {"2": {"label": "Q1", "kind": "gradingClose"}}})
     bs6 = bells.BellSchedule([data6], {"role": "student"})
     # A 4-day lesson must flow AROUND the exam days: Mon/Tue of week 1, then
     # Mon/Tue of week 2 -- never onto Wed-Fri of week 1.
@@ -156,11 +158,19 @@ def main():
     # AP days stay bookable (week 3 has its full five school days available).
     assert wr6[2]["school_days"] == 5, wr6[2]
 
-    # No sidecar data -> no exam/AP/grading metadata, identical layout to before.
+    # No annotations -> no exam/AP/grading metadata, identical layout to before.
     v7 = cv.build_calendar(bs, DATA, [{"title": "U", "weeks": 3, "lessons": []}])
     plain = [r for r in v7["units"][0]["rows"] if r["kind"] == "week"]
     assert all(not r["is_ap"] and r["grading_close"] is None for r in plain), plain
     assert not any(c["kind"] in ("exam", "special") for r in plain for c in r["cells"]), plain
+
+    # Week-numbering invariant: the layout's school-week numbers come from bells'
+    # canonical numbering, so they agree with bs.school_weeks() by construction.
+    # (Guards against the two numbering schemes drifting apart over time.)
+    weeks8 = cv._weeks(bs6, data6, cv._d(data6["firstDay"]), cv._d(data6["lastDay"]))
+    layout = [(w["monday"], w["number"]) for w in weeks8 if not w["is_break"]]
+    canonical = [(w["monday"], w["number"]) for w in bs6.school_weeks()]
+    assert layout == canonical, (layout, canonical)
 
     print("ok - all calendar_view checks passed")
 

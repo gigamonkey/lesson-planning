@@ -180,11 +180,11 @@ Course-level facts that live in no single hierarchy:
   onto. The school-year span comes from that calendar (`firstDay`..`lastDay`),
   and **exam days** come from the calendar itself (any in-session day bells gives
   a non-class label, e.g. a named `EXAMS` schedule — rendered as red exam cells,
-  not bookable lesson days). A matching sidecar in `calendar-extras/<id>.json` (this
-  repo, not the bells repo) can add what bells doesn't carry: `apExams`
-  (a `{start, end}` window — weeks it overlaps are badged "AP exams") and
-  `gradingPeriods` (a `{teaching-week-number: name}` map — that week is badged
-  "`<name>` close"). The sidecar is optional.
+  not bookable lesson days). The calendar's first-class `annotations` field
+  supplies the rest: an `apExams` range (under `annotations.ranges`) badges the
+  weeks it overlaps "AP exams", and `annotations.weeks` grading-close entries badge
+  their week "`<name>` close". These are read via the bells annotation API and are
+  optional.
 - `targets:` — a comma-separated list of reference slugs the outline is measured
   against (the `hierarchy_targets` rows).
 

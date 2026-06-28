@@ -115,10 +115,13 @@ tags in `FORMAT.md`). It reads bells calendar JSONs from `LESSON_CALENDAR_DIR`
 (default the data bundled in the `bhs-calendars` package); a course binds to one via the
 `calendar:` key in its `plan.md` front matter (the year span comes from the
 calendar's `firstDay`..`lastDay`). Exam days come from the calendar's own
-`nonClassDays`; a per-calendar sidecar in `calendar-extras/<id>.json`
-(`LESSON_CALENDAR_EXTRAS_DIR`, this repo) adds the `apExams` window and
-`gradingPeriods` week numbers that bells doesn't carry — see `load_calendar` in
-`calendar_view.py`.
+`nonClassDays`; the AP-exam window and grading-period closes come from the
+calendar's first-class `annotations` field (a `ranges.apExams` range and
+`weeks.<n>` grading-close entries), read back per school week via the bells
+annotation API (`annotations_for_week`) and the canonical school-week numbering
+(`school_weeks`) — see `_week_badges` / `_weeks` in `calendar_view.py`. (This
+replaced the old out-of-band `calendar-extras/` sidecar once bells ≥ 0.8 / the
+`bhs-calendars` ≥ 2.10 data carried `annotations`.)
 
 ```bash
 # Rebuild the editor bundle after editing frontend/editor.js (needs Node/npm).
