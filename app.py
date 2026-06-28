@@ -2052,9 +2052,10 @@ def lesson_arrange(course):
 def node_duration_set(course, node_id):
     """Set (or clear) an outline node's duration from the inline field. The unit is
     implied by the node's level: weeks on a unit, days on a lesson. An empty or
-    negative amount clears it; for a lesson, 1 day is the default and also clears
-    the row (so plan.md stays quiet), but an explicit 0 days is kept (the lesson is
-    then omitted from the calendar). For a unit, 0 weeks clears it (means 'auto')."""
+    negative amount clears it (back to auto-sizing); for a lesson, 1 day is the
+    default and also clears the row (so plan.md stays quiet). An explicit 0 is KEPT
+    -- a 0-day lesson or a 0-week unit is omitted from the calendar (auto-sized
+    units otherwise get at least 1 week)."""
     raw = (request.form.get("amount") or "").strip()
     with db() as conn:
         O = outline_hierarchy(conn, course)
@@ -2068,7 +2069,6 @@ def node_duration_set(course, node_id):
         except ValueError:
             amount = None
         clear = (amount is None or amount < 0
-                 or (unit == "week" and amount == 0)
                  or (unit == "day" and amount == 1))
         if clear:
             conn.execute("DELETE FROM node_duration WHERE course=? AND hierarchy=? AND node_id=?",

@@ -13,6 +13,7 @@ and a calendar; it returns a view model the template renders.
 """
 
 import json
+import math
 import os
 from datetime import date, timedelta
 
@@ -204,6 +205,42 @@ def _break_row(w):
     return {"kind": "break", "name": w["name"], "days": w["days"]}
 
 
+def _requested_weeks(units, weeks):
+    """Total teaching weeks the units demand -- laid out over the year's real
+    teaching weeks at their true positions, so an auto-sized unit is sized by the
+    ACTUAL school days where it starts (a 5-lesson unit starting in a 4-day week
+    needs 2 weeks), continuing with nominal 5-day weeks past year-end so an
+    overflow is still measured (the live layout caps at availability, hiding it).
+
+    Rules: an explicit count is taken verbatim (0 = removed from the calendar); an
+    auto-sized unit takes at least 1 week, and otherwise as many as its lessons
+    need; the last auto-sized unit is greedy (absorbs the remainder) so it never
+    over-asks and isn't counted."""
+    school = [len(w["days"]) for w in weeks if not w["is_break"]]   # days per teaching week
+    days_at = lambda p: school[p] if p < len(school) else 5         # nominal 5 past year-end
+    emitted = [i for i, u in enumerate(units) if u["weeks"] != 0]
+    last_emit = emitted[-1] if emitted else None
+    total, pos = 0, 0
+    for i, u in enumerate(units):
+        w = u["weeks"]
+        if w == 0:                               # removed from the calendar
+            continue
+        if w:                                    # explicit count
+            total += w
+            pos += math.ceil(w)
+        elif i == last_emit:                     # greedy last auto unit: absorbs the rest
+            break
+        else:                                    # auto: weeks to hold its lessons from here
+            need = sum(int(L["days"]) for L in u["lessons"] if int(L["days"]) > 0)
+            have = taken = 0
+            while taken == 0 or have < need:     # >= 1 week
+                have += days_at(pos)
+                pos += 1
+                taken += 1
+            total += taken
+    return total
+
+
 def build_calendar(bs, data, units):
     """Lay `units` (ordered [{title, weeks, lessons:[{title, days}]}]) onto the
     school year of (bs, data) -- its full firstDay..lastDay span. Returns a view
@@ -305,13 +342,16 @@ def build_calendar(bs, data, units):
                           "weeks_shown": sum(1 for w in taken if not w["is_break"]),
                           "free_days": len(sdays) - i, "rows": rows})
 
+    # The last EMITTED no-count unit absorbs all remaining weeks to year-end -- a
+    # first-class, lesson-holding catch-all rather than the synthetic tail below.
+    # (A unit explicitly set to 0 weeks is omitted from the calendar entirely.)
+    emitted = [i for i, u in enumerate(units) if u["weeks"] != 0]
+    last_emit = emitted[-1] if emitted else None
     for i, unit in enumerate(units):
+        if unit["weeks"] == 0:
+            continue
         emit_leading_breaks()
-        # The last outline unit, if it has no explicit week count, absorbs all the
-        # remaining weeks to year-end -- a first-class, lesson-holding catch-all
-        # ("Unplanned") rather than the synthetic tail below.
-        last = i == len(units) - 1
-        emit_unit(unit, greedy=last and not unit["weeks"])
+        emit_unit(unit, greedy=(i == last_emit and not unit["weeks"]))
 
     # Run the calendar out to the end of the year: any teaching weeks the units
     # didn't claim go in ONE synthetic "Unplanned" section (header shows the count).
@@ -324,18 +364,7 @@ def build_calendar(bs, data, units):
     emit_leading_breaks()   # any trailing breaks
 
     warnings = []
-    # Teaching weeks the units ask for. An explicit count is its demand; an
-    # auto-sized (no-count) unit still needs ~ceil(lesson-days / 5) weeks to hold
-    # its lessons (5 = a full teaching week, so this is the FEWEST it could need --
-    # conservative, no false alarms). The last no-count unit is greedy (it absorbs
-    # whatever's left), so it never over-asks and is skipped.
-    requested = 0
-    for i, u in enumerate(units):
-        if u["weeks"]:
-            requested += u["weeks"]
-        elif i < len(units) - 1:
-            days = sum(int(L["days"]) for L in u["lessons"] if int(L["days"]) > 0)
-            requested += max(1, -(-days // 5))
+    requested = _requested_weeks(units, weeks)
     if requested > teaching_total:
         warnings.append(f"Units ask for more weeks than the year has "
                         f"({_fmt_num(requested)} vs {teaching_total} teaching weeks).")
