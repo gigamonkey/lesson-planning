@@ -98,14 +98,8 @@
     .coursehead .gear { color: #bbb; text-decoration: none; font-size: .82rem; flex: none;
                 cursor: pointer; line-height: 1; position: relative; }
     .coursehead .gear:hover, .coursehead .gear.on { color: #2b6cb0; }
-    /* Click-to-edit course title (the header line): looks like plain bold text
-       until hover/focus. Shares the row with the four course-view icons. */
-    .ctitle-form { margin: 0; flex: 1; min-width: 0; }
-    .ctitle-input { width: 100%; box-sizing: border-box; font: inherit; font-size: .95rem;
-                font-weight: 700; color: #222; border: 1px solid transparent; background: transparent;
-                border-radius: 3px; padding: .05rem .2rem; margin-left: -.2rem; }
-    .ctitle-input:hover { border-color: var(--line); }
-    .ctitle-input:focus { border-color: #bcd; background: #fff; color: #222; outline: none; }
+    /* The course title (header line) is a link to the outline; rename it on the
+       course settings page. Shares the row with the four course-view icons. */
     /* Section label above the reference-hierarchy list. */
     .sidebar .refhead { font-size: .68rem; font-weight: 600; letter-spacing: .04em;
                 text-transform: uppercase; color: var(--muted); margin: .35rem 0 .1rem; }
@@ -149,6 +143,7 @@
     .sidebar .coursename { font-weight: 700; color: #222; text-decoration: none; font-size: .95rem;
                            flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
                            text-overflow: ellipsis; }
+    .sidebar .coursename:hover { color: #2b6cb0; }
     .sidebar .course.active .coursename { color: #2b6cb0; }
     .sidebar ul.hiers { list-style: none; margin: .2rem 0; padding: 0; }
     .sidebar ul.hiers li { display: flex; align-items: center; gap: .35rem; padding: .13rem 0; }
@@ -627,16 +622,8 @@
           {# Header line: the course title (click-to-edit when editable) plus the
              four course-view icons — outline, calendar, objectives, settings. #}
           <div class="coursehead">
-            {% if can_edit %}
-            <form class="ctitle-form autosave" method="post"
-                  action="{{ url_for('course_rename', course=c.course) }}"
-                  hx-post="{{ url_for('course_rename', course=c.course) }}" hx-swap="none">
-              <input class="ctitle-input" type="text" name="title" value="{{ c.title }}"
-                     autocomplete="off" aria-label="Course title" placeholder="{{ c.course|upper }}">
-            </form>
-            {% else %}
-            <span class="coursename">{{ c.title or c.course|upper }}</span>
-            {% endif %}
+            <a class="coursename" href="{{ url_for('plan', course=c.course) }}"
+               title="{{ (c.title or c.course|upper) }} outline">{{ c.title or c.course|upper }}</a>
             <span class="coursehead-actions">
               <a class="gear {{ 'on' if request.endpoint == 'plan' and c.course == nav_course else '' }}"
                  href="{{ url_for('plan', course=c.course) }}"

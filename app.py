@@ -982,17 +982,17 @@ def references_reorder(course):
 
 @app.route("/<course>/rename", methods=["POST"])
 def course_rename(course):
-    """Rename a course's display title (the id/slug is fixed). Used by the inline
-    click-to-edit title in the sidebar (htmx) and the setup form."""
+    """Rename a course's display title (the id/slug is fixed). Posted from the
+    course settings page."""
     title = (request.form.get("title") or "").strip()
     with db() as conn:
         if not conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
             abort(404)
         if title:  # ignore an empty title rather than blanking it
             conn.execute("UPDATE courses SET title=? WHERE course=?", (title, course))
-    if request.headers.get("HX-Request"):
-        return ("", 204)
-    return redirect(request.referrer or url_for("tree", course=course))
+    if title:
+        flash(f"Renamed to “{title}”.")
+    return redirect(url_for("course_settings", course=course))
 
 
 @app.route("/<course>/settings")

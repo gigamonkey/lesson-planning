@@ -7,6 +7,15 @@
      on the outline, objectives, and reference pages in the sidebar.</p>
 
   {% if can_edit %}
+  <h2>Course title</h2>
+  <p>The display name shown in the sidebar (the course id <code>{{ course }}</code>
+     is fixed).</p>
+  <form method="post" action="{{ url_for('course_rename', course=course) }}" class="caction">
+    <input type="text" name="title" value="{{ title or '' }}" placeholder="{{ course|upper }}"
+           aria-label="Course title" autocomplete="off">
+    <button type="submit" class="btn"><i class="bi bi-check-lg"></i> Save title</button>
+  </form>
+
   <h2>Add a reference hierarchy</h2>
   <p>Upload a reference hierarchy markdown file (<code>.md</code>) to add it to this
      course. You'll confirm its slug and title before it loads.</p>
@@ -78,6 +87,9 @@
   .csettings .btn:disabled, .csettings .btn:disabled:hover { color: #9aa; background: #f4f5f6;
           border-color: #e3e5e8; cursor: default; }
   .csettings select { font: inherit; padding: .25rem; }
+  .csettings input[type=text] { font: inherit; font-size: .9rem; padding: .35rem .5rem;
+          border: 1px solid var(--line); border-radius: 5px; min-width: 16rem; }
+  .csettings input[type=text]:focus { border-color: #bcd; outline: none; }
   .csettings h2.danger { color: var(--gap, #c05621); margin-top: 1.6rem; }
   .csettings .btn-danger { color: var(--gap, #c05621); background: #fdeee7;
           border-color: #f3d6c6; }
