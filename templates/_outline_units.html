@@ -121,6 +121,15 @@
     </ul>
   </section>
 {% endfor %}
+{# Append a unit at the end (the hover-gap "+" above each unit inserts before it;
+   this adds after the last one, before Unassigned). #}
+<div class="unit-append">
+  <form method="post" action="{{ url_for('unit_new', course=course) }}"
+        hx-post="{{ url_for('unit_new', course=course) }}"
+        hx-target="#outline-units" hx-swap="innerHTML">
+    <button type="submit" class="addunit-end"><i class="bi bi-plus-lg"></i> Add a unit here</button>
+  </form>
+</div>
 <section class="unit unassigned" data-unit-id="none">
   <div class="unithead">
     <button type="button" class="unittoggle" title="Collapse / expand this section"

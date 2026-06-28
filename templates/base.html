@@ -372,6 +372,13 @@
     .units .unit-insert .addunit-here:focus-visible { color: #2b6cb0; }
     .units .unit-insert .addunit-here:focus-visible { outline: 2px solid #bcd;
             outline-offset: 2px; border-radius: 3px; }
+    /* "Add a unit here" appended after the last unit (before Unassigned). */
+    .units .unit-append { margin: .2rem 0 1rem; }
+    .units .unit-append form { margin: 0; }
+    .units .addunit-end { border: none; background: none; padding: .15rem .2rem;
+            color: #9aa6b2; font: inherit; font-size: .85rem; cursor: pointer;
+            display: inline-flex; align-items: center; gap: .3rem; }
+    .units .addunit-end:hover, .units .addunit-end:focus-visible { color: #2b6cb0; }
     .units ul.rawzone { border: none; background: none; padding: .05rem 0 .05rem 1rem;
             margin: .1rem 0; min-height: 1.3rem; }
     .units li.rawitem { background: none; border: none; border-radius: 4px;
