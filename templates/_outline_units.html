@@ -55,6 +55,16 @@
 {% endmacro %}
 
 {% for u in tree if u.level == 'unit' %}
+  {# Hover the gap before a unit to insert a new unit there (between two units, or
+     at the very top before the first). Appending is the "+" by the page title. #}
+  <div class="unit-insert">
+    <form method="post" action="{{ url_for('unit_new', course=course) }}"
+          hx-post="{{ url_for('unit_new', course=course) }}"
+          hx-target="#outline-units" hx-swap="innerHTML">
+      <input type="hidden" name="before" value="{{ u.id }}">
+      <button type="submit" class="addunit-here" title="Add a unit here">+</button>
+    </form>
+  </div>
   <section class="unit" data-unit-id="{{ u.id }}">
     <div class="unithead">
       <button type="button" class="unittoggle" title="Collapse / expand this unit"

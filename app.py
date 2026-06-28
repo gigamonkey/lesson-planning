@@ -1859,16 +1859,28 @@ def outline_import(course):
 
 @app.route("/<course>/unit/new", methods=["POST"])
 def unit_new(course):
-    # Added via the "+" by the page title with no title yet (the new unit's title
-    # input is focused on reload for immediate editing); a title may still be sent.
+    # Added via the "+" by the page title (appends), or an insert-here "+" between
+    # units (form sends `before`=<unit id>). No title yet -- the new unit's title
+    # input is focused on reload for immediate editing -- though one may be sent.
     title = (request.form.get("title") or "").strip()
+    before = (request.form.get("before") or "").strip() or None
     with db() as conn:
         O = ensure_outline(conn, course)
-        nxt = conn.execute("SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
-                           "WHERE course=? AND hierarchy=? AND level='unit'", (course, O)).fetchone()[0]
+        pos = None
+        if before:
+            row = conn.execute("SELECT ordinal FROM nodes WHERE course=? AND hierarchy=? "
+                               "AND node_id=? AND level='unit'", (course, O, before)).fetchone()
+            if row is not None:
+                pos = row["ordinal"]
+                # Open a gap: shift this unit and everything after it down by one.
+                conn.execute("UPDATE nodes SET ordinal=ordinal+1 WHERE course=? AND hierarchy=? "
+                             "AND level='unit' AND ordinal>=?", (course, O, pos))
+        if pos is None:   # append (the page-title "+", or a stale `before`)
+            pos = conn.execute("SELECT COALESCE(MAX(ordinal), -1)+1 FROM nodes "
+                               "WHERE course=? AND hierarchy=? AND level='unit'", (course, O)).fetchone()[0]
         conn.execute("INSERT INTO nodes(course, hierarchy, node_id, parent_id, level, is_leaf,"
                      " ordinal, text) VALUES (?, ?, ?, NULL, 'unit', 0, ?, ?)",
-                     (course, O, str(uuidlib.uuid4()), nxt, title))
+                     (course, O, str(uuidlib.uuid4()), pos, title))
         conn.commit()
         if request.headers.get("HX-Request"):
             return _outline_swap(conn, course)
