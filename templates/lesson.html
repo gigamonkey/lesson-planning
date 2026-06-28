@@ -7,10 +7,21 @@
 <style>
   .lessonview { max-width: var(--content-max); }
   /* A meta line under the title: a link back to the outline, the unit, the days. */
-  .lessonview .lessonmeta { color: var(--muted); font-size: .85rem; margin: -.4rem 0 1.3rem; }
+  .lessonview .lessonmeta { color: var(--muted); font-size: .85rem; margin: -.4rem 0 1.1rem; }
   .lessonview .lessonmeta a { color: #2b6cb0; text-decoration: none; }
   .lessonview .lessonmeta a:hover { text-decoration: underline; }
   .lessonview .lessonmeta .sep { opacity: .45; margin: 0 .4rem; }
+  /* Plan | Present segmented toggle (in the title row, by Edit as Markdown). */
+  .pagetitle .viewmode { display: inline-flex; vertical-align: middle; margin-left: .6rem;
+        border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .pagetitle .viewmode .vm-btn { font: inherit; font-size: .72rem; font-weight: 600;
+        padding: .1rem .5rem; border: none; background: #fff; color: var(--muted);
+        cursor: pointer; line-height: 1.5; }
+  .pagetitle .viewmode .vm-btn + .vm-btn { border-left: 1px solid var(--line); }
+  .pagetitle .viewmode .vm-btn:hover { color: #2b6cb0; }
+  .pagetitle .viewmode .vm-btn.active { background: #eef3f8; color: #2b6cb0; }
+  /* The parts column: flex so the Plan|Present toggle can reorder via CSS `order`. */
+  .lessonparts { display: flex; flex-direction: column; }
   .lessonpart { margin: 0 0 1.4rem; }
   .parthead { display: flex; align-items: baseline; gap: .4rem; }
   .parthead h2 { font-size: 1.05rem; border-bottom: 1px solid var(--line);
@@ -44,8 +55,8 @@
   .partctl { display: flex; gap: .4rem; margin-top: .4rem; }
   .partctl button { font-size: .82rem; padding: .2rem .6rem; }
   .lessonempty { color: var(--muted); font-style: italic; }
-  /* "Objectives addressed": the placed raw objectives this plan distills. */
-  .lessonobjs { margin: 1.8rem 0 0; padding: .8rem 1rem; background: #fff;
+  /* "Objectives addressed": the placed raw objectives this plan distills (top of page). */
+  .lessonobjs { margin: 0 0 1.4rem; padding: .8rem 1rem; background: #fff;
         border: 1px solid var(--line); border-radius: 6px; }
   .lessonobjs h2 { font-size: .72rem; margin: 0 0 .4rem; border: none; padding: 0;
         color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
@@ -57,8 +68,15 @@
 {% block titlebtn %}
   {% if can_edit %}
   <a class="editmd" href="{{ url_for('lesson_edit_md', course=course, lesson_id=lesson_id) }}"
-     title="Edit the whole lesson plan as Markdown">Edit as Markdown</a>
+     title="Edit the whole lesson plan as Markdown">
+    <i class="bi bi-pencil-square"></i>&nbsp;Edit as Markdown</a>
   {% endif %}
+  <span class="viewmode" role="group" aria-label="Section order">
+    <button type="button" class="vm-btn" data-mode="plan"
+            title="Planning order: objective first, then assessment and components">Plan</button>
+    <button type="button" class="vm-btn" data-mode="present"
+            title="Teaching order: the lesson as it unfolds in class">Present</button>
+  </span>
 {% endblock %}
 
 {% block body %}
@@ -69,12 +87,6 @@
     {% if duration %}<span class="sep">·</span>{{ duration }}{% endif %}
   </div>
 
-  {% if not has_content and not can_edit %}
-  <p class="lessonempty">This lesson plan has no written content yet.</p>
-  {% endif %}
-
-  {% for part in parts %}{% include "_lessonpart.html" %}{% endfor %}
-
   {% if objectives %}
   <div class="lessonobjs">
     <h2>Objectives addressed</h2>
@@ -83,24 +95,67 @@
     </ul>
   </div>
   {% endif %}
+
+  {% if not has_content and not can_edit %}
+  <p class="lessonempty">This lesson plan has no written content yet.</p>
+  {% endif %}
+
+  <div class="lessonparts">
+    {% for part in parts %}{% include "_lessonpart.html" %}{% endfor %}
+  </div>
 </div>
 
 <script>
+  // Two display orders for the eight parts, flipped by the Plan | Present toggle
+  // (CSS `order` on the flex .lessonparts column). Present = the lesson as it
+  // unfolds in class (the authored file order); Plan = backward-design planning
+  // order. The choice persists across lessons via localStorage.
+  (function () {
+    var PRESENT = ['preview', 'learning_objective', 'review', 'key_ideas',
+                   'expert_thinking', 'guided_practice', 'closure', 'independent_practice'];
+    var PLAN = ['learning_objective', 'independent_practice', 'key_ideas', 'expert_thinking',
+                'guided_practice', 'review', 'closure', 'preview'];
+    var mode = localStorage.getItem('lessonViewMode') || 'plan';
+
+    function apply() {
+      var order = mode === 'present' ? PRESENT : PLAN;
+      document.querySelectorAll('.lessonparts .lessonpart').forEach(function (sec) {
+        var key = sec.id.replace(/^part-/, '');
+        var i = order.indexOf(key);
+        sec.style.order = i < 0 ? 99 : i;
+      });
+      document.querySelectorAll('.viewmode .vm-btn').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+    }
+    apply();
+
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest('.viewmode .vm-btn');
+      if (!b) return;
+      mode = b.dataset.mode;
+      localStorage.setItem('lessonViewMode', mode);
+      apply();
+    });
+    // A per-part save swaps in a fresh section (no inline order) — reapply.
+    document.body.addEventListener('htmx:afterSwap', apply);
+  })();
+
   // Per-part inline editing: clicking the pencil (or an empty part's "+ add")
   // reveals that section's raw-markdown textarea; Cancel reverts and closes; Save
   // is an htmx post that swaps the whole section back to its rendered form. Handlers
   // are delegated so they survive the htmx swap.
   (function () {
     document.addEventListener('click', function (e) {
-      const sec = e.target.closest('.lessonpart');
+      var sec = e.target.closest('.lessonpart');
       if (!sec) return;
       if (e.target.closest('.partedit-btn') || e.target.closest('.addpart')) {
         sec.classList.add('editing');
-        const ta = sec.querySelector('.partedit textarea');
+        var ta = sec.querySelector('.partedit textarea');
         if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
       } else if (e.target.closest('.cancelpart')) {
-        const ta = sec.querySelector('.partedit textarea');
-        if (ta) ta.value = ta.defaultValue;   // discard unsaved changes
+        var ta2 = sec.querySelector('.partedit textarea');
+        if (ta2) ta2.value = ta2.defaultValue;   // discard unsaved changes
         sec.classList.remove('editing');
       }
     });
