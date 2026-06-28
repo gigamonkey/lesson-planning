@@ -152,10 +152,20 @@ targets: widgets-ced
 - Name the two main parts of a widget.  (#faf3)
 - Explain what the frobnicator does.  (#221a)
 
+# Unassigned lessons
+
+## A lesson not yet in a unit
+
 # Unplaced objectives
 
 - Brainstorm a class project that uses widgets.  (#9eec)
 ```
+
+Two trailing H1 sections are optional. **`# Unassigned lessons`** holds lessons
+not (yet) under any unit — `## TITLE` entries with no parent, the round-trip home
+for the outline's "Unassigned lessons" area (e.g. lessons left over after a unit
+is deleted). **`# Unplaced objectives`** holds pool objectives not placed in any
+lesson.
 
 ### 1. Front-matter wiring
 
