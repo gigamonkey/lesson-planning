@@ -1,8 +1,8 @@
 """Lay a course outline out across a real school year for the calendar view.
 
-The outline is the source of truth: each unit consumes a number of *teaching
+The outline is the source of truth: each unit consumes a number of *school
 weeks* (calendar weeks with at least one school day) -- "loosely", so a 2-week
-unit takes the next 2 teaching weeks regardless of days off, and a week with a
+unit takes the next 2 school weeks regardless of days off, and a week with a
 holiday in it still counts as one week. Full-week breaks are shown between units
 but don't count. Within a unit's weeks, lessons are laid into the school days in
 order (each lesson takes its `days`, default 1).
@@ -73,15 +73,15 @@ def _fmt_range(a, b):
 
 
 def _weeks(bs, data, start, end):
-    """The year as an ordered list of items: teaching weeks and break boxes.
+    """The year as an ordered list of items: school weeks and break boxes.
 
-    A teaching week is a Monday-anchored calendar week with >=1 school day:
+    A school week is a Monday-anchored calendar week with >=1 school day:
     {is_break: False, monday, days: [school dates], number}. A break box is any gap
     between consecutive school days that has a non-school WEEKDAY and crosses a
     weekend -- i.e. a real holiday/break, not a plain weekend and not a lone
     mid-week day off (which stays a greyed cell in its week). This boxes named long
     weekends (e.g. Presidents' Day) as well as week-plus breaks; the weekday(s) off
-    still show greyed in their teaching weeks. {is_break: True, name, days} where
+    still show greyed in their school weeks. {is_break: True, name, days} where
     `days` is the break's length in days; named from breakNames, else "Break"."""
     break_names = {_d(k): v for k, v in (data.get("breakNames") or {}).items()}
 
@@ -92,7 +92,7 @@ def _weeks(bs, data, start, end):
             school_days.append(d)
         d += timedelta(days=1)
 
-    # Group school days into Monday-anchored teaching weeks, numbered 1..n.
+    # Group school days into Monday-anchored school weeks, numbered 1..n.
     weeks_by_key, order = {}, []
     for sd in school_days:
         key = sd.isocalendar()[:2]
@@ -118,7 +118,7 @@ def _weeks(bs, data, start, end):
             breaks.append({"is_break": True, "start": gap[0],
                            "name": named[0] if named else "Break", "days": len(gap)})
 
-    # Merge chronologically: each break sits before the teaching week that follows it.
+    # Merge chronologically: each break sits before the school week that follows it.
     out, bi = [], 0
     for w in order:
         while bi < len(breaks) and breaks[bi]["start"] < w["days"][0]:
@@ -170,9 +170,9 @@ def _week_cells(week, assign, labels):
 
 
 def _consume(weeks, idx, unit, greedy=False):
-    """Consume the teaching weeks one unit gets, starting at weeks[idx]. A unit with
-    an explicit `weeks` count takes that many TEACHING weeks (breaks pass through,
-    uncounted). A unit with no count takes just enough teaching weeks to hold its
+    """Consume the school weeks one unit gets, starting at weeks[idx]. A unit with
+    an explicit `weeks` count takes that many SCHOOL weeks (breaks pass through,
+    uncounted). A unit with no count takes just enough school weeks to hold its
     lessons' days (min one) -- unless `greedy`, in which case it takes ALL remaining
     weeks to the end of the year (the last outline unit, so a no-week-count final
     unit becomes a real, lesson-holding "rest of the year" catch-all). Returns
@@ -190,7 +190,7 @@ def _consume(weeks, idx, unit, greedy=False):
         need = max(1, sum(L["days"] for L in unit["lessons"]))
         have = 0
         # Greedy (last unit): take everything left. Otherwise take at least one
-        # teaching week and keep going until the lessons fit.
+        # school week and keep going until the lessons fit.
         while idx < len(weeks) and (greedy or have == 0 or have < need):
             w = weeks[idx]; idx += 1
             taken.append(w)
@@ -206,8 +206,8 @@ def _break_row(w):
 
 
 def _requested_weeks(units, weeks):
-    """Total teaching weeks the units demand -- laid out over the year's real
-    teaching weeks at their true positions, so an auto-sized unit is sized by the
+    """Total school weeks the units demand -- laid out over the year's real
+    school weeks at their true positions, so an auto-sized unit is sized by the
     ACTUAL school days where it starts (a 5-lesson unit starting in a 4-day week
     needs 2 weeks), continuing with nominal 5-day weeks past year-end so an
     overflow is still measured (the live layout caps at availability, hiding it).
@@ -216,7 +216,7 @@ def _requested_weeks(units, weeks):
     auto-sized unit takes at least 1 week, and otherwise as many as its lessons
     need; the last auto-sized unit is greedy (absorbs the remainder) so it never
     over-asks and isn't counted."""
-    school = [len(w["days"]) for w in weeks if not w["is_break"]]   # days per teaching week
+    school = [len(w["days"]) for w in weeks if not w["is_break"]]   # days per school week
     days_at = lambda p: school[p] if p < len(school) else 5         # nominal 5 past year-end
     emitted = [i for i, u in enumerate(units) if u["weeks"] != 0]
     last_emit = emitted[-1] if emitted else None
@@ -263,13 +263,13 @@ def build_calendar(bs, data, units):
     start = _d(data["firstDay"])
     end = _d(data["lastDay"])
     weeks = _weeks(bs, data, start, end)
-    teaching_total = sum(1 for w in weeks if not w["is_break"])
+    school_total = sum(1 for w in weeks if not w["is_break"])
 
     # Exam days (and any other non-class label) come from the bells calendar itself:
     # bs.non_class_label(d) returns a label like "exam" for an in-session day that's
     # reserved (e.g. finals -- whether the source marks it via a named EXAMS schedule
     # or a raw nonClassDays entry; bells normalizes both). Such days stay in their
-    # teaching week but are NOT bookable -- lessons flow around them -- and render as
+    # school week but are NOT bookable -- lessons flow around them -- and render as
     # their own cell kind ("exam" -> red, any other label -> a generic special cell).
     labels = {}
     for w in weeks:
@@ -281,7 +281,7 @@ def build_calendar(bs, data, units):
     ap = data.get("apExams") or None
     ap_start = _d(ap["start"]) if ap else None
     ap_end = _d(ap["end"]) if ap else None
-    # Grading periods (sidecar): teaching-week number -> name, labeled "<name> close".
+    # Grading periods (sidecar): school-week number -> name, labeled "<name> close".
     grading = data.get("gradingPeriods") or {}
 
     out_units = []
@@ -353,7 +353,7 @@ def build_calendar(bs, data, units):
         emit_leading_breaks()
         emit_unit(unit, greedy=(i == last_emit and not unit["weeks"]))
 
-    # Run the calendar out to the end of the year: any teaching weeks the units
+    # Run the calendar out to the end of the year: any school weeks the units
     # didn't claim go in ONE synthetic "Unplanned" section (header shows the count).
     # A greedy last unit will have eaten them, so this only fires when the final unit
     # had an explicit week count that left a tail.
@@ -365,14 +365,14 @@ def build_calendar(bs, data, units):
 
     warnings = []
     requested = _requested_weeks(units, weeks)
-    if requested > teaching_total:
+    if requested > school_total:
         warnings.append(f"Units ask for more weeks than the year has "
-                        f"({_fmt_num(requested)} vs {teaching_total} teaching weeks).")
+                        f"({_fmt_num(requested)} vs {school_total} school weeks).")
     for u in out_units:
         if u.get("overflow"):   # break sections have no overflow
             n = sum(o["days"] - o["fit"] for o in u["overflow"])
             warnings.append(f"Unit “{u['title']}” overflows by {n} lesson-day(s).")
 
     return {"warnings": warnings, "units": out_units,
-            "teaching_weeks": teaching_total, "calendar_name": data.get("name", ""),
+            "school_weeks": school_total, "calendar_name": data.get("name", ""),
             "year": _fmt_year(data.get("year"))}

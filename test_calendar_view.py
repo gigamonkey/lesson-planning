@@ -34,11 +34,11 @@ def main():
     ]
     view = cv.build_calendar(bs, DATA, units)
 
-    assert view["teaching_weeks"] == 3, view["teaching_weeks"]
+    assert view["school_weeks"] == 3, view["school_weeks"]
 
     u1 = view["units"][0]
     weekrows = [r for r in u1["rows"] if r["kind"] == "week"]
-    assert len(weekrows) == 2, "U1 (2 weeks) should consume two teaching weeks"
+    assert len(weekrows) == 2, "U1 (2 weeks) should consume two school weeks"
     assert weekrows[0]["school_days"] == 5, weekrows[0]
     # The holiday week still counts as one week, with four school days ("loose").
     assert weekrows[1]["school_days"] == 4, weekrows[1]
@@ -53,12 +53,12 @@ def main():
     assert [c["kind"] for c in first] == ["lesson", "free", "free"], first
     assert all(c["days"] == 1 for c in first[1:]), first
 
-    # U2 has no week count -> derived, consuming one teaching week for its 1 lesson.
+    # U2 has no week count -> derived, consuming one school week for its 1 lesson.
     u2 = view["units"][1]
     assert u2["derived"], "U2 should be auto-sized"
     assert sum(1 for r in u2["rows"] if r["kind"] == "week") == 1, u2["rows"]
 
-    # Both units cover 3 teaching weeks total -> none left over, no overflow.
+    # Both units cover 3 school weeks total -> none left over, no overflow.
     assert not any("unscheduled" in w for w in view["warnings"]), view["warnings"]
     assert not u1["overflow"] and not u2["overflow"]
 
@@ -86,7 +86,7 @@ def main():
     sec = between["units"][1]
     assert sec["rows"][0]["kind"] == "break" and sec["rows"][0]["name"] == "Fall Break", sec
     assert sec["rows"][0]["days"] == 9, sec   # Sep 6-14 inclusive
-    # The leftover teaching week at the end is filled with an Unplanned chunk.
+    # The leftover school week at the end is filled with an Unplanned chunk.
     assert kinds[-1] == "unplanned" and between["units"][-1]["title"] == "Unplanned", kinds
 
     inside = cv.build_calendar(bs2, data2, [{"title": "A", "weeks": 2, "lessons": []}])
@@ -134,7 +134,7 @@ def main():
     v6 = cv.build_calendar(bs6, data6,
                            [{"title": "U", "weeks": 4,
                              "lessons": [{"node_id": "l", "title": "L", "days": 4}]}])
-    assert v6["teaching_weeks"] == 4, v6["teaching_weeks"]
+    assert v6["school_weeks"] == 4, v6["school_weeks"]
     wr6 = [r for r in v6["units"][0]["rows"] if r["kind"] == "week"]
 
     # Week 1: a 2-day lesson block then a 3-day exam block.

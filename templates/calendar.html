@@ -194,7 +194,7 @@
 {% block body %}
   <dialog id="help-dialog" class="help-dialog">
     <p>This lays the course <b>outline</b> across the school year. Each <b>unit</b>
-       spans a number of teaching weeks, and its <b>lessons</b> fill the school days
+       spans a number of school weeks, and its <b>lessons</b> fill the school days
        in order, flowing around holidays and exam days. A unit with no week count is
        auto-sized to hold its lessons (at least one week); set a unit to <b>0 weeks</b>
        to drop it from the calendar.</p>
@@ -217,7 +217,7 @@
          a JSON file in the calendars directory). The school year comes from that calendar.</p>
     </div>
   {% elif view %}
-    <p class="cal-intro">{{ view.calendar_name }} - {{ view.year }} · {{ view.teaching_weeks }} teaching weeks.</p>
+    <p class="cal-intro">{{ view.calendar_name }} - {{ view.year }} · {{ view.school_weeks }} school weeks.</p>
     <div id="cal-content">{% include "_calendar_content.html" %}</div>
   {% endif %}
 
