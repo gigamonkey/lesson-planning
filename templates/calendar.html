@@ -19,6 +19,12 @@
   .cal-unit-head { display: flex; align-items: baseline; gap: .5rem;
                    border-bottom: 2px solid var(--line); padding-bottom: .2rem; margin-bottom: .35rem; }
   .cal-unit-head .name { font-weight: 700; font-size: 1.05rem; flex: 1 1 auto; min-width: 0; }
+  /* Grip to drag-reorder a unit (like the outline): revealed on head hover/drag. */
+  .cal-unithandle { flex: none; color: #c4c4c4; cursor: grab; font-size: .9rem;
+                    align-self: center; opacity: 0; transition: opacity .1s; }
+  .cal-unit-head:hover .cal-unithandle, body.cal-dragging .cal-unithandle { opacity: 1; }
+  .cal-unithandle:hover { color: #2b6cb0; }
+  .cal-unit-ghost { opacity: .4; }
   /* Click-to-edit unit title: looks like .name, gets a field outline on hover/focus. */
   .cal-name { flex: 1 1 auto; margin: 0; min-width: 0; }
   .cal-name input { font: inherit; font-weight: 700; font-size: 1.05rem; color: inherit;
@@ -363,5 +369,32 @@
         values: { unit: unitId, ids: ids.join(','), view: 'calendar' }
       });
     });
+
+    // --- Drag whole units to reorder them (like the outline) ---
+    // Units are a vertical stack of sections, so SortableJS's sibling reorder fits
+    // (unlike the irregular lesson grid above). #cal-content persists across htmx
+    // swaps and SortableJS delegates to its current children, so bind once. On drop
+    // we post the new unit order and re-lay-out (the calendar positions change).
+    (function initCalUnitSort() {
+      const el = document.getElementById('cal-content');
+      if (!window.Sortable || !el || el.dataset.unitSortInit) return;
+      el.dataset.unitSortInit = '1';
+      new Sortable(el, {
+        draggable: 'section.cal-unit[data-unit-id]', handle: '.cal-unithandle',
+        animation: 120, forceFallback: true, fallbackOnBody: true,
+        scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
+        ghostClass: 'cal-unit-ghost',
+        onStart: function () { document.body.classList.add('cal-dragging'); },
+        onEnd: function () {
+          document.body.classList.remove('cal-dragging');
+          const ids = Array.from(el.querySelectorAll('section.cal-unit[data-unit-id]'))
+            .map(function (s) { return s.dataset.unitId; });
+          window.htmx && htmx.ajax('POST', '/' + course + '/unit/arrange', {
+            target: '#cal-content', swap: 'innerHTML',
+            values: { ids: ids.join(','), view: 'calendar' }
+          });
+        }
+      });
+    })();
   </script>
 {% endblock %}

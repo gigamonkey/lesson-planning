@@ -1922,9 +1922,9 @@ def unit_delete(course, unit_id):
 
 @app.route("/<course>/unit/arrange", methods=["POST"])
 def unit_arrange(course):
-    """Drag-reorder units. Form: `ids` (unit node_ids in their new order). Client-
-    driven like lesson_arrange -- the DOM already reflects the order, so just
-    persist the new ordinals and return 204 (no swap)."""
+    """Drag-reorder units. Form: `ids` (unit node_ids in their new order). Persist
+    the new ordinals. From the outline (DOM already reordered) return 204; from the
+    calendar (`view=calendar`) the layout changes, so re-render #cal-content."""
     ids = _id_list("ids")
     with db() as conn:
         O = outline_hierarchy(conn, course)
@@ -1932,7 +1932,10 @@ def unit_arrange(course):
             conn.execute("UPDATE nodes SET ordinal=? WHERE course=? AND hierarchy=? "
                          "AND node_id=? AND level='unit'", (pos, course, O, uid))
         conn.commit()
-    g.action_phrase = f"reordered units in {course}"
+        g.action_phrase = f"reordered units in {course}"
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   **_calendar_ctx(conn, course))
     return ("", 204)
 
 
