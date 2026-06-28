@@ -86,7 +86,7 @@
             hx-post="{{ url_for('lesson_new', course=course) }}"
             hx-target="#outline-units" hx-swap="innerHTML">
         <input type="hidden" name="unit" value="{{ u.id }}">
-        <button type="submit" title="Add a lesson to this unit">+ lesson</button>
+        <button type="submit" class="addlesson" title="Add a lesson to this unit">+</button>
       </form>
       <div class="lessonctl">
         <form method="post" action="{{ url_for('unit_delete', course=course, unit_id=u.id) }}"
@@ -119,7 +119,7 @@
     <form method="post" action="{{ url_for('lesson_new', course=course) }}"
           hx-post="{{ url_for('lesson_new', course=course) }}"
           hx-target="#outline-units" hx-swap="innerHTML">
-      <button type="submit" title="Add an unassigned lesson">+ lesson</button>
+      <button type="submit" class="addlesson" title="Add an unassigned lesson">+</button>
     </form>
   </div>
   <ul class="sortable unitlessons" data-unit="none">

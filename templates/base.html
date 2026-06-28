@@ -23,12 +23,14 @@
     /* Fill the available width after the sidebar (flush-left, not centered). */
     main { flex: 1; min-width: 0; margin: 0; padding: 1.2rem 1.5rem; }
     .pagetitle { font-size: 1.3rem; font-weight: 700; margin: 0 0 .9rem; }
-    /* A small "+" by the page title (e.g. add a unit on the Course outline). */
+    /* Plain grey "+" add buttons: a unit (by the page title) and a lesson (in each
+       unit head). No border/background -- just the glyph, blue on hover. */
     .pagetitle form.addunit-form { display: inline; margin: 0; }
-    .pagetitle .addunit { font-size: 1rem; font-weight: 700; line-height: 1; vertical-align: middle;
-            margin-left: .5rem; padding: .05rem .4rem; border: 1px solid var(--line);
-            border-radius: 5px; color: #2b6cb0; background: #fff; cursor: pointer; }
-    .pagetitle .addunit:hover { background: #eef3f8; border-color: #bcd; }
+    .pagetitle .addunit, .addlesson { font-size: 1.05rem; font-weight: 700; line-height: 1;
+            vertical-align: middle; border: none; background: none; padding: 0 .2rem;
+            color: #aaa; cursor: pointer; }
+    .pagetitle .addunit { margin-left: .4rem; }
+    .pagetitle .addunit:hover, .addlesson:hover { color: #2b6cb0; background: none; }
     /* An icon link to the calendar view, between the "+" and "Edit as Markdown". */
     .pagetitle .calicon { font-size: 1rem; line-height: 1; vertical-align: middle;
             margin-left: .5rem; color: var(--muted); text-decoration: none; }
