@@ -1,0 +1,36 @@
+{# One lesson-plan part. Read mode shows the rendered markdown; an editor can click
+   to reveal a raw-markdown textarea (Save htmx-swaps this whole section back to read
+   mode). Context: course, lesson_id, part {key, disp, raw, html}, can_edit.
+   A viewer with an empty part renders nothing. #}
+{% if part.html or can_edit %}
+<section class="lessonpart {{ 'lo' if part.key == 'learning_objective' else '' }}"
+         id="part-{{ part.key }}">
+  <div class="parthead hoverhost">
+    <h2>{{ part.disp }}</h2>
+    {% if can_edit %}
+    <button type="button" class="partedit-btn hoverctl" title="Edit {{ part.disp }}">
+      <i class="bi bi-pencil"></i></button>
+    {% endif %}
+  </div>
+  {% if part.html %}
+  <div class="partbody">{{ part.html }}</div>
+  {% elif can_edit %}
+  <div class="partbody empty">
+    <button type="button" class="addpart">+ add {{ part.disp|lower }}</button>
+  </div>
+  {% endif %}
+  {% if can_edit %}
+  <form class="partedit" method="post"
+        action="{{ url_for('lesson_part_save', course=course, lesson_id=lesson_id, part=part.key) }}"
+        hx-post="{{ url_for('lesson_part_save', course=course, lesson_id=lesson_id, part=part.key) }}"
+        hx-target="#part-{{ part.key }}" hx-swap="outerHTML">
+    <textarea name="value" rows="6" autocomplete="off"
+              placeholder="Write the {{ part.disp|lower }} in Markdown…">{{ part.raw }}</textarea>
+    <div class="partctl">
+      <button type="submit" class="primary">Save</button>
+      <button type="button" class="cancelpart">Cancel</button>
+    </div>
+  </form>
+  {% endif %}
+</section>
+{% endif %}

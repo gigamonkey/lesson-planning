@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{# Full-page Markdown editor for a whole lesson plan (its eight `## part` sections).
+   Context: course, lesson_id, page_title (lesson title), text (the body markdown),
+   error (optional). Saving posts to lesson_source. #}
+{% block head %}
+<style>
+  .editwrap { display: flex; flex-direction: column; gap: .6rem; }
+  .edithint { color: var(--muted); font-size: .9rem; margin: 0; max-width: var(--content-max); }
+  .editbar { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
+  .editbar .spacer { flex: 1; }
+  .editbar label { font-size: .85rem; color: var(--muted); display: inline-flex;
+                   align-items: center; gap: .35rem; }
+  .editbar select { font: inherit; font-size: .85rem; padding: .2rem .3rem;
+                    border: 1px solid var(--line); border-radius: 4px; }
+  .editbar .savebtn, .editbar .revert { display: inline-flex; align-items: center;
+                      font-size: 1.15rem; line-height: 1; padding: .3rem .55rem;
+                      border: 1px solid var(--line); background: #fff; border-radius: 5px;
+                      cursor: pointer; text-decoration: none; }
+  .editbar .savebtn { color: #2b6cb0; }
+  .editbar .revert { color: var(--muted); }
+  .editbar .savebtn:hover, .editbar .revert:hover { background: #eef3f8; border-color: #bcd;
+                      color: #2b6cb0; }
+  .editerr { color: var(--gap); font-size: .9rem; margin: 0; }
+  #editor { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #fff; }
+  #editor .cm-editor { height: calc(100vh - 12rem); }
+  #editor .cm-scroller { font: 13.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #editor .cm-focused { outline: none; }
+</style>
+{% endblock %}
+
+{% block titlebtn %}
+  <button type="button" class="helpbtn" title="Help"
+          onclick="document.getElementById('help-dialog').showModal()">
+    <i class="bi bi-question-circle"></i></button>
+{% endblock %}
+
+{% block body %}
+<div class="editwrap">
+  <dialog id="help-dialog" class="help-dialog">
+    <p class="edithint">Editing the whole lesson plan as Markdown. Each part is a
+      <code>## Heading</code> section — <em>Preview</em>, <em>Learning objective</em>,
+      <em>Review</em>, <em>Key ideas</em>, <em>Expert thinking</em>,
+      <em>Guided practice</em>, <em>Closure</em>, <em>Independent practice</em> — and
+      its body is free Markdown. Leave a section empty to clear it; only these eight
+      headings define parts (any other heading is content). Saving writes the lesson
+      file to git and refreshes the database.</p>
+    <menu><button type="button" onclick="this.closest('dialog').close()">Close</button></menu>
+  </dialog>
+
+  {% if error %}<p class="editerr">{{ error }}</p>{% endif %}
+
+  <form id="editform" method="post"
+        action="{{ url_for('lesson_source', course=course, lesson_id=lesson_id) }}">
+    <div class="editbar">
+      <button type="submit" class="savebtn" title="Save"><i class="bi bi-floppy"></i></button>
+      <a class="revert" href="{{ url_for('lesson_view', course=course, lesson_id=lesson_id) }}"
+         title="Cancel — back to the lesson"><i class="bi bi-x-lg"></i></a>
+      <span class="spacer"></span>
+      <label>Keymap
+        <select id="keymap-select">
+          <option value="default">Default</option>
+          <option value="vim">Vim</option>
+          <option value="emacs">Emacs</option>
+        </select>
+      </label>
+    </div>
+    <div id="editor"></div>
+    <textarea id="editor-src" name="text" hidden>{{ text }}</textarea>
+  </form>
+</div>
+
+<script src="{{ url_for('static', filename='editor.bundle.js') }}"></script>
+<script>
+  (function () {
+    var src = document.getElementById('editor-src');
+    LessonEditor.mount({
+      parent: document.getElementById('editor'),
+      textarea: src,
+      doc: src.value,
+    });
+  })();
+</script>
+{% endblock %}

@@ -193,6 +193,7 @@ _ACTION_PHRASES = {
     "unit_arrange": "reordered units in {course}",
     "lesson_new": "added a lesson to {course}",
     "lesson_edit": "edited a lesson in {course}",
+    "lesson_part_save": "edited a lesson plan in {course}",
     "lesson_delete": "deleted a lesson in {course}",
     "lesson_arrange": "reordered lessons in {course}",
     "node_duration_set": "set a duration in {course}",
@@ -203,7 +204,7 @@ _ACTION_PHRASES = {
     "course_rename": "renamed course {course}",
 }
 # Endpoints that themselves perform the commit -- don't double-record them.
-_SAVE_ENDPOINTS = {"outline_source"}
+_SAVE_ENDPOINTS = {"outline_source", "lesson_source"}
 
 # Discrete structural ops that commit themselves immediately (via commit_structural)
 # with their own message, rather than going through the debounced autosave -- they
@@ -1971,22 +1972,40 @@ def unit_arrange(course):
 
 # --- Lessons ---
 
+def _lesson_part(key, disp, raw):
+    """One lesson-plan part for the view/edit templates: its raw markdown plus the
+    rendered HTML (empty when there's no content)."""
+    raw = raw or ""
+    return {"key": key, "disp": disp, "raw": raw,
+            "html": render_markdown(raw) if raw.strip() else ""}
+
+
+def _lesson_or_redirect(conn, course, lesson_id):
+    """The outline + lesson row, or a Response (outline redirect / 404) to return.
+    Returns (outline, row) on success, or (None, response)."""
+    O = outline_hierarchy(conn, course)
+    L = conn.execute(
+        "SELECT node_id, parent_id, text FROM nodes WHERE course=? AND hierarchy=?"
+        " AND node_id=? AND level='lesson'", (course, O, lesson_id)).fetchone() if O else None
+    if L:
+        return O, L
+    # Stale/renamed lesson link: fall back to the outline rather than 404 (matches
+    # hierarchy_view), or hard-404 if the course is gone too.
+    if conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
+        return None, redirect(url_for("plan", course=course))
+    abort(404, f"no course {course!r}")
+
+
 @app.route("/<course>/lesson/<lesson_id>")
 def lesson_view(course, lesson_id):
-    """Read-only lesson plan: its free-text parts (Preview, Learning objective, …)
-    rendered from the lesson file's node_attr, plus the raw objectives placed in it
-    (the plan is a distillation of those). The eight parts render as markdown."""
+    """The lesson plan: its free-text parts (Preview, Learning objective, …) rendered
+    from the lesson's node_attr, plus the raw objectives placed in it (the plan is a
+    distillation of those). Editors get per-part click-to-edit + an Edit-as-Markdown
+    button; viewers see only the non-empty parts."""
     with db() as conn:
-        O = outline_hierarchy(conn, course)
-        L = conn.execute(
-            "SELECT node_id, parent_id, text FROM nodes WHERE course=? AND hierarchy=?"
-            " AND node_id=? AND level='lesson'", (course, O, lesson_id)).fetchone() if O else None
-        if not L:
-            # Stale/renamed lesson link: fall back to the outline rather than 404
-            # (matches hierarchy_view), or hard-404 if the course is gone too.
-            if conn.execute("SELECT 1 FROM courses WHERE course=?", (course,)).fetchone():
-                return redirect(url_for("plan", course=course))
-            abort(404, f"no course {course!r}")
+        O, L = _lesson_or_redirect(conn, course, lesson_id)
+        if O is None:
+            return L
         unit = None
         if L["parent_id"]:
             row = conn.execute("SELECT text FROM nodes WHERE course=? AND hierarchy=?"
@@ -2001,16 +2020,98 @@ def lesson_view(course, lesson_id):
             "SELECT o.text FROM coverage cv JOIN objectives o ON o.uuid=cv.uuid"
             " WHERE cv.course=? AND cv.hierarchy=? AND cv.node_id=? ORDER BY cv.position, o.text",
             (course, O, lesson_id))]
-    # The parts in canonical order, each rendered to HTML; only non-empty ones.
-    parts = [(disp, key, render_markdown(attrs[key]))
-             for key, disp in plan_io.LESSON_PARTS if attrs.get(key)]
+    # All eight parts in canonical order (raw + rendered). The template shows every
+    # part to an editor (empty ones offer "+ add"); a viewer sees only non-empty ones.
+    parts = [_lesson_part(key, disp, attrs.get(key)) for key, disp in plan_io.LESSON_PARTS]
     duration = None
     if dur:
         amount = int(dur["amount"]) if float(dur["amount"]).is_integer() else dur["amount"]
         duration = f"{amount} {dur['unit']}{'' if amount == 1 else 's'}"
     return render_template("lesson.html", course=course, page_title=L["text"],
-                           unit=unit, duration=duration, parts=parts,
+                           lesson_id=lesson_id, unit=unit, duration=duration,
+                           parts=parts, has_content=any(p["html"] for p in parts),
                            objectives=objectives)
+
+
+@app.route("/<course>/lesson/<lesson_id>/part/<part>", methods=["POST"])
+def lesson_part_save(course, lesson_id, part):
+    """Save one lesson-plan part's markdown (per-part inline editor). Updates the
+    part's node_attr (deletes it when emptied) and returns the re-rendered part
+    fragment for htmx to swap back into the page. Autosave persists the lesson file."""
+    disp = dict(plan_io.LESSON_PARTS).get(part)
+    if disp is None:
+        abort(404, f"no lesson part {part!r}")
+    value = (request.form.get("value") or "").strip()
+    with db() as conn:
+        O, L = _lesson_or_redirect(conn, course, lesson_id)
+        if O is None:
+            return L
+        if value:
+            conn.execute(
+                "INSERT INTO node_attr(course, hierarchy, node_id, name, value)"
+                " VALUES (?, ?, ?, ?, ?) ON CONFLICT(course, hierarchy, node_id, name)"
+                " DO UPDATE SET value=excluded.value", (course, O, lesson_id, part, value))
+        else:
+            conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=? AND node_id=?"
+                         " AND name=?", (course, O, lesson_id, part))
+        conn.commit()
+    return render_template("_lessonpart.html", course=course, lesson_id=lesson_id,
+                           part=_lesson_part(part, disp, value), can_edit=True)
+
+
+def _lesson_body_text(attrs):
+    """The lesson body markdown for the whole-file editor: every part heading (even
+    empty ones, as scaffolding) followed by its content."""
+    out = []
+    for key, disp in plan_io.LESSON_PARTS:
+        out += [f"## {disp}", ""]
+        val = (attrs.get(key) or "").strip()
+        if val:
+            out += [val, ""]
+    return "\n".join(out).rstrip() + "\n"
+
+
+@app.route("/<course>/lesson/<lesson_id>/edit")
+def lesson_edit_md(course, lesson_id):
+    """Full-page Markdown editor for the whole lesson file's body (all eight part
+    sections, scaffolded). Saving posts to lesson_source."""
+    with db() as conn:
+        O, L = _lesson_or_redirect(conn, course, lesson_id)
+        if O is None:
+            return L
+        attrs = {r["name"]: r["value"] for r in conn.execute(
+            "SELECT name, value FROM node_attr WHERE course=? AND hierarchy=? AND node_id=?",
+            (course, O, lesson_id))}
+    return render_template("lesson_edit.html", course=course, lesson_id=lesson_id,
+                           page_title=L["text"], text=_lesson_body_text(attrs))
+
+
+@app.route("/<course>/lesson/<lesson_id>/source", methods=["POST"])
+def lesson_source(course, lesson_id):
+    """Save the whole-lesson Markdown editor: parse the body's `## part` sections
+    into node_attr (each of the eight parts set or cleared), write the course (so the
+    lesson file is updated), and commit. Back to the lesson view on success."""
+    text = request.form.get("text", "")
+    parts = plan_io._parse_lesson_body(text)
+    with db() as conn:
+        O, L = _lesson_or_redirect(conn, course, lesson_id)
+        if O is None:
+            return L
+        for key, _disp in plan_io.LESSON_PARTS:
+            val = (parts.get(key) or "").strip()
+            if val:
+                conn.execute(
+                    "INSERT INTO node_attr(course, hierarchy, node_id, name, value)"
+                    " VALUES (?, ?, ?, ?, ?) ON CONFLICT(course, hierarchy, node_id, name)"
+                    " DO UPDATE SET value=excluded.value", (course, O, lesson_id, key, val))
+            else:
+                conn.execute("DELETE FROM node_attr WHERE course=? AND hierarchy=?"
+                             " AND node_id=? AND name=?", (course, O, lesson_id, key))
+        conn.commit()
+    plan_io.write_course(db_path(), course, os.path.join(courses_root(), course))
+    commit_after_save(course, f"Edit a {course.upper()} lesson plan")
+    flash("Saved lesson plan")
+    return redirect(url_for("lesson_view", course=course, lesson_id=lesson_id))
 
 
 @app.route("/<course>/lesson/new", methods=["POST"])

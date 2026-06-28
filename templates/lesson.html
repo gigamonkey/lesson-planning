@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{# Read-only lesson plan: the eight free-text parts (rendered markdown) plus the
-   raw objectives placed in the lesson. Context: course, page_title (the lesson
-   title), unit, duration, parts ([(display, key, html)]), objectives ([text]). #}
+{# The lesson plan: the eight free-text parts (rendered markdown, editor-editable in
+   place) plus the raw objectives placed in the lesson. Context: course, lesson_id,
+   page_title (title), unit, duration, parts ([{key,disp,raw,html}]), has_content,
+   objectives ([text]). #}
 {% block head %}
 <style>
   .lessonview { max-width: var(--content-max); }
@@ -11,8 +12,13 @@
   .lessonview .lessonmeta a:hover { text-decoration: underline; }
   .lessonview .lessonmeta .sep { opacity: .45; margin: 0 .4rem; }
   .lessonpart { margin: 0 0 1.4rem; }
-  .lessonpart > h2 { font-size: 1.05rem; border-bottom: 1px solid var(--line);
-        padding-bottom: .2rem; margin: 1.5rem 0 .5rem; color: #333; }
+  .parthead { display: flex; align-items: baseline; gap: .4rem; }
+  .parthead h2 { font-size: 1.05rem; border-bottom: 1px solid var(--line);
+        padding-bottom: .2rem; margin: 1.5rem 0 .5rem; color: #333; flex: 1; }
+  /* Pencil to edit a part, revealed on part-head hover (shared .hoverctl). */
+  .parthead .partedit-btn { align-self: center; border: none; background: none; cursor: pointer;
+        color: #b8b8b8; font-size: .9rem; line-height: 1; padding: .1rem .35rem; border-radius: 4px; }
+  .parthead .partedit-btn:hover { color: #2b6cb0; background: #eef3f8; }
   .lessonpart .partbody { color: #333; }
   .lessonpart .partbody > :first-child { margin-top: 0; }
   .lessonpart .partbody > :last-child { margin-bottom: 0; }
@@ -22,6 +28,21 @@
   .lessonpart .partbody pre code { background: none; padding: 0; }
   /* The learning objective reads as the lesson's aim — set it apart, italic. */
   .lessonpart.lo .partbody { font-style: italic; color: #444; }
+  /* An empty part (editor only): a faint "+ add …" prompt. */
+  .partbody.empty .addpart { border: none; background: none; cursor: pointer; padding: 0;
+        color: #9aa6b2; font: inherit; font-size: .9rem; }
+  .partbody.empty .addpart:hover { color: #2b6cb0; }
+  /* The raw-markdown editor for a part: hidden until the section is .editing. */
+  .partedit { display: none; margin: .2rem 0 0; }
+  .lessonpart.editing .partbody { display: none; }
+  .lessonpart.editing .partedit-btn { visibility: hidden; }
+  .lessonpart.editing .partedit { display: block; }
+  .partedit textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: .92rem;
+        line-height: 1.5; padding: .45rem .6rem; border: 1px solid #bcd; border-radius: 6px;
+        background: #fff; resize: vertical; min-height: 5rem; }
+  .partedit textarea:focus { outline: none; border-color: #2b6cb0; }
+  .partctl { display: flex; gap: .4rem; margin-top: .4rem; }
+  .partctl button { font-size: .82rem; padding: .2rem .6rem; }
   .lessonempty { color: var(--muted); font-style: italic; }
   /* "Objectives addressed": the placed raw objectives this plan distills. */
   .lessonobjs { margin: 1.8rem 0 0; padding: .8rem 1rem; background: #fff;
@@ -32,6 +53,14 @@
   .lessonobjs li { margin: .15rem 0; color: #333; }
 </style>
 {% endblock %}
+
+{% block titlebtn %}
+  {% if can_edit %}
+  <a class="editmd" href="{{ url_for('lesson_edit_md', course=course, lesson_id=lesson_id) }}"
+     title="Edit the whole lesson plan as Markdown">Edit as Markdown</a>
+  {% endif %}
+{% endblock %}
+
 {% block body %}
 <div class="lessonview">
   <div class="lessonmeta">
@@ -40,16 +69,11 @@
     {% if duration %}<span class="sep">·</span>{{ duration }}{% endif %}
   </div>
 
-  {% if not parts %}
-  <p class="lessonempty">This lesson plan has no content yet.</p>
+  {% if not has_content and not can_edit %}
+  <p class="lessonempty">This lesson plan has no written content yet.</p>
   {% endif %}
 
-  {% for disp, key, body in parts %}
-  <section class="lessonpart {{ 'lo' if key == 'learning_objective' else '' }}">
-    <h2>{{ disp }}</h2>
-    <div class="partbody">{{ body }}</div>
-  </section>
-  {% endfor %}
+  {% for part in parts %}{% include "_lessonpart.html" %}{% endfor %}
 
   {% if objectives %}
   <div class="lessonobjs">
@@ -60,4 +84,26 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+  // Per-part inline editing: clicking the pencil (or an empty part's "+ add")
+  // reveals that section's raw-markdown textarea; Cancel reverts and closes; Save
+  // is an htmx post that swaps the whole section back to its rendered form. Handlers
+  // are delegated so they survive the htmx swap.
+  (function () {
+    document.addEventListener('click', function (e) {
+      const sec = e.target.closest('.lessonpart');
+      if (!sec) return;
+      if (e.target.closest('.partedit-btn') || e.target.closest('.addpart')) {
+        sec.classList.add('editing');
+        const ta = sec.querySelector('.partedit textarea');
+        if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+      } else if (e.target.closest('.cancelpart')) {
+        const ta = sec.querySelector('.partedit textarea');
+        if (ta) ta.value = ta.defaultValue;   // discard unsaved changes
+        sec.classList.remove('editing');
+      }
+    });
+  })();
+</script>
 {% endblock %}

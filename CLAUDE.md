@@ -111,11 +111,17 @@ round-trippable `plan.md`. Saving posts to `/<course>/outline/source`, which run
 `plan_io.load_plan_text` then `plan_io.write_course` — so a save updates the db
 **and** writes `plan.md` + the TSVs to disk, leaving the course clean.
 
-Each lesson links to a **read-only lesson view** (`/<course>/lesson/<uuid>`,
-`lesson_view` + `templates/lesson.html`) — its eight free-text parts rendered from
-the lesson file's `node_attr` (via `markdown`), plus the raw objectives placed in
-it (the plan distills them). A "journal" icon opens it from the outline lesson card
-and from each calendar lesson cell. (Editing the parts is not built yet.)
+Each lesson links to a **lesson view** (`/<course>/lesson/<uuid>`, `lesson_view` +
+`templates/lesson.html`) — its eight free-text parts rendered from the lesson file's
+`node_attr` (via `markdown`), plus the raw objectives placed in it (the plan
+distills them). A "journal" icon opens it from the outline lesson card and from each
+calendar lesson cell. An editor can edit the parts two ways: **per-part in place**
+(click a part's pencil / an empty part's "+ add" to reveal a Markdown textarea;
+Save htmx-posts to `lesson_part_save` → `node_attr`, swapping `_lessonpart.html`
+back in) and **whole-file** ("Edit as Markdown" → `lesson_edit_md` opens a
+CodeMirror editor on the eight `## part` sections, posting to `lesson_source` which
+parses → `node_attr` → `write_course`). Both rely on the lesson file's stable uuid;
+autosave/commit persists the lesson file as usual.
 
 The **Calendar** sidebar item (`/<course>/calendar`) lays the outline across the
 school year (units→weeks, lessons→days; see `calendar_view.py` and the duration
