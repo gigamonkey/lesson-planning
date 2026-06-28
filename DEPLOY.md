@@ -176,6 +176,15 @@ for the multi-line **deploy key** read from the `deploy_key` file minted in step
 3. The app writes that key onto the volume at startup, so there's no manual
 `sftp` step.
 
+**Optional — instant main refresh.** Set `LESSON_GITHUB_WEBHOOK_SECRET` in `.env`
+(a fresh `python3 -c 'import secrets; print(secrets.token_hex(32))'`) to enable the
+`POST /github/webhook` endpoint, then add a webhook in the **courses** repo
+(GitHub → Settings → Webhooks → Add webhook): Payload URL
+`https://<app>.fly.dev/github/webhook`, content type `application/json`, the same
+secret, "Just the push event". A push to `main` then refreshes the viewers' view
+in seconds instead of waiting on the poll; GitHub's **Recent Deliveries** tab
+shows a `202`. Leave the secret unset to stay poll-only (the endpoint 404s).
+
 ### 5b. collab.json on the volume
 
 The volume isn't mounted until a machine is running, so deploy once (step 6)
@@ -263,7 +272,8 @@ editor.
    automatically at sign-in), which merges `main` into their branch.
 
 **Viewers** see the shared, read-only `main` view; it refreshes automatically
-every `main_refresh_seconds` (default 5 min) and right after a merge.
+every `main_refresh_seconds` (default 5 min) and right after a merge — or in
+seconds on every push if you wired up the GitHub webhook (step 5a).
 
 ---
 

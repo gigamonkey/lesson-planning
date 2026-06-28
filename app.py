@@ -14,6 +14,8 @@ The database path defaults to db.db next to this file; override with LESSON_DB.
 
 import csv
 import datetime
+import hashlib
+import hmac
 import html
 import io
 import json
@@ -25,6 +27,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import uuid as uuidlib
 from importlib.resources import files as importlib_files
 
@@ -175,7 +178,10 @@ def db():
 
 # Endpoints reachable without a logged-in session (the auth dance itself).
 _AUTH_EXEMPT = {"collab_login", "collab_oauth_start", "collab_callback",
-                "collab_devlogin", "collab_logout", "favicon", "static"}
+                "collab_devlogin", "collab_logout", "favicon", "static",
+                # GitHub webhook: authenticates itself via HMAC signature, not a
+                # session -- the login gate must let it through.
+                "github_webhook"}
 
 # Human phrases for the debounced-autosave commit message, keyed by mutating
 # endpoint (the route's function name); the acting course is interpolated. Some
@@ -508,6 +514,37 @@ def sync_courses():
     names = ", ".join(os.path.basename(d) for d in dirs) or "none"
     flash(f"Reloaded {len(dirs)} course(s) from git: {names}")
     return back
+
+
+@app.route("/github/webhook", methods=["POST"])
+def github_webhook():
+    """GitHub push webhook: refresh the shared read-only main view when course
+    content is pushed to origin/main, so external edits show up near-instantly
+    instead of waiting on the background poll (collab._start_main_timer). Collab
+    mode only; inert (404) in single-user/local mode or with no secret set.
+
+    Security is the HMAC-SHA256 signature over the raw body, keyed by
+    LESSON_GITHUB_WEBHOOK_SECRET (GitHub's `X-Hub-Signature-256`); without it
+    anyone could POST here to force rebuilds. We do our own auth, so the endpoint
+    is in `_AUTH_EXEMPT` (the collab login gate would otherwise bounce GitHub).
+
+    The refresh runs off-thread and we ack `202` immediately: GitHub times out
+    deliveries at ~10s and a full rebuild_db(MAIN) can approach that. refresh_main
+    is already serialized under collab's _main_lock, so an overlapping delivery and
+    timer tick are safe, and a fetch with no new commits is cheap (no rebuild
+    unless HEAD actually moved)."""
+    secret = os.environ.get("LESSON_GITHUB_WEBHOOK_SECRET")
+    if not (collab.enabled() and secret):
+        abort(404)
+    expected = "sha256=" + hmac.new(
+        secret.encode(), request.get_data(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, request.headers.get("X-Hub-Signature-256", "")):
+        abort(401)
+    if (request.headers.get("X-GitHub-Event") == "push"
+            and (request.get_json(silent=True) or {}).get("ref") == "refs/heads/main"):
+        threading.Thread(target=collab.refresh_main, daemon=True,
+                         name="github-webhook-refresh").start()
+    return ("", 202)
 
 
 def _schema_version():
