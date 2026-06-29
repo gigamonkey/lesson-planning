@@ -160,12 +160,15 @@
     }
 
     // While dragging an objective, a collapsed lesson's objectives box is hidden,
-    // so it can't be a drop target. Auto-expand the collapsed lesson the cursor
-    // hovers (revealing its box), collapse it again when the cursor leaves, and
-    // keep whichever lesson the objective is finally dropped into open. We track a
-    // single auto-opened card and drive it off pointermove since SortableJS runs a
-    // fallback (non-native) drag, so native dragover events don't fire.
-    let dragAutoOpen = null;
+    // so it can't be a drop target. Auto-expand any collapsed lesson the cursor
+    // hovers (revealing its box). We expand only -- never collapse mid-drag --
+    // because collapsing a box above the cursor shifts content upward and the
+    // cursor suddenly sits over a different lesson; expanding only ever pushes
+    // content *down* (below the expansion), so nothing above the cursor moves.
+    // The ones we opened are folded back at drag end, except the drop target.
+    // Driven off pointermove since the objective drag is a SortableJS fallback
+    // (non-native) drag, so native dragover events don't fire.
+    let dragAutoOpened = null;   // Set of cards we expanded this drag (null when idle)
     function lessonCardAtPoint(x, y) {
       const stack = document.elementsFromPoint(x, y);
       for (let i = 0; i < stack.length; i++) {
@@ -178,17 +181,12 @@
       }
       return null;
     }
-    function collapseDragAutoOpen() {
-      if (dragAutoOpen) { setLessonOpen(dragAutoOpen, false); dragAutoOpen = null; }
-    }
     document.addEventListener('pointermove', function (e) {
-      if (!document.body.classList.contains('dragging')) return;   // objective drag only
+      if (!dragAutoOpened) return;                        // only during an objective drag
       const card = lessonCardAtPoint(e.clientX, e.clientY);
-      if (card === dragAutoOpen) return;                  // still over the opened one
-      collapseDragAutoOpen();                             // left it -> fold it back
       if (card && card.classList.contains('collapsed')) {
         setLessonOpen(card, true);                        // open as a drop target
-        dragAutoOpen = card;
+        dragAutoOpened.add(card);
       }
     });
 
@@ -208,14 +206,20 @@
         // reach it.
         forceFallback: true, fallbackOnBody: true,
         scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
-        onStart: function () { document.body.classList.add('dragging'); },
+        onStart: function () {
+          document.body.classList.add('dragging');
+          dragAutoOpened = new Set();
+        },
         onEnd: function (evt) {
           document.body.classList.remove('dragging');
-          // Keep the lesson the objective landed in open; fold back any other
-          // lesson we auto-expanded while dragging across it.
+          // Fold back every lesson we auto-expanded during the drag, except the
+          // one the objective actually landed in. Done once here (not mid-drag)
+          // so the layout never shifts under the cursor while dragging.
           const dropCard = evt.to.closest && evt.to.closest('li.lessoncard');
-          if (dragAutoOpen && dragAutoOpen === dropCard) dragAutoOpen = null;
-          collapseDragAutoOpen();
+          dragAutoOpened.forEach(function (card) {
+            if (card !== dropCard) setLessonOpen(card, false);
+          });
+          dragAutoOpened = null;
           const body = new URLSearchParams();
           body.set('uuid', evt.item.dataset.uuid);
           body.set('to', evt.to.dataset.to);
