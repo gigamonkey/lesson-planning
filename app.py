@@ -2017,7 +2017,8 @@ def lesson_view(course, lesson_id):
     return render_template("lesson.html", course=course, page_title=L["text"],
                            lesson_id=lesson_id, unit=unit, duration=duration,
                            parts=parts, has_content=any(p["html"] for p in parts),
-                           objectives=objectives)
+                           objectives=objectives,
+                           embed=bool(request.args.get("embed")))
 
 
 @app.route("/<course>/lesson/<lesson_id>/part/<part>", methods=["POST"])

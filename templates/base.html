@@ -407,7 +407,21 @@
     /* Unified workspace: hierarchy (left) + raw pool (right). */
     /* Node content capped at --content-max; the objectives pool takes the rest. */
     .workspace-board { grid-template-columns: minmax(0, var(--content-max)) minmax(0, 1fr); }
+    .rightcol { min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
     .workspace-board .pool { position: sticky; top: 1rem; }
+    /* Lesson-edit pane: a chrome-less embed of the lesson page, opened by the
+       pencil on a lesson title, sitting above the pool. */
+    .lessonpane { border: 1px solid var(--line); border-radius: 8px; background: #fff;
+        overflow: hidden; display: flex; flex-direction: column; }
+    .lessonpane[hidden] { display: none; }
+    .lessonpane-head { display: flex; align-items: center; gap: .5rem; padding: .4rem .6rem;
+        border-bottom: 1px solid var(--line); background: #f7f9fb; }
+    .lessonpane-title { flex: 1; font-weight: 700; font-size: .9rem; color: #333;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lessonpane-close { border: none; background: none; font-size: 1.3rem; line-height: 1;
+        color: var(--muted); cursor: pointer; padding: 0 .3rem; }
+    .lessonpane-close:hover { color: var(--gap, #b00); }
+    .lessonpane-frame { width: 100%; height: 78vh; border: 0; display: block; }
     .nodes { min-width: 0; }
     .poolhead { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
     .poolhead h2 { margin: .1rem 0 .4rem; }
@@ -592,14 +606,19 @@
   </style>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body{% if embed %} class="embed"{% endif %}>
+  {# `embed` mode (e.g. the lesson pane loaded in an outline iframe) drops the
+     topbar + sidebar, rendering just the main content. #}
+  {% if not embed %}
   <header class="topbar">
     <button type="button" id="nav-toggle" class="hamburger" aria-label="Open menu">
       <i class="bi bi-list"></i></button>
     <span class="topbar-title">{{ page_title or 'Lesson Planning' }}</span>
   </header>
   <div id="nav-backdrop" class="nav-backdrop"></div>
+  {% endif %}
   <div class="layout">
+    {% if not embed %}
     <aside class="sidebar">
       <div class="brandrow">
         <h1>Lesson Planning</h1>
@@ -732,6 +751,7 @@
         {% endif %}
       </div>
     </aside>
+    {% endif %}
     <main>
       {% if page_title %}<h1 class="pagetitle">{{ page_title }}{% block titlebtn %}{% endblock %}</h1>{% endif %}
       {% with msgs = get_flashed_messages() %}

@@ -84,6 +84,19 @@
       </section>
     {% endif %}
 
+    <div class="rightcol">
+    {% if editable %}
+    {# Lesson editing pane: the pencil on a lesson title loads that lesson's plan
+       here (a chrome-less embed of its page) above the pool. #}
+    <aside class="lessonpane" id="lessonpane" hidden>
+      <div class="lessonpane-head">
+        <span class="lessonpane-title" id="lessonpane-title">Lesson</span>
+        <button type="button" class="lessonpane-close" id="lessonpane-close"
+                title="Close">&times;</button>
+      </div>
+      <iframe class="lessonpane-frame" id="lessonpane-frame" title="Lesson editor"></iframe>
+    </aside>
+    {% endif %}
     <section class="pool">
       <div class="poolhead">
         <h2>Raw objectives (<span id="pool-count">{{ pool|length }}</span>)</h2>
@@ -112,6 +125,7 @@
         {% for o in pool %}{% include "_rawitem.html" %}{% endfor %}
       </ul>
     </section>
+    </div>
   </div>
 
   <script src="{{ url_for('static', filename='editor.bundle.js') }}"></script>
@@ -438,6 +452,31 @@
       autosizeTitles(root);
     }
     initWorkspace(document);
+
+    // Pencil on a lesson title -> open that lesson's plan in the side pane (a
+    // chrome-less ?embed=1 view of the lesson page) above the pool. Delegated so
+    // it keeps working across htmx swaps of the outline region; one-time wiring.
+    (function initLessonPane() {
+      const pane = document.getElementById('lessonpane');
+      if (!pane) return;  // read-only outline: no pane
+      const frame = document.getElementById('lessonpane-frame');
+      const titleEl = document.getElementById('lessonpane-title');
+      document.addEventListener('click', function (e) {
+        const btn = e.target.closest && e.target.closest('.lessonedit-btn');
+        if (!btn) return;
+        const id = btn.dataset.lessonId;
+        const card = btn.closest('.lessoncard');
+        const t = card && card.querySelector('.lessontitle');
+        titleEl.textContent = (t && t.textContent.trim()) || 'Lesson';
+        frame.src = '/' + encodeURIComponent(course) + '/lesson/' +
+                    encodeURIComponent(id) + '?embed=1';
+        pane.hidden = false;
+      });
+      document.getElementById('lessonpane-close').addEventListener('click', function () {
+        pane.hidden = true;
+        frame.removeAttribute('src');
+      });
+    })();
 
     // Non-htmx fallback: unit_new redirects with ?focus_new_unit when htmx isn't
     // driving the add (the htmx path focuses via the form's after-request instead).
