@@ -64,6 +64,9 @@
          <code>plan.md</code>-style bullets (reword freely; leave each trailing
          <code>(#token)</code> to keep an objective's identity, and add new lines for
          new objectives). The <b>pencil</b> opens the lesson plan for editing.</p>
+      <p>The counts in the bar above — <b>units</b>, <b>lessons</b>, <b>placed
+         objectives</b> — set how deep the outline is shown: units only, units and
+         lessons, or every lesson's objectives box open.</p>
     {% else %}
       <p>Drag raw objectives from the pool onto the nodes they belong to, or use a leaf's
          <b>+</b> to edit its objectives as <code>plan.md</code>-style bullets (reword the
@@ -383,6 +386,7 @@
           tri.dataset.collapseInit = '1';
           tri.addEventListener('click', function () {
             setUnitCollapsed(unit, !unit.classList.contains('collapsed'));
+            markActiveView();
           });
         }
       });
@@ -393,6 +397,7 @@
           title.dataset.collapseInit = '1';
           title.addEventListener('click', function () {
             setLessonOpen(card, card.classList.contains('collapsed'));
+            markActiveView();
           });
         }
         const zone = card.querySelector('ul.rawzone');
@@ -401,42 +406,59 @@
           zone.addEventListener('click', function () { openObjEditor(card); });
         }
       });
-      wireCollapseAll();
+      wireViewPicker();
     }
-    // The "N units" / "M lessons" counts in the stat bar are collapse-all toggles.
-    // Units: if any unit is open, fold them all; else unfold them all. Lessons: if
-    // any lesson is open, drop to a two-level view (units open, lessons folded);
-    // else expand everything. The stat bar is re-rendered on every stats refresh,
-    // so this re-wires after each swap.
-    function wireCollapseAll() {
+    // The stat-bar counts -- "N units", "M lessons", "X placed objectives" -- are a
+    // three-step depth picker: clicking one sets the whole outline to that view --
+    // units only (all units folded), units + lessons (units open, lessons folded),
+    // or all levels (every lesson's objectives box open). The bar is re-rendered on
+    // every stats refresh, so this re-wires (and re-highlights) after each swap.
+    function applyView(view) {
+      const units = Array.from(document.querySelectorAll('section.unit'));
+      const cards = Array.from(document.querySelectorAll('li.lessoncard'));
+      if (view === 'units') {
+        units.forEach(u => setUnitCollapsed(u, true));
+      } else if (view === 'lessons') {
+        units.forEach(u => setUnitCollapsed(u, false));
+        cards.forEach(c => setLessonOpen(c, false));
+      } else {  // 'all'
+        units.forEach(u => setUnitCollapsed(u, false));
+        cards.forEach(c => setLessonOpen(c, true));
+      }
+      markActiveView();
+    }
+    // Best-effort read of the current depth from the DOM (mixed states resolve to
+    // the deepest thing still showing), used to highlight the matching step.
+    function computeView() {
+      const units = Array.from(document.querySelectorAll('section.unit'));
+      const cards = Array.from(document.querySelectorAll('li.lessoncard'));
+      if (units.length && units.every(u => u.classList.contains('collapsed'))) return 'units';
+      if (cards.some(c => !c.classList.contains('collapsed'))) return 'all';
+      return 'lessons';
+    }
+    const VIEW_BY_LEVEL = { unit: 'units', lesson: 'lessons', objective: 'all' };
+    function markActiveView() {
+      const v = computeView();
+      document.querySelectorAll('.wstats .wstats-level').forEach(function (el) {
+        el.classList.toggle('view-active', VIEW_BY_LEVEL[el.dataset.level] === v);
+      });
+    }
+    function wireViewPicker() {
       if (!editable) return;
-      const unitsEl = document.querySelector('.wstats-level[data-level="unit"]');
-      if (unitsEl && !unitsEl.dataset.collapseAllInit) {
-        unitsEl.dataset.collapseAllInit = '1';
-        unitsEl.classList.add('clickable');
-        unitsEl.title = 'Collapse / expand all units';
-        unitsEl.addEventListener('click', function () {
-          const units = Array.from(document.querySelectorAll('section.unit'));
-          const anyOpen = units.some(u => !u.classList.contains('collapsed'));
-          units.forEach(u => setUnitCollapsed(u, anyOpen));
-        });
-      }
-      const lessonsEl = document.querySelector('.wstats-level[data-level="lesson"]');
-      if (lessonsEl && !lessonsEl.dataset.collapseAllInit) {
-        lessonsEl.dataset.collapseAllInit = '1';
-        lessonsEl.classList.add('clickable');
-        lessonsEl.title = 'Expand / collapse all lessons';
-        lessonsEl.addEventListener('click', function () {
-          const units = Array.from(document.querySelectorAll('section.unit'));
-          const cards = Array.from(document.querySelectorAll('li.lessoncard'));
-          // If any lesson is open, collapse them all back to the default two-level
-          // view; otherwise open them all. Reveal the units either way so the
-          // result is visible.
-          const anyOpen = cards.some(c => !c.classList.contains('collapsed'));
-          units.forEach(u => setUnitCollapsed(u, false));
-          cards.forEach(c => setLessonOpen(c, !anyOpen));
-        });
-      }
+      const steps = [
+        { level: 'unit', view: 'units', title: 'Show units only' },
+        { level: 'lesson', view: 'lessons', title: 'Show units and lessons' },
+        { level: 'objective', view: 'all', title: 'Show units, lessons, and objectives' },
+      ];
+      steps.forEach(function (s) {
+        const el = document.querySelector('.wstats .wstats-level[data-level="' + s.level + '"]');
+        if (!el || el.dataset.viewInit) return;
+        el.dataset.viewInit = '1';
+        el.classList.add('clickable');
+        el.title = s.title;
+        el.addEventListener('click', function () { applyView(s.view); });
+      });
+      markActiveView();
     }
 
     // Wire every interactive piece within `root`. Idempotent (each helper guards
@@ -490,7 +512,7 @@
     // Skip the stats refresh's own swap to avoid an infinite loop.
     document.body.addEventListener('htmx:afterSwap', function (e) {
       var path = (e.detail && e.detail.requestConfig && e.detail.requestConfig.path) || '';
-      if (path.indexOf('/stats') !== -1) { wireCollapseAll(); return; }
+      if (path.indexOf('/stats') !== -1) { wireViewPicker(); return; }
       var target = e.detail && e.detail.target;
       if (target && target.id === 'outline-units') initWorkspace(target);
       refreshStats();
