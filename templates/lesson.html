@@ -6,6 +6,11 @@
 {% block head %}
 <style>
   .lessonview { max-width: var(--content-max); }
+  /* In the outline's lesson pane (embed mode) the column is narrow, so drop the
+     content-max cap and let the "Objectives addressed" box use almost the full
+     pane width. */
+  body.embed .lessonview { max-width: none; }
+  body.embed .lessonobjs { padding: .8rem 1.1rem; }
   /* A meta line under the title: a link back to the outline, the unit, the days. */
   .lessonview .lessonmeta { color: var(--muted); font-size: .85rem; margin: -.4rem 0 1.1rem; }
   .lessonview .lessonmeta a { color: #2b6cb0; text-decoration: none; }
