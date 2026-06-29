@@ -117,14 +117,20 @@
        control reserves no width (no permanent gap on a collapsed head/row).
 
        Pair it with a `.hoverhost` ancestor (the row/head you hover): the
-       generic rules below reveal every `.hoverctl` inside a hovered or
-       focus-within `.hoverhost`. During a drag (`body.dragging` for the
-       outline's SortableJS, `body.cal-dragging` for the calendar) handles stay
-       revealed so you can see where you're dragging. Revealed controls become
-       `inline-flex` (works for the grip spans and the icon buttons alike). */
+       generic rules below reveal every `.hoverctl` inside a hovered
+       `.hoverhost`, or one that contains a `:focus-visible` element. We use
+       `:has(:focus-visible)` rather than `:focus-within` so a *mouse* click on
+       a focusable child (e.g. the lesson title button, which toggles the
+       objectives box and keeps focus) does NOT reveal -- and pin -- the icons;
+       keyboard focus still does, and text inputs focused by mouse match
+       `:focus-visible` too, so editing a field still reveals its row's
+       controls. During a drag (`body.dragging` for the outline's SortableJS,
+       `body.cal-dragging` for the calendar) handles stay revealed so you can
+       see where you're dragging. Revealed controls become `inline-flex` (works
+       for the grip spans and the icon buttons alike). */
     .hoverctl { display: none; align-items: center; }
     .hoverhost:hover .hoverctl,
-    .hoverhost:focus-within .hoverctl,
+    .hoverhost:has(:focus-visible) .hoverctl,
     body.dragging .hoverctl,
     body.cal-dragging .hoverctl { display: inline-flex; }
 
