@@ -50,10 +50,10 @@
   {% if error %}<p class="editerr">{{ error }}</p>{% endif %}
 
   <form id="editform" method="post"
-        action="{{ url_for('lesson_source', course=course, lesson_id=lesson_id) }}">
+        action="{{ url_for('lesson_source', course=course, lesson_id=lesson_id) }}{% if embed %}?embed=1{% endif %}">
     <div class="editbar">
       <button type="submit" class="savebtn" title="Save"><i class="bi bi-floppy"></i></button>
-      <a class="revert" href="{{ url_for('lesson_view', course=course, lesson_id=lesson_id) }}"
+      <a class="revert" href="{{ url_for('lesson_view', course=course, lesson_id=lesson_id) }}{% if embed %}?embed=1{% endif %}"
          title="Cancel — back to the lesson"><i class="bi bi-x-lg"></i></a>
       <span class="spacer"></span>
       <label>Keymap

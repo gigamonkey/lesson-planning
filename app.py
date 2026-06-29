@@ -2071,7 +2071,8 @@ def lesson_edit_md(course, lesson_id):
             "SELECT name, value FROM node_attr WHERE course=? AND hierarchy=? AND node_id=?",
             (course, O, lesson_id))}
     return render_template("lesson_edit.html", course=course, lesson_id=lesson_id,
-                           page_title=L["text"], text=_lesson_body_text(attrs))
+                           page_title=L["text"], text=_lesson_body_text(attrs),
+                           embed=bool(request.args.get("embed")))
 
 
 @app.route("/<course>/lesson/<lesson_id>/source", methods=["POST"])
@@ -2099,7 +2100,8 @@ def lesson_source(course, lesson_id):
     plan_io.write_course(db_path(), course, os.path.join(courses_root(), course))
     commit_after_save(course, f"Edit a {course.upper()} lesson plan")
     flash("Saved lesson plan")
-    return redirect(url_for("lesson_view", course=course, lesson_id=lesson_id))
+    return redirect(url_for("lesson_view", course=course, lesson_id=lesson_id,
+                            **({"embed": 1} if request.args.get("embed") else {})))
 
 
 @app.route("/<course>/lesson/new", methods=["POST"])

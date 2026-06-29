@@ -67,7 +67,7 @@
 
 {% block titlebtn %}
   {% if can_edit %}
-  <a class="editmd" href="{{ url_for('lesson_edit_md', course=course, lesson_id=lesson_id) }}"
+  <a class="editmd" href="{{ url_for('lesson_edit_md', course=course, lesson_id=lesson_id) }}{% if embed %}?embed=1{% endif %}"
      title="Edit the whole lesson plan as Markdown">
     <i class="bi bi-pencil-square"></i>&nbsp;Edit as Markdown</a>
   {% endif %}
