@@ -125,14 +125,17 @@
        keyboard focus still does, and text inputs focused by mouse match
        `:focus-visible` too, so editing a field still reveals its row's
        controls. During a drag (`body.dragging` for the outline's SortableJS,
-       `body.cal-dragging` for the calendar) handles stay revealed so you can
-       see where you're dragging. Revealed controls become `inline-flex` (works
-       for the grip spans and the icon buttons alike). */
+       `body.cal-dragging` for the calendar) only the grip *handles* stay
+       revealed -- not every hover-icon (trash, pencil, day-pill...), which
+       would otherwise flood all rows the moment a drag starts. Revealed
+       controls become `inline-flex` (works for the grip spans and the icon
+       buttons alike). */
     .hoverctl { display: none; align-items: center; }
     .hoverhost:hover .hoverctl,
-    .hoverhost:has(:focus-visible) .hoverctl,
-    body.dragging .hoverctl,
-    body.cal-dragging .hoverctl { display: inline-flex; }
+    .hoverhost:has(:focus-visible) .hoverctl { display: inline-flex; }
+    /* Mid-drag: keep only the drag handles visible, not the rest of the icons. */
+    body.dragging .draghandle,
+    body.cal-dragging .cal-unithandle { display: inline-flex; }
 
     /* Drag handle to reorder references; revealed on row hover (.hoverctl). */
     .draghandle { color: #ccc; cursor: grab; font-size: .8rem; line-height: 1; flex: none;
