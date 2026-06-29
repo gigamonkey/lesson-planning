@@ -283,6 +283,12 @@
             font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
             padding: .05rem .4rem; border-radius: 8px; background: #eef1f4; color: #555;
             border: 1px solid #e0e4e8; }
+    /* A 1-day lesson's pill is a .hoverctl, but the base .durform rule above sets
+       `display:inline-flex` and (equal specificity, later in source) would defeat
+       .hoverctl's `display:none`. This two-class override restores hide-at-rest;
+       the reveal rules (.hoverhost:hover/:has(:focus-visible)/body.dragging --
+       all higher specificity) still show it on hover, focus, and drag. */
+    .durform.hoverctl { display: none; }
     .durform:hover { border-color: #cfd6dd; }
     .durform:focus-within { background: #fff; border-color: #bcd; }
     .durform.derived { background: #f7f9fb; border-color: #eceff2; }
