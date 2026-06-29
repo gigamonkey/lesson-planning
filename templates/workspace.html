@@ -280,9 +280,9 @@
           animation: 120, ghostClass: 'sortable-ghost',
           forceFallback: true, fallbackOnBody: true,
           scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
-          onStart: function () { document.body.classList.add('dragging'); },
+          onStart: function () { document.body.classList.add('dragging-handles'); },
           onEnd: function (evt) {
-            document.body.classList.remove('dragging');
+            document.body.classList.remove('dragging-handles');
             const body = new URLSearchParams();
             body.set('unit', evt.to.dataset.unit || 'none');
             body.set('ids', Array.from(evt.to.children)
@@ -312,9 +312,9 @@
         forceFallback: true, fallbackOnBody: true,
         scroll: true, scrollSensitivity: 90, scrollSpeed: 14, bubbleScroll: true,
         onMove: function (evt) { return !evt.related || !evt.related.classList.contains('unassigned'); },
-        onStart: function () { document.body.classList.add('dragging'); },
+        onStart: function () { document.body.classList.add('dragging-handles'); },
         onEnd: function (evt) {
-          document.body.classList.remove('dragging');
+          document.body.classList.remove('dragging-handles');
           const ids = Array.from(el.children)
             .filter(c => c.classList.contains('unit') && !c.classList.contains('unassigned'))
             .map(s => s.dataset.unitId);

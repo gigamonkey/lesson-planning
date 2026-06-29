@@ -124,17 +124,21 @@
        objectives box and keeps focus) does NOT reveal -- and pin -- the icons;
        keyboard focus still does, and text inputs focused by mouse match
        `:focus-visible` too, so editing a field still reveals its row's
-       controls. During a drag (`body.dragging` for the outline's SortableJS,
-       `body.cal-dragging` for the calendar) only the grip *handles* stay
-       revealed -- not every hover-icon (trash, pencil, day-pill...), which
-       would otherwise flood all rows the moment a drag starts. Revealed
-       controls become `inline-flex` (works for the grip spans and the icon
-       buttons alike). */
+       controls. Revealed controls become `inline-flex` (works for the grip
+       spans and the icon buttons alike).
+
+       Drags are split by what's being dragged. Reordering a row by its grip
+       (a lesson/unit on the outline -> `body.dragging-handles`; a unit on the
+       calendar -> `body.cal-dragging`) keeps the grip *handles* visible so the
+       dragged row doesn't shift -- but reveals nothing else. Dragging an
+       *objective* sets plain `body.dragging`, which only lights up the rawzone
+       drop targets (rules further down); it has no handle, so it must reveal no
+       handles and none of the other hover-icons. */
     .hoverctl { display: none; align-items: center; }
     .hoverhost:hover .hoverctl,
     .hoverhost:has(:focus-visible) .hoverctl { display: inline-flex; }
-    /* Mid-drag: keep only the drag handles visible, not the rest of the icons. */
-    body.dragging .draghandle,
+    /* Mid-drag (a grip drag only): keep the drag handles visible. */
+    body.dragging-handles .draghandle,
     body.cal-dragging .cal-unithandle { display: inline-flex; }
 
     /* Drag handle to reorder references; revealed on row hover (.hoverctl). */
@@ -289,8 +293,8 @@
     /* A 1-day lesson's pill is a .hoverctl, but the base .durform rule above sets
        `display:inline-flex` and (equal specificity, later in source) would defeat
        .hoverctl's `display:none`. This two-class override restores hide-at-rest;
-       the reveal rules (.hoverhost:hover/:has(:focus-visible)/body.dragging --
-       all higher specificity) still show it on hover, focus, and drag. */
+       the hover/focus reveal rules (.hoverhost:hover / :has(:focus-visible) --
+       higher specificity) still show it on hover and keyboard focus. */
     .durform.hoverctl { display: none; }
     .durform:hover { border-color: #cfd6dd; }
     .durform:focus-within { background: #fff; border-color: #bcd; }
