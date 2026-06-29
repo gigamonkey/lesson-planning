@@ -263,7 +263,9 @@
     .lessoncard { margin-bottom: .7rem; }
     .lessonhead { display: flex; align-items: center; gap: .5rem; }
     .lessonhead .edit { flex: 1; }
-    .lessonctl { display: flex; gap: .2rem; }
+    /* No `display` here -- it's a .hoverctl, so let that govern visibility
+       (display:flex would override hoverctl's display:none and keep it shown). */
+    .lessonctl { gap: .2rem; }
     .lessonctl form { margin: 0; }
     .lessonctl button { padding: .1rem .4rem; }
     /* Inline duration pill on a unit/lesson (weeks / days), autosaved. A filled pill
