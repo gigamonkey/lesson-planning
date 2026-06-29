@@ -159,6 +159,39 @@
       if (window.htmx) htmx.ajax('GET', statsURL, { target: '#wstats', swap: 'outerHTML' });
     }
 
+    // While dragging an objective, a collapsed lesson's objectives box is hidden,
+    // so it can't be a drop target. Auto-expand the collapsed lesson the cursor
+    // hovers (revealing its box), collapse it again when the cursor leaves, and
+    // keep whichever lesson the objective is finally dropped into open. We track a
+    // single auto-opened card and drive it off pointermove since SortableJS runs a
+    // fallback (non-native) drag, so native dragover events don't fire.
+    let dragAutoOpen = null;
+    function lessonCardAtPoint(x, y) {
+      const stack = document.elementsFromPoint(x, y);
+      for (let i = 0; i < stack.length; i++) {
+        const el = stack[i];
+        if (el.classList && (el.classList.contains('sortable-fallback') ||
+            el.classList.contains('sortable-drag') ||
+            el.classList.contains('sortable-ghost'))) continue;   // skip the drag image
+        const card = el.closest && el.closest('li.lessoncard');
+        if (card) return card;
+      }
+      return null;
+    }
+    function collapseDragAutoOpen() {
+      if (dragAutoOpen) { setLessonOpen(dragAutoOpen, false); dragAutoOpen = null; }
+    }
+    document.addEventListener('pointermove', function (e) {
+      if (!document.body.classList.contains('dragging')) return;   // objective drag only
+      const card = lessonCardAtPoint(e.clientX, e.clientY);
+      if (card === dragAutoOpen) return;                  // still over the opened one
+      collapseDragAutoOpen();                             // left it -> fold it back
+      if (card && card.classList.contains('collapsed')) {
+        setLessonOpen(card, true);                        // open as a drop target
+        dragAutoOpen = card;
+      }
+    });
+
     // Raw objectives: drag between the pool and any node's drop zone. Wired per
     // zone, guarded so re-running over htmx-swapped outline content (new lessons,
     // re-rendered units) only inits the fresh zones, not the untouched pool.
@@ -178,6 +211,11 @@
         onStart: function () { document.body.classList.add('dragging'); },
         onEnd: function (evt) {
           document.body.classList.remove('dragging');
+          // Keep the lesson the objective landed in open; fold back any other
+          // lesson we auto-expanded while dragging across it.
+          const dropCard = evt.to.closest && evt.to.closest('li.lessoncard');
+          if (dragAutoOpen && dragAutoOpen === dropCard) dragAutoOpen = null;
+          collapseDragAutoOpen();
           const body = new URLSearchParams();
           body.set('uuid', evt.item.dataset.uuid);
           body.set('to', evt.to.dataset.to);
