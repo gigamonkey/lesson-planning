@@ -302,6 +302,10 @@
     .unithead { display: flex; align-items: center; gap: .5rem; margin-bottom: .2rem;
             border-bottom: 2px solid var(--line); padding-bottom: .2rem; }
     .unit.unassigned .unithead { border-bottom-style: dashed; }
+    /* When a unit is collapsed to just its title, drop the head's underline and
+       tighten the gap so the bare unit list reads as a compact stack. */
+    .unit.collapsed { margin-bottom: .25rem; }
+    .unit.collapsed .unithead { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
     /* A unit collapses to just its head via the caret; lessons (and any legacy
        unit-level objectives) hide. State is JS-held so it survives htmx swaps. */
     .unittoggle { flex: none; background: none; border: none; cursor: pointer;
@@ -312,14 +316,16 @@
     .unit.collapsed .unittoggle i { transform: rotate(-90deg); }
     .unit.collapsed ul.unitlessons,
     .unit.collapsed .roughzone { display: none; }
-    /* A lesson collapses the same way, down to just its head row. */
-    .lessontoggle { flex: none; background: none; border: none; cursor: pointer;
-            padding: 0 .15rem; color: var(--muted); font-size: .75rem; line-height: 1;
-            display: flex; align-items: center; }
-    .lessontoggle:hover { color: #333; }
-    .lessontoggle i { transition: transform .12s ease; }
-    .lessoncard.collapsed .lessontoggle i { transform: rotate(-90deg); }
+    /* A lesson is collapsed by default to just its head (the title); clicking the
+       title reveals its objectives box. No caret -- the title itself is the toggle. */
     .lessoncard.collapsed > *:not(.lessonhead) { display: none; }
+    /* The lesson title: a plain left-aligned clickable text button (toggles the box). */
+    .lessontitle { flex: 1; min-width: 0; text-align: left; font: inherit; font-weight: 600;
+            color: #333; background: none; border: 1px solid transparent; border-radius: 4px;
+            padding: .15rem .4rem; cursor: pointer; line-height: 1.3; }
+    .lessontitle:hover { color: #2b6cb0; }
+    .lessontitle:focus-visible { outline: none; border-color: #bcd; }
+    .lessoncard:not(.collapsed) > .lessonhead .lessontitle { color: #2b6cb0; }
     /* The "N units" / "M lessons" counts double as collapse-all toggles (wired in
        workspace). */
     .wstats-level.clickable { cursor: pointer; }
@@ -331,27 +337,16 @@
     .unithead .edit input:focus { border-color: #bcd; background: #fff; outline: none; }
     .unitlabel { flex: 1; font-weight: 700; color: var(--muted); }
     ul.unitlessons { min-height: 3rem; }
-    .lessonhead .edit input,
-    .lessonhead .edit textarea { flex: 1; min-width: 0; font-weight: 600; padding: .2rem .4rem;
-            border: 1px solid transparent; border-radius: 4px; background: transparent; }
-    /* The title is a textarea (not an input) only so a genuinely long title wraps
-       when shown; it FILLS the column (width:100%, not field-sizing) and sits on
-       one line for normal titles, growing height via JS autosize when it wraps. */
-    .lessonhead .edit textarea { display: block; width: 100%; box-sizing: border-box;
-            font: inherit; font-weight: 600; line-height: 1.3; resize: none; overflow: hidden; }
-    /* Hover hints "editable" (subtle gray box); focus is the distinct "editing"
-       look (blue border + white bg) -- so Enter/blur changes the look immediately
-       even while the cursor still hovers the field. */
-    .lessonhead .edit input:hover, .lessonhead .edit textarea:hover {
-            border-color: var(--line); outline: none; }
-    .lessonhead .edit input:focus, .lessonhead .edit textarea:focus {
-            border-color: #bcd; background: #fff; outline: none; }
-    ul.unitlessons > li.lessoncard { margin: .35rem 0; }
     .lessoncard input, .lessoncard textarea { cursor: text; }
-    /* "Open this lesson plan" link in the lesson head (hover-revealed via .hoverctl). */
-    .lessonhead .lessonopen { color: #b8b8b8; text-decoration: none; font-size: .95rem;
-            line-height: 1; padding: .1rem .35rem; border-radius: 4px; }
-    .lessonhead .lessonopen:hover { color: #2b6cb0; background: #eef3f8; }
+    /* Lesson-head icons: pencil (opens the lesson pane) + journal (full page),
+       both hover-revealed via .hoverctl. */
+    .lessonhead .lessonopen, .lessonhead .lessonedit-btn { color: #b8b8b8;
+            text-decoration: none; font-size: .92rem; line-height: 1; padding: .1rem .35rem;
+            border-radius: 4px; background: none; border: none; cursor: pointer; }
+    .lessonhead .lessonopen:hover, .lessonhead .lessonedit-btn:hover { color: #2b6cb0; background: #eef3f8; }
+    /* The objectives box reads as clickable (click to edit it as Markdown). */
+    .units li.lessoncard ul.rawzone { cursor: pointer; }
+    .units li.lessoncard ul.rawzone:hover { background: #f3f7fc; }
     /* Plan page: outline (left) + raw pool (right). */
     ul.rawzone { list-style: none; margin: .3rem 0 0; padding: .2rem; min-height: 2.2rem;
             border: 1px dashed var(--line); border-radius: 5px; background: var(--bg); }
@@ -370,7 +365,10 @@
        by indentation; drop zones reveal themselves only while dragging. */
     .units ul.unitlessons { border: none; background: none; padding: 0; margin: .15rem 0 0;
             min-height: 1.4rem; }
-    .units .lessoncard { border: none; background: none; padding: 0; margin: .4rem 0 .4rem .9rem; }
+    /* Tight rows between collapsed (default) lesson titles; an expanded lesson
+       (its objectives box showing) gets a bit more breathing room. */
+    .units .lessoncard { border: none; background: none; padding: 0; margin: .1rem 0 .1rem .9rem; }
+    .units li.lessoncard:not(.collapsed) { margin-top: .5rem; margin-bottom: .5rem; }
     /* Insert-a-unit-here: a thin gap before each unit; hovering reveals a dashed
        rule with a centred grey "+" that adds a unit at that position. */
     .units .unit-insert { position: relative; height: .55rem; margin: -.15rem 0; }

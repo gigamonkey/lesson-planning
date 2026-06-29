@@ -58,11 +58,12 @@
   <dialog id="help-dialog" class="help-dialog">
     {% if editable %}
       <p>Build the course outline: add <b>units</b> with the <b>+</b> that appears
-         between units (or the <b>Add a unit here</b> button at the end), add
-         <b>lessons</b>, and drag raw objectives from the pool into a lesson — or use a
-         lesson's <b>+</b> to edit its objectives as <code>plan.md</code>-style bullets
-         (reword the text freely; leave each trailing <code>(#token)</code> to keep an
-         objective's identity). Each lesson gets one learning objective.</p>
+         between units (or the <b>Add a unit here</b> button at the end), and add
+         <b>lessons</b>. Click a <b>lesson title</b> to open its objectives box — drag
+         raw objectives from the pool into it, or click the box to edit them as
+         <code>plan.md</code>-style bullets (reword freely; leave each trailing
+         <code>(#token)</code> to keep an objective's identity, and add new lines for
+         new objectives). The <b>pencil</b> opens the lesson plan for editing.</p>
     {% else %}
       <p>Drag raw objectives from the pool onto the nodes they belong to, or use a leaf's
          <b>+</b> to edit its objectives as <code>plan.md</code>-style bullets (reword the
@@ -325,20 +326,39 @@
       if (last) { last.focus(); last.select(); }
     };
 
-    // Collapse: a caret in a unit/lesson head folds it down to just its head row.
-    // Collapsed ids live in JS (not the DOM) so the state survives the htmx swaps
-    // that re-render the whole outline region on a structural edit.
+    // Collapse model: units default OPEN (caret in the head); lessons default
+    // COLLAPSED to just their title -- clicking the title reveals the objectives
+    // box. The exceptions (collapsed units, open lessons) live in JS so the state
+    // survives the htmx swaps that re-render the outline region.
     const collapsedUnits = new Set();
-    const collapsedLessons = new Set();
+    const openLessons = new Set();
     function setUnitCollapsed(unit, collapsed) {
       const id = unit.dataset.unitId;
       unit.classList.toggle('collapsed', collapsed);
       if (id) { collapsed ? collapsedUnits.add(id) : collapsedUnits.delete(id); }
     }
-    function setLessonCollapsed(card, collapsed) {
+    // Open a lesson's objectives box AS the Markdown editor; clicking the box does
+    // this (the box is hidden by the .collapsed rule until the lesson is expanded).
+    function openObjEditor(card) {
+      const form = card.querySelector('form.bulkobj');
+      const zone = card.querySelector('ul.rawzone');
+      if (!form || !form.hidden) return;     // already editing
+      form.hidden = false;
+      if (zone) zone.hidden = true;
+      openBulk(form);
+    }
+    function setLessonOpen(card, open) {
       const id = card.dataset.lessonId;
-      card.classList.toggle('collapsed', collapsed);
-      if (id) { collapsed ? collapsedLessons.add(id) : collapsedLessons.delete(id); }
+      card.classList.toggle('collapsed', !open);
+      const t = card.querySelector('.lessontitle');
+      if (t) t.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (id) { open ? openLessons.add(id) : openLessons.delete(id); }
+      if (open) {                            // expanding always shows the list first
+        const form = card.querySelector('form.bulkobj');
+        const zone = card.querySelector('ul.rawzone');
+        if (form) form.hidden = true;
+        if (zone) zone.hidden = false;
+      }
     }
     function initCollapse(root) {
       if (!editable) return;
@@ -353,13 +373,18 @@
         }
       });
       root.querySelectorAll('li.lessoncard').forEach(function (card) {
-        if (collapsedLessons.has(card.dataset.lessonId)) card.classList.add('collapsed');
-        const tri = card.querySelector('.lessontoggle');
-        if (tri && !tri.dataset.collapseInit) {
-          tri.dataset.collapseInit = '1';
-          tri.addEventListener('click', function () {
-            setLessonCollapsed(card, !card.classList.contains('collapsed'));
+        if (openLessons.has(card.dataset.lessonId)) card.classList.remove('collapsed');
+        const title = card.querySelector('.lessontitle');
+        if (title && !title.dataset.collapseInit) {
+          title.dataset.collapseInit = '1';
+          title.addEventListener('click', function () {
+            setLessonOpen(card, card.classList.contains('collapsed'));
           });
+        }
+        const zone = card.querySelector('ul.rawzone');
+        if (zone && !zone.dataset.boxInit) {
+          zone.dataset.boxInit = '1';
+          zone.addEventListener('click', function () { openObjEditor(card); });
         }
       });
       wireCollapseAll();
@@ -386,20 +411,16 @@
       if (lessonsEl && !lessonsEl.dataset.collapseAllInit) {
         lessonsEl.dataset.collapseAllInit = '1';
         lessonsEl.classList.add('clickable');
-        lessonsEl.title = 'Collapse / expand all lessons';
+        lessonsEl.title = 'Expand / collapse all lessons';
         lessonsEl.addEventListener('click', function () {
           const units = Array.from(document.querySelectorAll('section.unit'));
           const cards = Array.from(document.querySelectorAll('li.lessoncard'));
-          // Toggle between the two-level view (units open, lessons folded) and
-          // fully expanded. Only expand the lessons when we're *already* exactly
-          // in the two-level view; anything else (units collapsed, or some lessons
-          // open) drops to two-level -- so this stays a clean two-state toggle no
-          // matter what was hidden behind a collapsed unit.
-          const inTwoLevel = units.every(u => !u.classList.contains('collapsed'))
-            && cards.length && cards.every(c => c.classList.contains('collapsed'));
-          // Always reveal the units so the (un)folded lessons are visible.
+          // If any lesson is open, collapse them all back to the default two-level
+          // view; otherwise open them all. Reveal the units either way so the
+          // result is visible.
+          const anyOpen = cards.some(c => !c.classList.contains('collapsed'));
           units.forEach(u => setUnitCollapsed(u, false));
-          cards.forEach(c => setLessonCollapsed(c, !inTwoLevel));
+          cards.forEach(c => setLessonOpen(c, !anyOpen));
         });
       }
     }

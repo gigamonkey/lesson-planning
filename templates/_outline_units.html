@@ -4,20 +4,21 @@
    this region in place -- no full reload, scroll position preserved. Context:
    tree, course, ref (the outline hierarchy), durations. #}
 
-{# An outline lesson: title + learning objective + its raws (editable). #}
+{# An outline lesson. Collapsed by default to just its head; clicking the title
+   reveals its objectives box (a drop target), and clicking that box turns it into
+   a Markdown editor. The title isn't edited here -- the pencil opens a lesson pane;
+   the days pill shows only for a non-default (not 1-day) duration. #}
 {% macro lessoncard(L) %}
-<li class="lessoncard" data-lesson-id="{{ L.id }}">
+{% set d = durations.get(L.id) %}
+<li class="lessoncard collapsed" data-lesson-id="{{ L.id }}">
   <div class="lessonhead hoverhost">
-    <button type="button" class="lessontoggle" title="Collapse / expand this lesson"
-            aria-label="Collapse / expand this lesson"><i class="bi bi-caret-down-fill"></i></button>
     <span class="draghandle lessonhandle hoverctl" title="Drag to reorder or move this lesson"
           aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>
-    <form method="post" class="edit autosave"
-          action="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}"
-          hx-post="{{ url_for('lesson_edit', course=course, lesson_id=L.id) }}" hx-swap="none">
-      <textarea name="title" rows="1" placeholder="Lesson title…">{{ L.label }}</textarea>
-    </form>
-    <form class="durform autosave" method="post"
+    <button type="button" class="lessontitle" aria-expanded="false"
+            title="Show / hide this lesson's objectives">{{ L.label or 'Untitled lesson' }}</button>
+    {# Days pill: hidden at rest for a default 1-day lesson (revealed on hover so it
+       stays settable); always shown for any other duration (incl. an explicit 0). #}
+    <form class="durform autosave {{ 'hoverctl' if d is none or d == 1 }}" method="post"
           action="{{ url_for('node_duration_set', course=course, node_id=L.id) }}"
           hx-post="{{ url_for('node_duration_set', course=course, node_id=L.id) }}" hx-swap="none">
       <label><input class="durinput" type="number" name="amount" min="0" step="0.5"
@@ -25,8 +26,9 @@
              title="Days this lesson takes (default 1)" aria-label="Days"
              ><span class="durunit">{{ 'day' if durations.get(L.id, 1) == 1 else 'days' }}</span></label>
     </form>
-    <button type="button" class="addobjbtn hoverctl" title="Add or edit objectives for this lesson">+</button>
-    <a class="lessonopen hoverctl" title="Open this lesson plan"
+    <button type="button" class="lessonedit-btn hoverctl" title="Edit this lesson plan"
+            data-lesson-id="{{ L.id }}"><i class="bi bi-pencil"></i></button>
+    <a class="lessonopen hoverctl" title="Open this lesson plan in its own page"
        href="{{ url_for('lesson_view', course=course, lesson_id=L.id) }}"><i class="bi bi-journal-text"></i></a>
     <form method="post" class="hoverctl" action="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
           hx-post="{{ url_for('lesson_delete', course=course, lesson_id=L.id) }}"
@@ -34,7 +36,9 @@
       <button class="iconbtn" title="Delete lesson"><i class="bi bi-trash3"></i></button>
     </form>
   </div>
-  <ul class="sortable rawzone" data-to="node-{{ L.id }}">
+  {# The objectives box: a drop target for pool objectives; click it to edit. #}
+  <ul class="sortable rawzone" data-to="node-{{ L.id }}"
+      title="Click to edit these objectives as Markdown">
     {% for o in L.objectives %}{% include "_rawitem.html" %}{% endfor %}
   </ul>
   <form class="bulkobj" hidden method="post"
