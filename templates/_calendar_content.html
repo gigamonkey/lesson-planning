@@ -56,7 +56,31 @@
         </form>
         {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
         {% if u.weeks_short %}<span class="cal-badge warn" title="{% if u.weeks %}Needs {{ u.weeks|int if u.weeks == u.weeks|int else u.weeks }} weeks but only {{ u.weeks_shown }} fit before the next pinned unit{% else %}Doesn’t fit before the next pinned unit{% endif %}">won’t fit</span>{% endif %}
-        {% if u.pin %}<span class="cal-badge pin" title="Pinned: this unit {{ 'ends on' if u.pin.edge == 'end' else 'starts on' }} week {{ u.pin.week }}"><i class="bi bi-pin-angle-fill"></i> {{ 'ends' if u.pin.edge == 'end' else 'starts' }} wk {{ u.pin.week }}</span>{% endif %}
+        {# Pin control. Unpinned: a faint pin icon, hover-revealed on the head; click
+           to open the editor. Pinned: the blue pin badge, click to edit/remove. The
+           <details> gives click-to-toggle with no JS; the form posts the edge + week
+           and re-lays-out (htmx) in place, collapsing the editor. #}
+        <details class="cal-pin {{ 'pinned' if u.pin }}">
+          <summary class="{{ 'cal-badge pin' if u.pin }}"
+                   title="{% if u.pin %}Pinned: this unit {{ 'ends on' if u.pin.edge == 'end' else 'starts on' }} week {{ u.pin.week }} — click to edit{% else %}Pin this unit to a week{% endif %}">
+            {% if u.pin %}<i class="bi bi-pin-angle-fill"></i> {{ 'ends' if u.pin.edge == 'end' else 'starts' }} wk {{ u.pin.week }}{% else %}<i class="bi bi-pin-angle"></i>{% endif %}
+          </summary>
+          <form class="cal-pin-edit" method="post"
+                action="{{ url_for('node_pin_set', course=course, node_id=u.node_id) }}"
+                hx-post="{{ url_for('node_pin_set', course=course, node_id=u.node_id) }}"
+                hx-target="#cal-content" hx-swap="innerHTML">
+            <input type="hidden" name="view" value="calendar">
+            <select name="edge" aria-label="Pin edge">
+              <option value="start" {{ 'selected' if u.pin and u.pin.edge == 'start' }}>starts</option>
+              <option value="end" {{ 'selected' if (not u.pin) or u.pin.edge == 'end' }}>ends</option>
+            </select>
+            <span>week</span>
+            <input type="number" name="week" min="1" step="1" inputmode="numeric"
+                   value="{{ u.pin.week if u.pin else '' }}" placeholder="#" aria-label="Week number">
+            <button type="submit" class="iconbtn" title="Pin to this week"><i class="bi bi-check-lg"></i></button>
+            {% if u.pin %}<button type="submit" name="clear" value="1" class="iconbtn" title="Remove pin"><i class="bi bi-trash3"></i></button>{% endif %}
+          </form>
+        </details>
       {% endif %}
       {% if u.node_id %}
         {# Delete this unit (hover-revealed, matching the outline's trash). Its

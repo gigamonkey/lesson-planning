@@ -53,6 +53,34 @@
                border: 1px solid #e0e4e8; }
   .cal-badge.warn { background: #fdeeee; color: var(--gap); border-color: #f0cccc; }
   .cal-badge.pin { background: #eef4fb; color: #2c6cb0; border-color: #cfe0f2; }
+  /* Inline pin control (<details>): a hover-revealed grey pin when unpinned, the
+     blue pin badge when pinned, expanding into a small edge+week editor popover. */
+  .cal-pin { margin: 0; flex: none; align-self: center; position: relative; }
+  .cal-pin > summary { list-style: none; cursor: pointer; display: inline-flex;
+              align-items: center; gap: .2rem; line-height: 1.4; }
+  .cal-pin > summary::-webkit-details-marker { display: none; }
+  /* Unpinned: a faint pin icon, hidden until the head is hovered (like .hoverctl)
+     -- but kept visible once the editor is open so it doesn't vanish mid-edit. */
+  .cal-pin:not(.pinned) > summary { display: none; color: #c4c4c4; font-size: .85rem; }
+  .cal-unit-head:hover .cal-pin:not(.pinned) > summary,
+  .cal-pin[open] > summary { display: inline-flex; }
+  .cal-pin:not(.pinned) > summary:hover { color: #2c6cb0; }
+  .cal-pin.pinned > summary:hover { border-color: #cfd6dd; }
+  /* The editor pops below the toggle (absolute) so opening it doesn't reflow the
+     unit-head row. */
+  .cal-pin-edit { position: absolute; z-index: 5; top: calc(100% + .25rem); left: 0;
+              margin: 0; display: flex; align-items: center; gap: .3rem; white-space: nowrap;
+              background: #fff; border: 1px solid #cfe0f2; border-radius: 8px;
+              padding: .3rem .45rem; box-shadow: 0 2px 8px rgba(40, 70, 110, .15);
+              font-size: .72rem; color: #555; }
+  .cal-pin-edit select { font: inherit; font-size: .72rem; padding: .05rem .1rem;
+              border: 1px solid #d6dde4; border-radius: 4px; background: #fff; }
+  .cal-pin-edit input[type=number] { font: inherit; font-size: .72rem; width: 2.6rem;
+              padding: .05rem .25rem; border: 1px solid #d6dde4; border-radius: 4px;
+              -moz-appearance: textfield; appearance: textfield; }
+  .cal-pin-edit input::-webkit-outer-spin-button,
+  .cal-pin-edit input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .cal-pin-edit .iconbtn { padding: 0 .2rem; font-size: .85rem; line-height: 1; }
   /* Click-to-edit weeks pill (looks like a badge; editable on hover/focus). */
   .cal-weeks { display: inline-flex; margin: 0;
                font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
@@ -242,6 +270,10 @@
        field to pin its span (blank = auto); click an empty day to add a lesson there.
        Drag a lesson by its handle to reorder it or move it to another unit, and drag a
        unit by its grip to reorder units — every change saves to the outline.</p>
+    <p>Hover a unit heading to reveal its <b>pin</b> (📌); click it to anchor the unit so
+       it <b>starts</b> or <b>ends</b> on a chosen week, instead of flowing sequentially.
+       Units that can't fit before a pin overflow, and slack before it shows as unplanned
+       weeks.</p>
     <p>The school year, its holidays, and exam days come from the calendar bound in the
        outline's <code>plan.md</code> (the <code>calendar:</code> key).</p>
     <menu><button type="button" onclick="this.closest('dialog').close()">Close</button></menu>
@@ -376,6 +408,28 @@
       if (e.target.matches && e.target.matches('.cal-lessonname textarea')) autosizeLesson(e.target);
     });
     document.addEventListener('DOMContentLoaded', autosizeLessons);
+
+    // --- Pin editor (<details>) niceties ---
+    // Focus the week field when the editor opens (the `toggle` event doesn't bubble,
+    // so listen in the capture phase). Close an open editor on click-away or Escape;
+    // saving re-renders #cal-content, which collapses it on its own.
+    document.addEventListener('toggle', function (e) {
+      const d = e.target;
+      if (d.matches && d.matches('.cal-pin[open]')) {
+        const wk = d.querySelector('.cal-pin-edit input[name="week"]');
+        if (wk) { wk.focus(); wk.select(); }
+      }
+    }, true);
+    document.addEventListener('mousedown', function (e) {
+      document.querySelectorAll('.cal-pin[open]').forEach(function (d) {
+        if (!d.contains(e.target)) d.removeAttribute('open');
+      });
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      const d = e.target.closest && e.target.closest('.cal-pin[open]');
+      if (d) { d.removeAttribute('open'); d.querySelector('summary').focus(); }
+    });
 
     // --- Drag and drop: reorder lessons within a unit or move them between units ---
     // The calendar grid is irregular -- a lesson can span several day-cells and even

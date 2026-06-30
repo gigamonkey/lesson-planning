@@ -197,6 +197,7 @@ _ACTION_PHRASES = {
     "lesson_delete": "deleted a lesson in {course}",
     "lesson_arrange": "reordered lessons in {course}",
     "node_duration_set": "set a duration in {course}",
+    "node_pin_set": "pinned a unit in {course}",
     "objective_new": "added an objective to {course}",
     "objective_edit": "edited an objective in {course}",
     "outline_import": "rebuilt the {course} outline from a reference",
@@ -2410,6 +2411,49 @@ def node_duration_set(course, node_id):
                            else f"set a duration in {course}")
         # From the calendar's weeks pill: return the re-laid-out calendar content
         # so htmx swaps it in place (no full reload, scroll preserved).
+        if request.form.get("view") == "calendar":
+            return render_template("_calendar_content.html", course=course,
+                                   **_calendar_ctx(conn, course))
+    if request.headers.get("HX-Request"):
+        return ("", 204)
+    return _back(course)
+
+
+@app.route("/<course>/node/<node_id>/pin", methods=["POST"])
+def node_pin_set(course, node_id):
+    """Pin (or unpin) an outline unit to a school week from the calendar's inline
+    pin control. `edge` is 'start'|'end' (which end of the unit anchors) and `week`
+    is the bells school-week number. A `clear` field, a blank/invalid week, or a bad
+    edge removes the pin (back to sequential layout). Only units pin -- lessons flow
+    within their unit. Mirrors node_duration_set: write node_pin, then re-lay-out and
+    swap #cal-content so the calendar reflects the new anchor in place."""
+    with db() as conn:
+        O = outline_hierarchy(conn, course)
+        row = conn.execute("SELECT level FROM nodes WHERE course=? AND hierarchy=? AND node_id=?",
+                           (course, O, node_id)).fetchone()
+        if not row:
+            abort(404)
+        if row["level"] != "unit":
+            abort(400)
+        edge = request.form.get("edge")
+        raw = (request.form.get("week") or "").strip()
+        try:
+            week = int(raw) if raw else None
+        except ValueError:
+            week = None
+        clear = (request.form.get("clear") or week is None or week < 1
+                 or edge not in ("start", "end"))
+        if clear:
+            conn.execute("DELETE FROM node_pin WHERE course=? AND hierarchy=? AND node_id=?",
+                         (course, O, node_id))
+        else:
+            conn.execute("INSERT INTO node_pin(course, hierarchy, node_id, week, edge)"
+                         " VALUES (?, ?, ?, ?, ?) ON CONFLICT(course, hierarchy, node_id)"
+                         " DO UPDATE SET week=excluded.week, edge=excluded.edge",
+                         (course, O, node_id, week, edge))
+        conn.commit()
+        g.action_phrase = (f"removed a pin in {course}" if clear
+                           else f"pinned a unit in {course}")
         if request.form.get("view") == "calendar":
             return render_template("_calendar_content.html", course=course,
                                    **_calendar_ctx(conn, course))
