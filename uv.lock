@@ -13,11 +13,11 @@ wheels = [
 
 [[package]]
 name = "bhs-calendars"
-version = "2.10.0"
+version = "2.11.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9b/f1/1bba61b1c4301c9917c13faaba9095daa5fb154b43e283c6ea9833884399/bhs_calendars-2.10.0.tar.gz", hash = "sha256:9c7ceae13006357f8b24c640be95cc189644b66bdc9f7b51a69586cc31930c45", size = 12118, upload-time = "2026-06-28T18:15:10.802Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/c7/171c4fe97fc6a8377f94ad35d6278506b143c1ebc3689b529c09d88854cd/bhs_calendars-2.11.1.tar.gz", hash = "sha256:e4a7c457e06d15afa047732cbdd63f7b1eeb84dbc6a9c4255c536097e06bfdbe", size = 12169, upload-time = "2026-06-30T15:12:03.22Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ee/8b/33781e156918807069358818189362ed9260054d22a6afe0ce4d2aa5d448/bhs_calendars-2.10.0-py3-none-any.whl", hash = "sha256:d94c2c5d0058c7f4c46bb1dcb1e7d5d0033ea6ad9c66f3c3f7507a2026a63be1", size = 26039, upload-time = "2026-06-28T18:15:09.641Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/72/31236e5842b0aa987e62887b3faf3dfb0ace34751526be71cfd4e7b52434/bhs_calendars-2.11.1-py3-none-any.whl", hash = "sha256:db61bc1a0358443d065104563a04f6d7f0e7343de575c6baee6e67fa5e976932", size = 26077, upload-time = "2026-06-30T15:12:01.801Z" },
 ]
 
 [[package]]
@@ -115,7 +115,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "bell-schedule", specifier = ">=0.8.0" },
-    { name = "bhs-calendars", specifier = ">=2.10.0" },
+    { name = "bhs-calendars", specifier = ">=2.11.1" },
     { name = "flask" },
     { name = "gunicorn" },
     { name = "markdown", specifier = ">=3.10.2" },

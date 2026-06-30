@@ -82,6 +82,7 @@
           <div class="cal-when"><b>Week {{ row.number }}</b><br>{{ row.range }}
             {% if row.grading_close %}<br><span class="cal-gp">{{ row.grading_close }} close</span>{% endif %}
             {% if row.is_ap %}<br><span class="cal-ap">AP exams</span>{% endif %}
+            {% if row.is_ib %}<br><span class="cal-ib">IB exams</span>{% endif %}
           </div>
           <div class="cal-days">
             {% for c in row.cells %}

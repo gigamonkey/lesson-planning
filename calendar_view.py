@@ -203,15 +203,17 @@ def _break_row(w):
 
 def _week_badges(bs, number):
     """Resolve a school week's calendar badges from the bells annotation API:
-    `(is_ap, grading_close)`. `is_ap` is True when an `apExams` range annotation
-    overlaps the week's school days; `grading_close` is the label of a `weeks[n]`
-    annotation on the week (None if absent). Both come from
+    `(is_ap, is_ib, grading_close)`. `is_ap`/`is_ib` are True when an `apExams`/
+    `ibExams` range annotation overlaps the week's school days; `grading_close` is
+    the label of a `weeks[n]` annotation on the week (None if absent). All come from
     `bs.annotations_for_week(number)`, which tags each hit with its `source`."""
     anns = bs.annotations_for_week(number)
     is_ap = any(a.get("source") == "range"
                 and "apExams" in (a.get("id"), a.get("kind")) for a in anns)
+    is_ib = any(a.get("source") == "range"
+                and "ibExams" in (a.get("id"), a.get("kind")) for a in anns)
     grading_close = next((a.get("label") for a in anns if a.get("source") == "week"), None)
-    return is_ap, grading_close
+    return is_ap, is_ib, grading_close
 
 
 def _requested_weeks(units, weeks):
@@ -286,11 +288,11 @@ def build_calendar(bs, data, units):
             lab = bs.non_class_label(d)
             if lab:
                 labels[d] = lab
-    # AP-exam weeks and grading-period closes come from the calendar's first-class
-    # `annotations`, read back per school week via the bells annotation API: a week
-    # is `is_ap` when an `apExams` range annotation overlaps its school days, and its
-    # `grading_close` is the label of any `weeks[n]` annotation on it. `_week_badges`
-    # resolves both for a given school-week number.
+    # AP/IB-exam weeks and grading-period closes come from the calendar's first-class
+    # `annotations`, read back per school week via the bells annotation API: a week is
+    # `is_ap`/`is_ib` when an `apExams`/`ibExams` range annotation overlaps its school
+    # days, and its `grading_close` is the label of any `weeks[n]` annotation on it.
+    # `_week_badges` resolves all three for a given school-week number.
 
     out_units = []
     idx = [0]   # boxed so the nested helpers can advance it
@@ -326,11 +328,12 @@ def build_calendar(bs, data, units):
             if w["is_break"]:
                 rows.append(_break_row(w))
             else:
-                is_ap, grading_close = _week_badges(bs, w["number"])
+                is_ap, is_ib, grading_close = _week_badges(bs, w["number"])
                 rows.append({"kind": "week", "number": w["number"],
                              "range": _fmt_range(w["days"][0], w["days"][-1]),
                              "school_days": len(w["days"]),
                              "is_ap": is_ap,
+                             "is_ib": is_ib,
                              "grading_close": grading_close,
                              "cells": _week_cells(w, assign, labels)})
         # A real unit (one with a node_id) with leftover school days: mark its FIRST

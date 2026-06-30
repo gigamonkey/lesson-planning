@@ -122,13 +122,16 @@ def main():
     assert not any(r["kind"] == "break" for r in v5["units"][0]["rows"]), \
         "a lone mid-week day off should be a greyed cell, not a break box"
 
-    # Exam days, AP weeks, grading periods. Four clean Mon-Fri weeks (Sep 1-26);
-    # Wed-Fri of week 1 are exam days, week 3 is the AP window, week 2 closes Q1.
+    # Exam days, AP/IB weeks, grading periods. Four clean Mon-Fri weeks (Sep 1-26);
+    # Wed-Fri of week 1 are exam days, week 3 is the AP window, week 4 the IB window,
+    # week 2 closes Q1.
     data6 = dict(DATA, lastDay="2025-09-26", holidays=[],
                  nonClassDays={"2025-09-03": "exam", "2025-09-04": "exam", "2025-09-05": "exam"},
                  annotations={
                      "ranges": {"apExams": {"start": "2025-09-15", "end": "2025-09-19",
-                                            "label": "AP Exams", "kind": "testing"}},
+                                            "label": "AP Exams", "kind": "testing"},
+                                "ibExams": {"start": "2025-09-22", "end": "2025-09-26",
+                                            "label": "IB Exams", "kind": "testing"}},
                      "weeks": {"2": {"label": "Q1", "kind": "gradingClose"}}})
     bs6 = bells.BellSchedule([data6], {"role": "student"})
     # A 4-day lesson must flow AROUND the exam days: Mon/Tue of week 1, then
@@ -152,16 +155,18 @@ def main():
                      "node_id": "l", "lesson_days": 4}, w2
     assert all(c["kind"] == "free" for c in w2[1:]), w2
 
-    # AP weeks and grading-period closes land on exactly their weeks.
+    # AP/IB weeks and grading-period closes land on exactly their weeks.
     assert [r["is_ap"] for r in wr6] == [False, False, True, False], wr6
+    assert [r["is_ib"] for r in wr6] == [False, False, False, True], wr6
     assert [r["grading_close"] for r in wr6] == [None, "Q1", None, None], wr6
     # AP days stay bookable (week 3 has its full five school days available).
     assert wr6[2]["school_days"] == 5, wr6[2]
 
-    # No annotations -> no exam/AP/grading metadata, identical layout to before.
+    # No annotations -> no exam/AP/IB/grading metadata, identical layout to before.
     v7 = cv.build_calendar(bs, DATA, [{"title": "U", "weeks": 3, "lessons": []}])
     plain = [r for r in v7["units"][0]["rows"] if r["kind"] == "week"]
-    assert all(not r["is_ap"] and r["grading_close"] is None for r in plain), plain
+    assert all(not r["is_ap"] and not r["is_ib"] and r["grading_close"] is None
+               for r in plain), plain
     assert not any(c["kind"] in ("exam", "special") for r in plain for c in r["cells"]), plain
 
     # Week-numbering invariant: the layout's school-week numbers come from bells'
