@@ -111,15 +111,16 @@
 </div>
 
 <script>
-  // Two display orders for the eight parts, flipped by the Plan | Present toggle
+  // Two display orders for the parts, flipped by the Plan | Present toggle
   // (CSS `order` on the flex .lessonparts column). Present = the lesson as it
   // unfolds in class (the authored file order); Plan = backward-design planning
   // order. The choice persists across lessons via localStorage.
   (function () {
     var PRESENT = ['preview', 'learning_objective', 'review', 'key_ideas',
-                   'expert_thinking', 'guided_practice', 'closure', 'independent_practice'];
+                   'expert_thinking', 'guided_practice', 'closure', 'independent_practice',
+                   'summation'];
     var PLAN = ['learning_objective', 'independent_practice', 'key_ideas', 'expert_thinking',
-                'guided_practice', 'review', 'closure', 'preview'];
+                'guided_practice', 'review', 'closure', 'summation', 'preview'];
     var mode = localStorage.getItem('lessonViewMode') || 'plan';
 
     function apply() {

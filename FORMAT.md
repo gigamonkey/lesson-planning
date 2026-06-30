@@ -286,14 +286,14 @@ Describe a widget and name its parts.
   mints a fresh uuid and a new lesson file.
 - **`title:`** — a mirror of the `plan.md` heading (the authoritative title), kept
   in sync on save; the filename slug derives from it.
-- **The body** is the eight parts as `## <heading>` sections, in this canonical
+- **The body** is the nine parts as `## <heading>` sections, in this canonical
   order, **only the non-empty ones written**: **Preview**, **Learning objective**,
   **Review**, **Key ideas**, **Expert thinking**, **Guided practice**, **Closure**,
-  **Independent practice**. Each is free-text markdown. Only these eight headings
-  delimit parts — any other heading is content of the current part, so a part may
-  contain its own sub-headings. Each part is stored as a `node_attr` row on the
-  lesson (`learning_objective` is the very attribute the outline/calendar already
-  read).
+  **Independent practice**, **Summation**. Each is free-text markdown. Only these
+  nine headings delimit parts — any other heading is content of the current part, so
+  a part may contain its own sub-headings. Each part is stored as a `node_attr` row
+  on the lesson (`learning_objective` is the very attribute the outline/calendar
+  already read).
 
 On save, the `lessons/` directory is **reconciled**: a renamed lesson's file is
 rewritten under its new slug and the stale name removed; a lesson deleted from the

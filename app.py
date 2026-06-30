@@ -2093,7 +2093,7 @@ def lesson_view(course, lesson_id):
             "SELECT o.text FROM coverage cv JOIN objectives o ON o.uuid=cv.uuid"
             " WHERE cv.course=? AND cv.hierarchy=? AND cv.node_id=? ORDER BY cv.position, o.text",
             (course, O, lesson_id))]
-    # All eight parts in canonical order (raw + rendered). The template shows every
+    # All parts in canonical order (raw + rendered). The template shows every
     # part to an editor (empty ones offer "+ add"); a viewer sees only non-empty ones.
     parts = [_lesson_part(key, disp, attrs.get(key)) for key, disp in plan_io.LESSON_PARTS]
     duration = None
@@ -2147,7 +2147,7 @@ def _lesson_body_text(attrs):
 
 @app.route("/<course>/lesson/<lesson_id>/edit")
 def lesson_edit_md(course, lesson_id):
-    """Full-page Markdown editor for the whole lesson file's body (all eight part
+    """Full-page Markdown editor for the whole lesson file's body (all part
     sections, scaffolded). Saving posts to lesson_source."""
     with db() as conn:
         O, L = _lesson_or_redirect(conn, course, lesson_id)
@@ -2164,7 +2164,7 @@ def lesson_edit_md(course, lesson_id):
 @app.route("/<course>/lesson/<lesson_id>/source", methods=["POST"])
 def lesson_source(course, lesson_id):
     """Save the whole-lesson Markdown editor: parse the body's `## part` sections
-    into node_attr (each of the eight parts set or cleared), write the course (so the
+    into node_attr (each part set or cleared), write the course (so the
     lesson file is updated), and commit. Back to the lesson view on success."""
     text = request.form.get("text", "")
     parts = plan_io._parse_lesson_body(text)

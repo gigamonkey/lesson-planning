@@ -67,6 +67,7 @@ LESSON_PARTS = [
     ("guided_practice", "Guided practice"),
     ("closure", "Closure"),
     ("independent_practice", "Independent practice"),
+    ("summation", "Summation"),
 ]
 _PART_BY_HEADING = {disp.lower(): key for key, disp in LESSON_PARTS}
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -638,7 +639,7 @@ def _new_uuid():
 # to one of these by prefix (like an objective bullet resolves against objectives.tsv).
 
 def _parse_lesson_body(body):
-    """Split a lesson file body into {part_name: text}. Only the eight known part
+    """Split a lesson file body into {part_name: text}. Only the known part
     headings (LESSON_PARTS) delimit sections; any other heading is content of the
     current part, so a part's free text may contain its own sub-headings. Empty
     parts are dropped."""
