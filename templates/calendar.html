@@ -9,10 +9,11 @@
      calendar isn't organized by coverage. */
   #cal-stats { max-width: var(--content-max); margin: 0 0 1rem; }
   #cal-stats .wstats-figures { display: none; }
-  /* "Units only": the stat-bar "N units" hides each unit's week grid, the
-     standalone break sections, and the add-unit button, leaving just unit heads. */
-  .cal-units-only .cal-unit > *:not(.cal-unit-head) { display: none; }
-  .cal-units-only .cal-break-section,
+  /* "Units only": the stat-bar "N units" hides each unit's week grid and the
+     add-unit button, leaving just unit heads -- but keeps the breaks (the
+     standalone break sections between units, and any break row inside a unit) so
+     the collapsed timeline still shows where the year pauses. */
+  .cal-units-only .cal-unit > *:not(.cal-unit-head):not(.cal-break) { display: none; }
   .cal-units-only .cal-addunit { display: none; }
   .cal-units-only .cal-unit { margin-bottom: .4rem; }
   .cal-warn { background: #fffaf0; border: 1px solid #f0dcc0; color: #8a5a14;
