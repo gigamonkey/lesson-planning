@@ -476,12 +476,59 @@ def _write_all_courses(t):
         plan_io.write_course(t["db"], c, os.path.join(t["repo"], c))
 
 
+def _diff_lines(text):
+    """Classify a unified diff into [{cls, text}] for the commit page's rendering:
+    `file`/`hunk` headers, `add`/`del` lines, `ctx` (context) for the rest."""
+    out = []
+    for line in text.splitlines():
+        if line.startswith(("diff --git", "index ", "--- ", "+++ ", "new file",
+                            "deleted file", "rename ", "similarity ", "old mode",
+                            "new mode")):
+            cls = "file"
+        elif line.startswith("@@"):
+            cls = "hunk"
+        elif line.startswith("+"):
+            cls = "add"
+        elif line.startswith("-"):
+            cls = "del"
+        else:
+            cls = "ctx"
+        out.append({"cls": cls, "text": line})
+    return out
+
+
+@app.route("/commit")
+def commit_page():
+    """The Commit page: a commit-message box on top and the diff that a commit would
+    make below. Reifies the latest db to files so the diff is current; if the files
+    changed on disk under us (an external pull), shows the conflict instead. Submits
+    to /save."""
+    back = request.referrer or url_for("index")
+    if back.rstrip("/").endswith("/commit"):   # a refresh: don't loop back here
+        back = url_for("index")
+    t = _git_target()
+    if not t:
+        flash("Nothing to commit here.")
+        return redirect(back)
+    conflict = collab.head_moved(t["repo"])
+    diff = []
+    if conflict:
+        collab.flag_conflict(t["repo"])
+    else:
+        _write_all_courses(t)            # reify so the diff reflects the live db
+        diff = _diff_lines(collab.working_diff(t["repo"]))
+    return render_template("commit.html", page_title="Commit changes", back=back,
+                           message=collab.suggest_message(t["key"], "Update courses"),
+                           diff=diff, conflict=conflict)
+
+
 @app.route("/save", methods=["POST"])
 def save_courses():
     """Reify the latest db state to the course files and COMMIT them with the
     user-supplied message; in collab mode push to GitHub immediately. The explicit
-    counterpart to the file-only autosave timer -- the one place a commit happens."""
-    back = redirect(request.referrer or url_for("index"))
+    counterpart to the file-only autosave timer -- the one place a commit happens.
+    Posted from the Commit page (with a `next` to return to)."""
+    back = redirect(request.form.get("next") or request.referrer or url_for("index"))
     t = _git_target()
     if not t:
         flash("Nothing to commit here.")
@@ -539,15 +586,6 @@ def savebar():
     return render_template("_savebar.html")
 
 
-@app.route("/save/suggestion")
-def save_suggestion():
-    """The suggested commit message for the Save dialog (the buffered edit phrases),
-    as plain text; an empty 204 when not git-backed."""
-    t = _git_target()
-    if not t:
-        return ("", 204)
-    return Response(collab.suggest_message(t["key"], "Update courses"),
-                    mimetype="text/plain")
 
 
 @app.route("/sync", methods=["POST"])

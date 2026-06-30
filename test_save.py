@@ -7,7 +7,7 @@ framework: run directly.
 Boots the app against a throwaway copy of examples/ (a non-repo, so app copies it
 into a disposable git repo -- never touches the real one) with the file-autosave
 timer disabled, and drives the test client to assert: edits don't auto-commit; the
-Save dialog's suggested message reflects the edits; /flush writes files without
+commit page's suggested message reflects the edits; /flush writes files without
 committing; /save commits (and is a no-op when clean); single-user /sync is
 lossless.
 """
@@ -50,10 +50,11 @@ def main():
     check("running in throwaway-demo local-git mode", app.DEMO_MODE and app.LOCAL_GIT)
     c = app.app.test_client()
 
-    check("savebar renders a Save button", b"save-btn" in c.get("/savebar").data)
+    bar = c.get("/savebar").data
+    check("savebar renders a Commit link to /commit", b"savebtn" in bar and b"/commit" in bar)
     check("not dirty before any edit", not app.collab.is_dirty("_local"))
-    check("clean suggestion is the fallback",
-          c.get("/save/suggestion").get_data(as_text=True) == "Update courses")
+    check("clean commit page says no changes",
+          "No changes to commit" in c.get("/commit").get_data(as_text=True))
 
     base_commits = _git("rev-list", "--count", "HEAD")
 
@@ -61,8 +62,9 @@ def main():
     c.post("/widgets/unit/new", data={})
     check("edit marks the workspace dirty", app.collab.is_dirty("_local"))
     check("savebar shows the dirty state", b"dirty" in c.get("/savebar").data)
-    check("suggestion reflects the edit",
-          "added a unit" in c.get("/save/suggestion").get_data(as_text=True))
+    page = c.get("/commit").get_data(as_text=True)
+    check("commit page suggests a message from the edit", "added a unit" in page)
+    check("commit page renders a diff", 'class="diff"' in page and "d-add" in page)
     check("edit did NOT auto-commit", _git("rev-list", "--count", "HEAD") == base_commits)
 
     # /flush writes the pending files to disk, still without committing.

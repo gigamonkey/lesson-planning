@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+  .commit-wrap { max-width: 72rem; }
+  .commit-form { display: flex; flex-direction: column; gap: .5rem; margin: 0 0 1.2rem; }
+  .commit-form label { font-weight: 600; font-size: .9rem; }
+  .commit-form textarea { font: inherit; width: 100%; box-sizing: border-box;
+        padding: .5rem .6rem; border: 1px solid var(--line); border-radius: 6px;
+        resize: vertical; }
+  .commit-actions { display: flex; gap: .8rem; align-items: center; }
+  .commit-actions .cancel { color: var(--muted); text-decoration: none; }
+  .commit-actions .cancel:hover { color: #333; }
+  .commit-clean { color: var(--muted); }
+  .commit-conflict { background: #fdecea; border: 1px solid #f5c2c0; color: #8a1f1a;
+        border-radius: 6px; padding: .6rem .8rem; margin: 0 0 1rem; }
+
+  /* A unified diff, one row per line, colored like a code host. */
+  .diff { border: 1px solid var(--line); border-radius: 6px; overflow: auto;
+        max-height: 70vh; background: #fff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: .78rem; line-height: 1.5; }
+  .diff .dl { white-space: pre; padding: 0 .7rem; }
+  .diff .d-file { background: #eef2f7; color: #2d3a4a; font-weight: 600;
+        border-top: 1px solid var(--line); }
+  .diff .dl.d-file:first-child { border-top: none; }
+  .diff .d-hunk { background: #eef4fc; color: #2b6cb0; }
+  .diff .d-add { background: #e6f6ea; color: #166534; }
+  .diff .d-del { background: #fdecee; color: #b3261e; }
+  .diff .d-ctx { color: #444; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="commit-wrap">
+  {% if conflict %}
+    <div class="commit-conflict">
+      The course files changed on disk (a pull?).
+      {{ 'Sync' if collab_enabled else 'Reload' }} to take the new version before
+      committing — your in-app edits since then would be lost.
+    </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('save_courses') }}" class="commit-form">
+    <input type="hidden" name="next" value="{{ back }}">
+    <label for="commit-message">Commit message</label>
+    <textarea id="commit-message" name="message" rows="3"
+              {% if not conflict and diff %}autofocus{% endif %}>{{ message }}</textarea>
+    <div class="commit-actions">
+      <button type="submit" class="primary"{% if conflict or not diff %} disabled{% endif %}>
+        {{ 'Commit &amp; push' | safe if collab_enabled else 'Commit' }}</button>
+      <a class="cancel" href="{{ back }}">Cancel</a>
+      {% if not conflict and not diff %}
+        <span class="commit-clean">No changes to commit.</span>
+      {% endif %}
+    </div>
+  </form>
+
+  {% if diff %}
+  <div class="diff">
+    {% for d in diff %}<div class="dl d-{{ d.cls }}">{{ d.text }}</div>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

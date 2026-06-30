@@ -518,6 +518,16 @@ def push_error(handle):
     return _push_failed.get(handle)
 
 
+def working_diff(repo_dir):
+    """Stage all changes and return the unified diff a commit would make right now
+    (new files included, shown as additions); '' when the tree is clean. Shares
+    _commit_lock so it can't race a concurrent commit/push on the same repo."""
+    with _commit_lock:
+        _git(["add", "-A"], cwd=repo_dir)
+        _code, out = _git(["diff", "--cached"], cwd=repo_dir)
+    return out
+
+
 def push_sync(handle):
     """Push the editor's branch now and return (ok, output) -- for Save, which
     reports the push result immediately instead of enqueueing for the worker."""

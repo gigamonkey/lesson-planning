@@ -2,13 +2,13 @@
    by the sidebar poll (/savebar) so the "unsaved" hint stays current as you edit
    (htmx swaps don't re-render the sidebar). Context (from inject_collab): can_edit,
    git_backed, dirty, conflict, collab_enabled, collab_pending, collab_push_error,
-   collab_branch_published. The Commit button opens #save-dialog (wired in base.html);
-   it's safe to re-render under the poll because that click is delegated. #}
+   collab_branch_published. The Commit button is a plain link to the /commit page
+   (message box + diff), so it's safe to re-render under the poll. #}
 {% if can_edit and git_backed %}
-  <button type="button" id="save-btn" class="savebtn{{ ' dirty' if dirty }}"
-          title="Commit your changes{{ ' and push to GitHub' if collab_enabled }}">
+  <a href="{{ url_for('commit_page') }}" class="savebtn{{ ' dirty' if dirty }}"
+     title="Review changes and commit{{ ' (and push to GitHub)' if collab_enabled }}">
     <i class="bi bi-floppy"></i> Commit{% if dirty %} <span class="savedot" aria-label="uncommitted changes">●</span>{% endif %}
-  </button>
+  </a>
   {% if conflict %}
     <div class="collabpending err" role="alert">
       <i class="bi bi-exclamation-triangle"></i>
