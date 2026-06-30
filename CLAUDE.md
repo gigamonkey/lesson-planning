@@ -59,7 +59,7 @@ format and `plans/markdown-as-storage.md` for the design.
 | `seed.py`              | Courses-directory loader: load each course directory in a courses directory (`plan_io.read_course`). `seed` skips courses already present (create-if-absent; run on startup); `load_courses`/`--all` reloads all. CLI: `uv run seed.py <courses-dir> [db]`. |
 | `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load every course in the courses directory. `--courses <dir>` (default `courses`). |
 | `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + durations + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the markdown courses directory. |
-| `calendar_view.py`     | Pure layout engine for the calendar view: given a `bells.BellSchedule` + a course's outline (units→weeks, lessons→days), lays units across the year's *teaching weeks* (loose; breaks skipped) and lessons into school days, returning a view model. No Flask/SQL. `load_calendar(id, dir)` loads a bells JSON. |
+| `calendar_view.py`     | Pure layout engine for the calendar view: given a `bells.BellSchedule` + a course's outline (units→weeks, lessons→days), lays units across the year's *teaching weeks* (loose; breaks skipped) and lessons into school days, returning a view model. No Flask/SQL. `load_calendar(id, dir)` loads a bells JSON. **Pinned units** (a unit's `pin` `{edge,week}`, from `node_pin`) anchor a unit's start/end on a school-week number: the layout is segmented around pins, so units that don't fit before a pin overflow and slack before a pin shows as an Unplanned gap. |
 | `validate.py`          | Internal-consistency checker for a course directory, on the **raw files** (no db) so it sees corruption before `read_course`'s lenient resolution hides it: every uuid slot is a real UUID (objectives.tsv/coverage.tsv `uuid`, each `lessons/*.md` `uuid:`), and every uuid reference resolves (coverage `uuid`→objective, plan.md bullet token→objective, lesson-heading token→lesson file, coverage `(hierarchy_id, node_id)`→reference node). `validate_course(dir)`→list of problem strings; `read_course` prints them as warnings on load; CLI `uv run validate.py <courses-dir>` checks a tree (non-zero exit if any). |
 
 ## Running
@@ -156,6 +156,15 @@ annotation API (`annotations_for_week`) and the canonical school-week numbering
 (`school_weeks`) — see `_week_badges` / `_weeks` in `calendar_view.py`. (This
 replaced the old out-of-band `calendar-extras/` sidecar once bells ≥ 0.8 / the
 `bhs-calendars` ≥ 2.10 data carried `annotations`.)
+
+A unit can be **pinned** to a school week via a `(starts week N)` / `(ends week N)`
+tag on its `# Unit:` heading (the last group, after the duration tag; see
+`FORMAT.md` §5). The pin is stored in the `node_pin` table and consumed by
+`build_calendar`, which anchors the unit on that week instead of flowing it
+sequentially — units that can't fit before a pin overflow, and slack before a pin
+becomes an Unplanned gap. Pins round-trip through `plan.md` (`hierarchy.split_pin`/
+`format_pin`, `plan_io.parse_plan`/`write_course`); setting a pin is markdown-only
+today (no dedicated UI button yet).
 
 ```bash
 # Rebuild the editor bundle after editing frontend/editor.js (needs Node/npm).

@@ -21,7 +21,7 @@
 -- The app stamps every db with this version (PRAGMA user_version) and, on startup,
 -- discards + rebuilds any db whose stamp doesn't match -- so a stale
 -- db.db from an older schema heals itself instead of 500ing.
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;
 
 -- Courses are the top-level organizing principle: a short human id (also the
 -- /<course> URL) and a title. Every hierarchy belongs to a course.
@@ -135,6 +135,22 @@ CREATE TABLE IF NOT EXISTS node_duration (
   node_id   TEXT NOT NULL,
   amount    REAL NOT NULL,            -- 2, 0.5, 18
   unit      TEXT NOT NULL,            -- 'week' | 'day' | 'hour' (stored singular)
+  PRIMARY KEY (course, hierarchy, node_id),
+  FOREIGN KEY (course, hierarchy, node_id) REFERENCES nodes(course, hierarchy, node_id)
+);
+
+-- A unit pinned to a calendar week: the outline layout anchors the unit's START
+-- or END on that school-week number instead of flowing it sequentially. Authored
+-- as a trailing unit-heading tag, e.g. '# Unit: Review (3 weeks) (ends week 35)'.
+-- Only outline units pin; one pin per node. `week` is the bells school-week number
+-- (an int); `edge` is 'start' | 'end'. Same positional-node-id + regenerated-each-
+-- load lifecycle as node_duration (units have positional ids '1','2',...).
+CREATE TABLE IF NOT EXISTS node_pin (
+  course    TEXT    NOT NULL,
+  hierarchy TEXT    NOT NULL,         -- bare slug (always the outline)
+  node_id   TEXT    NOT NULL,         -- the unit's positional id ('1', '2', ...)
+  week      INTEGER NOT NULL,         -- bells school-week number
+  edge      TEXT    NOT NULL,         -- 'start' | 'end'
   PRIMARY KEY (course, hierarchy, node_id),
   FOREIGN KEY (course, hierarchy, node_id) REFERENCES nodes(course, hierarchy, node_id)
 );

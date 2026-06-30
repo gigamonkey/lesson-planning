@@ -135,7 +135,9 @@ def _emit_front_matter(meta):
 def parse_plan(text):
     """Parse a plan.md into (meta, units, lessons, los, bullets).
 
-    units   : [(node_id, title, duration)]       positional ids "1", "2", ...
+    units   : [(node_id, title, duration, pin)]  positional ids "1", "2", ...
+              `pin` is {"edge": "start"|"end", "week": int} (a unit pinned to a
+              calendar week) or None.
     lessons : [(key, parent_unit_id, token|None, title, duration)] -- `key` is a
               positional parse handle ("1.1", "u.1") used only to wire bullets and
               legacy LOs to their lesson; `token` is the heading's identity token
@@ -175,12 +177,15 @@ def parse_plan(text):
                     continue
                 um = UNIT_RE.match(rest)
                 title = um.group(1) if um else rest
+                # The pin tag is the LAST trailing group (strip it first), then the
+                # duration tag, then the title.
+                title, pin = hierarchy.split_pin(title)
                 title, duration = hierarchy.split_duration(title)
                 unit_n += 1
                 lesson_n = 0
                 cur_unit = str(unit_n)
                 cur_lesson, in_pool, in_unassigned = None, False, False
-                units.append((cur_unit, title, duration))
+                units.append((cur_unit, title, duration, pin))
             elif depth == 2:
                 # Legacy: the pool used to be an H2 ("## Pool ..."); still
                 # accept it so older plan.md files load (re-render migrates it
@@ -248,23 +253,32 @@ def _set_duration(conn, course, hierarchy, node_id, duration):
                      (course, hierarchy, node_id, duration["amount"], duration["unit"]))
 
 
+def _set_pin(conn, course, hierarchy, node_id, pin):
+    if pin:
+        conn.execute("INSERT INTO node_pin(course, hierarchy, node_id, week, edge)"
+                     " VALUES (?, ?, ?, ?, ?)",
+                     (course, hierarchy, node_id, pin["week"], pin["edge"]))
+
+
 def _rebuild_outline_nodes(conn, course, outline, units, lessons):
     """Insert the outline's unit nodes (positional ids "1", "2", ...) and lesson
-    nodes (stable uuid node_ids), plus any unit/lesson durations. Lesson CONTENT
+    nodes (stable uuid node_ids), plus any unit/lesson durations and unit pins.
+    Lesson CONTENT
     (the node_attr parts, including the learning objective) is applied separately by
     the caller -- loaded from the lesson files (read_course) or preserved across the
     edit (load_plan_text). `lessons` is [(uuid, parent_unit_id, title, duration)].
     The caller has already cleared the outline's nodes/node_attr/node_duration."""
     ordinal = 0
-    unit_has_lesson = {u: False for u, _, _ in units}
+    unit_has_lesson = {u: False for u, _, _, _ in units}
     for _, parent, _, _ in lessons:
         if parent in unit_has_lesson:
             unit_has_lesson[parent] = True
-    for uid, utitle, duration in units:
+    for uid, utitle, duration, pin in units:
         conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                      (course, outline, uid, None, "unit",
                       0 if unit_has_lesson[uid] else 1, ordinal, utitle))
         _set_duration(conn, course, outline, uid, duration)
+        _set_pin(conn, course, outline, uid, pin)
         ordinal += 1
     for uuid, parent, ltitle, duration in lessons:
         conn.execute("INSERT INTO nodes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -365,7 +379,7 @@ def read_course(db_path, course_dir):
         # this course's rows is a flat per-table delete. Children before parents
         # (coverage/attrs/durations before nodes; nodes before hierarchies) so the
         # deletes themselves satisfy the foreign keys.
-        for tbl in ("coverage", "node_attr", "node_duration", "nodes",
+        for tbl in ("coverage", "node_attr", "node_duration", "node_pin", "nodes",
                     "hierarchy_targets", "course_objectives", "objectives", "hierarchies"):
             conn.execute(f"DELETE FROM {tbl} WHERE course=?", (course,))
         conn.execute(
@@ -557,7 +571,7 @@ def load_plan_text(db_path, course, text):
 
         # Reset ONLY the outline + the pool; reference hierarchies and their
         # coverage edges are not represented in plan.md, so they stay as they are.
-        for tbl in ("coverage", "node_attr", "node_duration", "nodes"):
+        for tbl in ("coverage", "node_attr", "node_duration", "node_pin", "nodes"):
             conn.execute(f"DELETE FROM {tbl} WHERE course=? AND hierarchy=?", (course, outline))
         conn.execute("DELETE FROM hierarchy_targets WHERE course=? AND outline=?",
                      (course, outline))
@@ -748,6 +762,9 @@ def render_course(conn, course):
     dur_of = {r["node_id"]: {"amount": r["amount"], "unit": r["unit"]}
               for r in conn.execute("SELECT node_id, amount, unit FROM node_duration"
                                     " WHERE course=? AND hierarchy=?", (course, outline))}
+    pin_of = {r["node_id"]: {"week": r["week"], "edge": r["edge"]}
+              for r in conn.execute("SELECT node_id, week, edge FROM node_pin"
+                                    " WHERE course=? AND hierarchy=?", (course, outline))}
     # All lesson content (every node_attr part), for the lesson files.
     attrs = {}    # lesson node_id -> {part_name: value}
     for r in conn.execute("SELECT node_id, name, value FROM node_attr"
@@ -798,8 +815,11 @@ def render_course(conn, course):
             out.append("")
 
     for u in units:
-        # rstrip first (a unit may be untitled), then append any "(N weeks)" tag.
-        out.append(f"# Unit: {u['text']}".rstrip() + hierarchy.format_duration(dur_of.get(u["node_id"])))
+        # rstrip first (a unit may be untitled), then append any "(N weeks)" tag and
+        # then any pin tag (the pin is the last group on the line).
+        out.append(f"# Unit: {u['text']}".rstrip()
+                   + hierarchy.format_duration(dur_of.get(u["node_id"]))
+                   + hierarchy.format_pin(pin_of.get(u["node_id"])))
         out.append("")
         # Unit-level "rough" placements: bullets directly under the unit heading,
         # before its lessons (parse_plan reads these back as placed on the unit).
@@ -969,7 +989,7 @@ def import_structure(conn, course, outline, reference):
         cov.setdefault(r["node_id"], []).append(r["uuid"])
 
     # Replace the outline's structure wholesale.
-    for tbl in ("coverage", "node_attr", "nodes"):
+    for tbl in ("coverage", "node_attr", "node_pin", "nodes"):
         conn.execute(f"DELETE FROM {tbl} WHERE course=? AND hierarchy=?", (course, outline))
 
     placed = set()   # global: each objective lands in exactly one lesson/unit

@@ -68,6 +68,33 @@ def format_duration(duration):
     return f" ({amount} {unit})"
 
 
+# A trailing pin tag on an outline UNIT heading, e.g. "… (starts week 1)",
+# "… (ends week 35)": it anchors the unit's start/end on a calendar school-week
+# number instead of flowing it sequentially (see calendar_view + FORMAT.md). It is
+# the LAST parenthesized group on the line (after any duration tag), and the
+# keyword ("starts"/"ends") keeps it distinct from a "(N weeks)" duration.
+PIN_RE = re.compile(r"\s*\((starts|ends)\s+week\s+(\d+)\)\s*$")
+
+
+def split_pin(head):
+    """Split a trailing pin tag off a heading line.
+
+    Returns (clean_head, pin) where pin is {"edge": "start"|"end", "week": int} or
+    None. Only units pin; strip the pin BEFORE the duration (pin is the last group)."""
+    m = PIN_RE.search(head or "")
+    if not m:
+        return head, None
+    return head[:m.start()].rstrip(), {
+        "edge": "start" if m.group(1) == "starts" else "end", "week": int(m.group(2))}
+
+
+def format_pin(pin):
+    """Inverse of split_pin: " (starts week N)" / " (ends week N)", or "" for None."""
+    if not pin:
+        return ""
+    return f" ({'starts' if pin['edge'] == 'start' else 'ends'} week {pin['week']})"
+
+
 # Version of the node-list document emitted by to_nodes (see FORMAT.md).
 # Semantic versioning: bump major for any breaking change to an existing field or
 # guarantee; minor for backward-compatible additions (e.g. a new field).

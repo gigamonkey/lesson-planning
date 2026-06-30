@@ -165,18 +165,24 @@ def _week_cells(week, assign, labels):
     return cells
 
 
-def _consume(weeks, idx, unit, greedy=False):
+def _consume(weeks, idx, unit, greedy=False, max_idx=None):
     """Consume the school weeks one unit gets, starting at weeks[idx]. A unit with
     an explicit `weeks` count takes that many SCHOOL weeks (breaks pass through,
     uncounted). A unit with no count takes just enough school weeks to hold its
     lessons' days (min one) -- unless `greedy`, in which case it takes ALL remaining
     weeks to the end of the year (the last outline unit, so a no-week-count final
     unit becomes a real, lesson-holding "rest of the year" catch-all). Returns
-    (unit_weeks, next_idx, derived)."""
+    (unit_weeks, next_idx, derived).
+
+    `max_idx` caps how far into `weeks` the unit may reach -- the start index of the
+    next pinned unit, or len(weeks). A unit that hits the cap stops there, so its
+    unplaced lessons overflow: this is how "too many units before a pinned unit" is
+    rendered (the segment runs out of room and the tail units overflow)."""
+    limit = len(weeks) if max_idx is None else min(len(weeks), max_idx)
     taken, derived = [], False
     if unit["weeks"]:
         remaining = unit["weeks"]
-        while remaining > 0 and idx < len(weeks):
+        while remaining > 0 and idx < limit:
             w = weeks[idx]; idx += 1
             taken.append(w)
             if not w["is_break"]:
@@ -186,8 +192,8 @@ def _consume(weeks, idx, unit, greedy=False):
         need = max(1, sum(L["days"] for L in unit["lessons"]))
         have = 0
         # Greedy (last unit): take everything left. Otherwise take at least one
-        # school week and keep going until the lessons fit.
-        while idx < len(weeks) and (greedy or have == 0 or have < need):
+        # school week and keep going until the lessons fit -- but never past `limit`.
+        while idx < limit and (greedy or have == 0 or have < need):
             w = weeks[idx]; idx += 1
             taken.append(w)
             have += 0 if w["is_break"] else len(w["days"])
@@ -307,8 +313,8 @@ def build_calendar(bs, data, units):
         if lead:
             out_units.append({"break_section": True, "rows": [_break_row(w) for w in lead]})
 
-    def emit_unit(unit, unplanned=False, greedy=False):
-        taken, idx[0], derived = _consume(weeks, idx[0], unit, greedy=greedy)
+    def emit_unit(unit, unplanned=False, greedy=False, max_idx=None):
+        taken, idx[0], derived = _consume(weeks, idx[0], unit, greedy=greedy, max_idx=max_idx)
         # Labeled days (exams etc.) aren't bookable -- exclude them so lessons
         # flow onto the unit's plain school days only.
         sdays = [d for w in taken if not w["is_break"] for d in w["days"] if d not in labels]
@@ -350,19 +356,88 @@ def build_calendar(bs, data, units):
         out_units.append({"break_section": False, "unplanned": unplanned,
                           "node_id": unit.get("node_id"), "title": unit["title"],
                           "weeks": unit["weeks"], "derived": derived, "overflow": overflow,
+                          "pin": unit.get("pin"),
                           "weeks_shown": sum(1 for w in taken if not w["is_break"]),
                           "free_days": len(sdays) - i, "rows": rows})
+
+    # --- Pins: resolve each pinned unit to the school-week INDEX it must START at.
+    # `weeknum_index` maps a bells school-week number to its index in `weeks`; an
+    # 'end' pin walks back the unit's span from the end week. An unresolvable week
+    # (past year-end, or a break) drops the pin with a warning (sequential fallback).
+    pin_warnings = []
+    weeknum_index = {w["number"]: i for i, w in enumerate(weeks) if not w["is_break"]}
+
+    def resolve_anchor(unit):
+        pin = unit.get("pin")
+        if not pin:
+            return None
+        end_i = weeknum_index.get(pin["week"])
+        if end_i is None:
+            pin_warnings.append(f"Unit “{unit['title']}” is pinned to week "
+                                f"{pin['week']}, which isn’t a school week; ignoring the pin.")
+            return None
+        if pin["edge"] == "start":
+            return end_i
+        # 'end': walk back over school weeks from end_i until the unit's span is met.
+        if unit["weeks"]:
+            need, by = math.ceil(unit["weeks"]), "weeks"
+        else:
+            need, by = max(1, sum(L["days"] for L in unit["lessons"])), "days"
+        have, t, i = 0, end_i, end_i
+        while i >= 0:
+            if not weeks[i]["is_break"]:
+                have += 1 if by == "weeks" else len(weeks[i]["days"])
+                t = i
+                if have >= need:
+                    break
+            i -= 1
+        return t
 
     # The last EMITTED no-count unit absorbs all remaining weeks to year-end -- a
     # first-class, lesson-holding catch-all rather than the synthetic tail below.
     # (A unit explicitly set to 0 weeks is omitted from the calendar entirely.)
     emitted = [i for i, u in enumerate(units) if u["weeks"] != 0]
     last_emit = emitted[-1] if emitted else None
+
+    # Anchor start index per emitted, pinned, resolvable unit; and each unit's
+    # boundary = the start index of the NEXT anchored unit (else year-end). A unit
+    # can't reach past its boundary, so a segment's surplus units overflow at the pin.
+    anchor = {i: resolve_anchor(units[i]) for i in emitted}
+    anchor = {i: t for i, t in anchor.items() if t is not None}
+    next_anchor_T, nxt = {}, len(weeks)
+    for i in reversed(range(len(units))):
+        next_anchor_T[i] = nxt
+        if i in anchor:
+            nxt = anchor[i]
+
+    def advance_to(target):
+        # Emit any breaks at the cursor, then an "Unplanned" gap so the cursor
+        # reaches `target` (the next pin's start) -- slack the units left before it.
+        emit_leading_breaks()
+        gap = sum(1 for w in weeks[idx[0]:target] if not w["is_break"])
+        if gap > 0:
+            emit_unit({"title": "Unplanned", "weeks": gap, "lessons": []}, unplanned=True)
+        emit_leading_breaks()
+
     for i, unit in enumerate(units):
         if unit["weeks"] == 0:
             continue
-        emit_leading_breaks()
-        emit_unit(unit, greedy=(i == last_emit and not unit["weeks"]))
+        if i in anchor:
+            T = anchor[i]
+            if idx[0] < T:
+                advance_to(T)              # slack before the pin -> unplanned gap
+            if idx[0] > T:                 # earlier units overran this pin
+                pin_warnings.append(f"Unit “{unit['title']}” is pinned to week "
+                    f"{unit['pin']['week']} but earlier units overrun it; "
+                    f"placing it as soon as there’s room.")
+            else:
+                idx[0] = T
+            emit_leading_breaks()
+            emit_unit(unit, max_idx=next_anchor_T[i])   # a pinned unit is never greedy
+        else:
+            emit_leading_breaks()
+            greedy = (i == last_emit and not unit["weeks"])
+            emit_unit(unit, greedy=greedy, max_idx=next_anchor_T[i])
 
     # Run the calendar out to the end of the year: any school weeks the units
     # didn't claim go in ONE synthetic "Unplanned" section (header shows the count).
@@ -374,7 +449,7 @@ def build_calendar(bs, data, units):
         emit_unit({"title": "Unplanned", "weeks": remaining, "lessons": []}, unplanned=True)
     emit_leading_breaks()   # any trailing breaks
 
-    warnings = []
+    warnings = list(pin_warnings)
     requested = _requested_weeks(units, weeks)
     if requested > school_total:
         warnings.append(f"Units ask for more weeks than the year has "

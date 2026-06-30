@@ -1908,13 +1908,16 @@ def plan(course):
 
 def _outline_units(conn, course):
     """The course outline as ordered units for the calendar: each
-    {title, weeks (float|None), lessons: [{node_id, title, days (int)}]}. Lessons not under
-    a unit are omitted (the calendar lays out units)."""
+    {title, weeks (float|None), pin ({edge, week}|None), lessons: [{node_id, title,
+    days (int)}]}. Lessons not under a unit are omitted (the calendar lays out units)."""
     O = outline_hierarchy(conn, course)
     if not O:
         return []
     durs = {nid: (amt, unit) for nid, amt, unit in conn.execute(
         "SELECT node_id, amount, unit FROM node_duration WHERE course=? AND hierarchy=?",
+        (course, O))}
+    pins = {nid: {"edge": edge, "week": week} for nid, week, edge in conn.execute(
+        "SELECT node_id, week, edge FROM node_pin WHERE course=? AND hierarchy=?",
         (course, O))}
     nodes = conn.execute("SELECT node_id, parent_id, level, text FROM nodes "
                          "WHERE course=? AND hierarchy=? ORDER BY ordinal", (course, O)).fetchall()
@@ -1935,7 +1938,7 @@ def _outline_units(conn, course):
             lessons.append({"node_id": L["node_id"],
                             "title": L["text"] or "Untitled lesson", "days": days})
         units.append({"node_id": n["node_id"], "title": n["text"] or "Untitled unit",
-                      "weeks": weeks, "lessons": lessons})
+                      "weeks": weeks, "pin": pins.get(n["node_id"]), "lessons": lessons})
     return units
 
 

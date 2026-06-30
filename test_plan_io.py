@@ -364,6 +364,23 @@ def main():
             "duration rows not stored as expected"
         assert added >= 1, "test setup: no unit/lesson heading found to tag"
 
+        # 8. A unit pin round-trips through the editor loader and reaches node_pin.
+        #    The pin tag is the LAST group, after the duration -- so a unit can carry
+        #    both "(2 weeks) (ends week 35)" and both must survive a render.
+        base3 = _render(db)
+        lines3 = base3.splitlines()
+        for i, l in enumerate(lines3):
+            if l.startswith("# Unit:"):   # the one already tagged "(2 weeks)" in step 7
+                lines3[i] = l + " (ends week 35)"
+                break
+        else:
+            raise AssertionError("test setup: no unit heading found to pin")
+        src3 = "\n".join(lines3) + "\n"
+        plan_io.load_plan_text(db, "widgets", src3)
+        assert _render(db) == src3, "the pin tag did not round-trip through the editor loader"
+        assert _count(db, "SELECT count(*) FROM node_pin WHERE week=35 AND edge='end'") == 1, \
+            "the pin was not stored in node_pin"
+
     print("ok - all plan_io / load_plan_text checks passed")
 
 

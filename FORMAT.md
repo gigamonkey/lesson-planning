@@ -246,6 +246,34 @@ The tag is the **last** parenthesized group on the line (on a lesson heading, th
 last one before the identity token), and only when it matches
 `(<number> weeks|days|hours)` — an incidental `(HL only)` in a title is left alone.
 
+### 5. Pins (unit → calendar week)
+
+An **outline unit** heading may additionally carry a **pin tag** that anchors the
+unit to a specific school week in the calendar view, instead of letting it flow
+sequentially. This expresses facts like "the Review unit ends on the exam week":
+
+```markdown
+# Unit: Orientation (1 week) (starts week 1)
+# Unit: Review (3 weeks) (ends week 35)
+```
+
+- The tag is `(starts week N)` or `(ends week N)`, where `N` is a **bells
+  school-week number** (the same numbering the calendar shows and its AP/IB/grading
+  annotations use). `starts` anchors the unit's first week; `ends` anchors its last.
+- It is the **very last** parenthesized group on the line — **after** the duration
+  tag (`(2 weeks)`), so a unit may carry both. The keyword (`starts`/`ends`) keeps
+  it distinct from a `(N weeks)` duration. Parse order is the inverse of emit:
+  strip the pin, then the duration, then the title.
+- Pins are stored in the `node_pin` table (`week`, `edge`) and re-emitted on save.
+  **Only outline units pin** — lessons flow within their unit, and references never
+  pin.
+
+In the calendar view (`calendar_view.build_calendar`), a pinned unit is a fixed
+anchor: the units before it are laid into the weeks up to the pin, so **too many
+units before a pin overflow** (no room to fit them), and **slack before a pin**
+shows as an Unplanned gap. A pin to a week that isn't a school week (or out of
+range) is dropped with a warning and the unit falls back to sequential placement.
+
 ## Lesson plans
 
 Each outline lesson is a **lesson plan**: a first-class entity stored as its own

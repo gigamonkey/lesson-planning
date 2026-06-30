@@ -177,6 +177,61 @@ def main():
     canonical = [(w["monday"], w["number"]) for w in bs6.school_weeks()]
     assert layout == canonical, (layout, canonical)
 
+    # --- Pinned units. An eight clean Mon-Fri week calendar (Sep 1 - Oct 24 2025),
+    # school weeks numbered 1..8.
+    data8 = dict(DATA, lastDay="2025-10-24", holidays=[], breakNames={})
+    bs8 = bells.BellSchedule([data8], {"role": "student"})
+    assert cv.build_calendar(bs8, data8, [])["school_weeks"] == 8
+
+    weeknums = lambda u: [r["number"] for r in u["rows"] if r["kind"] == "week"]
+    named = lambda v, t: next(u for u in v["units"] if u.get("title") == t)
+
+    # (a) An end-pinned 2-week unit lands on the last two weeks; the slack before it
+    # becomes an Unplanned section.
+    pa = cv.build_calendar(bs8, data8, [
+        {"title": "U1", "weeks": None, "lessons": [{"node_id": "a", "title": "A", "days": 1}]},
+        {"title": "Review", "weeks": 2, "pin": {"edge": "end", "week": 8},
+         "lessons": [{"node_id": "r", "title": "R", "days": 1}]}])
+    assert weeknums(named(pa, "Review")) == [7, 8], named(pa, "Review")
+    assert any(u.get("unplanned") for u in pa["units"]), "slack before a pin -> Unplanned"
+
+    # (b) An auto-sized end-pinned unit walks its lessons' days back from the end.
+    pb = cv.build_calendar(bs8, data8, [
+        {"title": "Review", "weeks": None, "pin": {"edge": "end", "week": 8},
+         "lessons": [{"node_id": "r", "title": "R", "days": 7}]}])
+    rev = named(pb, "Review")
+    assert weeknums(rev) == [7, 8] and not rev["overflow"], rev
+
+    # (c) A start-pinned unit begins exactly on its week.
+    pc = cv.build_calendar(bs8, data8, [
+        {"title": "U1", "weeks": None, "lessons": [{"node_id": "a", "title": "A", "days": 1}]},
+        {"title": "P", "weeks": 1, "pin": {"edge": "start", "week": 5}, "lessons": []}])
+    assert weeknums(named(pc, "P")) == [5], named(pc, "P")
+
+    # (d) Too many units before a pin: the surplus unit can't fit and overflows,
+    # while the pinned unit still lands on its weeks.
+    pd = cv.build_calendar(bs8, data8, [
+        {"title": "U1", "weeks": 4, "lessons": []},
+        {"title": "U2", "weeks": 4, "lessons": [{"node_id": "x", "title": "X", "days": 15}]},
+        {"title": "Review", "weeks": 2, "pin": {"edge": "end", "week": 8}, "lessons": []}])
+    assert named(pd, "U2")["overflow"], "U2 is squeezed before the pin and overflows"
+    assert weeknums(named(pd, "Review")) == [7, 8], named(pd, "Review")
+
+    # (e) A pin to a non-existent week is dropped with a warning; the unit falls back
+    # to sequential placement.
+    pe = cv.build_calendar(bs8, data8, [
+        {"title": "U1", "weeks": 1, "lessons": []},
+        {"title": "P", "weeks": 1, "pin": {"edge": "start", "week": 99}, "lessons": []}])
+    assert any("school week" in w for w in pe["warnings"]), pe["warnings"]
+    assert weeknums(named(pe, "P")) == [2], named(pe, "P")
+
+    # (f) Out-of-order pins (a later unit pinned earlier than an earlier one) warn.
+    pf = cv.build_calendar(bs8, data8, [
+        {"title": "A", "weeks": 1, "lessons": []},
+        {"title": "P1", "weeks": 1, "pin": {"edge": "start", "week": 6}, "lessons": []},
+        {"title": "P2", "weeks": 1, "pin": {"edge": "start", "week": 3}, "lessons": []}])
+    assert any("overrun" in w for w in pf["warnings"]), pf["warnings"]
+
     print("ok - all calendar_view checks passed")
 
 
