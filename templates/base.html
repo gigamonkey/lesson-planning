@@ -668,8 +668,8 @@
       </div>
       {% if not collab_enabled and can_edit %}
       {# Save commits the course files (edits autosave to disk continuously; this is
-         the explicit commit). Sync reloads every course from the git-tracked files
-         on disk -- do the git pull yourself. #}
+         the explicit commit). Reload re-reads every course from the git-tracked
+         files on disk -- do the git pull yourself. #}
       <div class="collabbar">
         <div id="savebar" class="savebar" hx-get="{{ url_for('savebar') }}"
              hx-trigger="every 5s" hx-swap="innerHTML">
@@ -678,7 +678,7 @@
         <div class="collabacts">
           <form method="post" action="{{ url_for('sync_courses') }}" class="collabsync">
             <button type="submit" title="Reload courses from the files on disk">
-              <i class="bi bi-arrow-repeat"></i> Sync</button>
+              <i class="bi bi-arrow-repeat"></i> Reload</button>
           </form>
         </div>
       </div>
