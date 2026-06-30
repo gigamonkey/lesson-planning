@@ -1,14 +1,22 @@
 {# Save button + live save/push status. Rendered inline in base.html and re-fetched
    by the sidebar poll (/savebar) so the "unsaved" hint stays current as you edit
    (htmx swaps don't re-render the sidebar). Context (from inject_collab): can_edit,
-   git_backed, dirty, collab_enabled, collab_pending, collab_push_error,
-   collab_branch_published. The Save button opens #save-dialog (wired in base.html);
+   git_backed, dirty, conflict, collab_enabled, collab_pending, collab_push_error,
+   collab_branch_published. The Commit button opens #save-dialog (wired in base.html);
    it's safe to re-render under the poll because that click is delegated. #}
 {% if can_edit and git_backed %}
   <button type="button" id="save-btn" class="savebtn{{ ' dirty' if dirty }}"
           title="Commit your changes{{ ' and push to GitHub' if collab_enabled }}">
     <i class="bi bi-floppy"></i> Commit{% if dirty %} <span class="savedot" aria-label="uncommitted changes">●</span>{% endif %}
   </button>
+  {% if conflict %}
+    <div class="collabpending err" role="alert">
+      <i class="bi bi-exclamation-triangle"></i>
+      The course files changed on disk —
+      {{ 'Sync' if collab_enabled else 'Reload' }} to take the new version
+      (your in-app edits since then will be lost).
+    </div>
+  {% endif %}
   {% if collab_enabled and collab_pending %}
     <div class="collabpending {{ 'err' if collab_push_error else '' }}">
       {% if collab_push_error %}

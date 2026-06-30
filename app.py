@@ -345,6 +345,12 @@ def _autocommit_edit(resp):
             repo, db = t["repo"], t["db"]
 
             def flush(c, repo=repo, db=db):
+                # Don't clobber files that changed under us (an external pull): skip
+                # the write and flag a conflict for the UI to surface. The edit stays
+                # in the db; Reload resolves it by taking the disk version.
+                if collab.head_moved(repo):
+                    collab.flag_conflict(repo)
+                    return
                 plan_io.write_course(db, c, os.path.join(repo, c))
 
             collab.schedule_autosave(t["key"], t["delay"], course, flush)
@@ -360,7 +366,8 @@ def inject_collab():
         # FILES on a timer, but committing is the explicit Save button.
         return {"collab_enabled": False, "can_edit": True, "collab_user": None,
                 "git_backed": LOCAL_GIT,
-                "dirty": LOCAL_GIT and collab.is_dirty("_local")}
+                "dirty": LOCAL_GIT and collab.is_dirty("_local"),
+                "conflict": LOCAL_GIT and collab.has_conflict(COURSES_ROOT)}
     editor = getattr(g, "editor", False)
     handle = getattr(g, "handle", None)
     published, pending = collab.push_status(handle) if editor and handle else (True, 0)
@@ -369,6 +376,8 @@ def inject_collab():
         "git_backed": editor,
         "can_edit": editor,
         "dirty": editor and handle and collab.is_dirty(handle),
+        "conflict": bool(editor and getattr(g, "courses_root", None)
+                         and collab.has_conflict(g.courses_root)),
         "collab_user": getattr(g, "user", None),
         "collab_role": getattr(g, "role", None),
         "collab_pending": pending,
@@ -477,6 +486,14 @@ def save_courses():
     if not t:
         flash("Nothing to commit here.")
         return back
+    # Files changed under us (an external pull)? Committing would write the db over
+    # them -- refuse and point at Reload (which takes the disk version).
+    if collab.head_moved(t["repo"]):
+        collab.flag_conflict(t["repo"])
+        flash("The course files changed on disk (a pull?). "
+              + ("Sync" if collab.enabled() else "Reload")
+              + " to take the new version first — your in-app edits since then will be lost.")
+        return back
     message = (request.form.get("message") or "").strip() \
         or collab.suggest_message(t["key"], "Update courses")
     _write_all_courses(t)
@@ -511,9 +528,14 @@ def flush_courses():
 
 @app.route("/savebar")
 def savebar():
-    """The Save button + live status fragment, polled by the sidebar so the 'unsaved'
-    hint stays current after htmx edits (which don't re-render the sidebar). Both
-    modes; empty for non-editors."""
+    """The Commit button + live status fragment, polled by the sidebar so the
+    'uncommitted' hint stays current after htmx edits (which don't re-render the
+    sidebar). The poll also proactively notices an external change (a pull moved
+    HEAD) so the conflict warning shows within a poll even before the next edit.
+    Both modes; empty for non-editors."""
+    t = _git_target()
+    if t and collab.head_moved(t["repo"]):
+        collab.flag_conflict(t["repo"])
     return render_template("_savebar.html")
 
 
@@ -540,11 +562,13 @@ def sync_courses():
             abort(403)
         u = g.user
         t = _git_target()
-        # Flush pending writes so the dirty check sees the true state, then refuse if
+        # Flush pending writes so the dirty check sees the true state (unless the
+        # tree already moved under us -- then don't clobber it), then refuse if
         # anything is uncommitted: Sync only pulls others' work; committing is Save.
-        _write_all_courses(t)
+        if not collab.head_moved(t["repo"]):
+            _write_all_courses(t)
         if collab.has_uncommitted(g.courses_root):
-            flash("You have unsaved changes — Save them before syncing.")
+            flash("You have unsaved changes — Commit them before syncing.")
             return back
         try:
             result = collab.sync(u["handle"], u.get("name"), u.get("email"))
@@ -557,8 +581,10 @@ def sync_courses():
             flash(result["message"])
         return back
     # Single-user: flush db -> files first (so unsaved edits aren't lost to the
-    # reload), then re-read whatever's on disk.
-    if (t := _git_target()):
+    # reload) -- UNLESS the files changed under us (an external pull), in which case
+    # Reload is the resolution: take the disk version, don't clobber it.
+    t = _git_target()
+    if t and not collab.head_moved(t["repo"]):
         _write_all_courses(t)
     try:
         dirs = seed_module.course_dirs(courses_root())
@@ -566,6 +592,7 @@ def sync_courses():
     except (OSError, ValueError) as e:
         flash(f"Couldn't reload from git: {e}")
         return back
+    collab.remember_head(courses_root())   # db now reflects disk at the current HEAD
     names = ", ".join(os.path.basename(d) for d in dirs) or "none"
     flash(f"Reloaded {len(dirs)} course(s) from git: {names}")
     return back
@@ -2331,6 +2358,9 @@ else:
     if os.path.isdir(COURSES_ROOT):
         try:
             rebuild_db.rebuild(DB_PATH, SCHEMA_PATH, COURSES_ROOT)
+            # Baseline for the external-change guard: the db now reflects the
+            # courses repo at its current HEAD.
+            collab.remember_head(COURSES_ROOT)
         except Exception as e:  # a broken courses directory must not stop the app booting
             print(f"rebuild: failed ({e}); falling back to an empty db", file=sys.stderr)
             ensure_schema()

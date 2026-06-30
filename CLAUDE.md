@@ -111,10 +111,15 @@ just commits. Routes: `/save` (commit + push), `/flush` (write pending files now
 called via a `beforeunload` beacon), `/save/suggestion` (the dialog default),
 `/savebar` (the polled Save-button + status fragment, `_savebar.html`). A dirty
 flag (`collab.mark_dirty`/`is_dirty`, keyed by handle or `"_local"`) drives the
-Save button's "unsaved" hint; `git status` (`collab.has_uncommitted`) is the truth
-at Save/Sync time. **Sync** only pulls others' work: collab merges `origin/main`
-(and refuses while there are uncommitted edits — Save first); single-user reloads
-every course from disk (lossless — it flushes first). `commit_repo` (the shared
+Commit button's "uncommitted" hint; `git status` (`collab.has_uncommitted`) is the
+truth at Save/Sync time. **Sync/Reload** only pulls others' work: collab merges
+`origin/main` (and refuses while there are uncommitted edits — Commit first);
+single-user **Reload** re-reads every course from disk (lossless — it flushes
+first). An **external-change guard** (`collab.remember_head`/`head_moved`/
+`flag_conflict`, recorded whenever the db is built from a repo or we commit to it)
+stops a `git pull` that moved HEAD under us from being clobbered: the autosave
+skips, Commit refuses, and the conflict warning points at Reload, which takes the
+disk version. `commit_repo` (the shared
 stage-add-commit-maybe-push primitive) lives in `collab.py`; `app.py`'s
 `_git_target()` picks per-mode (repo, db, author, key, delay), `apply_structural`
 reifies structural ops to disk without committing, and `git_backed()` gates the

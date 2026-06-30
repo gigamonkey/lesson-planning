@@ -260,6 +260,9 @@ def rebuild_db(handle):
                 os.remove(tmp)
             raise RuntimeError(f"courses directory failed to load: {e}") from None
         os.replace(tmp, final)
+    # The db now reflects the worktree at its current HEAD -- record it as the
+    # external-change baseline (covers first bind and post-sync rebuilds).
+    remember_head(courses_root)
 
 
 # --------------------------------------------------------------------------
@@ -390,6 +393,51 @@ def is_dirty(key):
 
 
 # --------------------------------------------------------------------------
+# External-change guard: the db reflects a repo at a known HEAD (recorded when we
+# load the db from it or commit to it). If HEAD later differs, the files changed
+# under us -- a `git pull`/checkout -- and writing the db back would clobber them.
+# So the autosave skips, Commit refuses, and Reload takes the disk version. This is
+# HEAD-level (the common case is a pull); an uncommitted external hand-edit, with no
+# new commit, isn't detected.
+_repo_head = {}        # realpath(repo_dir) -> the HEAD sha the db reflects
+_conflict = set()      # realpath(repo_dir)s where an external HEAD move was seen
+_head_guard = threading.Lock()
+
+
+def _head_sha(repo_dir):
+    code, out = _git(["rev-parse", "HEAD"], cwd=repo_dir)
+    return out.strip() if code == 0 else None
+
+
+def remember_head(repo_dir):
+    """Record the repo's current HEAD as the state the db reflects -- after loading
+    the db from it, or committing to it -- and clear any prior conflict for it."""
+    rp = os.path.realpath(repo_dir)
+    with _head_guard:
+        _repo_head[rp] = _head_sha(repo_dir)
+        _conflict.discard(rp)
+
+
+def head_moved(repo_dir):
+    """True if the repo's HEAD differs from what the db reflects (the files changed
+    under us). False when no baseline was ever recorded (nothing to compare)."""
+    rp = os.path.realpath(repo_dir)
+    with _head_guard:
+        known = _repo_head.get(rp)
+    return known is not None and _head_sha(repo_dir) != known
+
+
+def flag_conflict(repo_dir):
+    with _head_guard:
+        _conflict.add(os.path.realpath(repo_dir))
+
+
+def has_conflict(repo_dir):
+    with _head_guard:
+        return os.path.realpath(repo_dir) in _conflict
+
+
+# --------------------------------------------------------------------------
 # Commit + push
 # --------------------------------------------------------------------------
 
@@ -415,6 +463,9 @@ def commit_repo(repo_dir, message, author=None, push_key=None):
             return None   # nothing staged
         msg = message() if callable(message) else message
         _git(["commit", "-m", msg], cwd=repo_dir, check=True, author=author)
+        # Our own commit advanced HEAD; rebase the external-change baseline onto it
+        # so the next autosave doesn't mistake our commit for someone else's.
+        remember_head(repo_dir)
     if push_key:
         enqueue_push(push_key)
     return msg.splitlines()[0]
