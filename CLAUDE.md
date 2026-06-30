@@ -40,7 +40,7 @@ format and `plans/markdown-as-storage.md` for the design.
   `LESSON_COURSES_DIR` to point at a git repo (a courses-repo checkout, e.g. the
   sibling `../bhs-cs-courses`); collab mode uses the git clone on the volume. A
   plain (non-repo) dir like `examples/` is copied into a throwaway git repo at
-  startup so the demo still autosaves + commits.
+  startup so the demo still autosaves to files + can be Saved (committed).
 - `examples/` — a courses directory with one synthetic course, `examples/widgets/`:
   `widgets-ced.md` (reference hierarchy markdown), `plan.md` (the outline +
   course wiring), `objectives.tsv`, `coverage.tsv`, and `lessons/` (one markdown
@@ -92,19 +92,33 @@ LESSON_COURSES_DIR=examples uv run app.py       # bundled widgets demo (throwawa
 
 **Local git mode is now the only single-user mode.** `LESSON_COURSES_DIR` must be
 the top of its own git repo (a checkout of the courses repo); single-user then
-treats it like collab does: edits **autosave + commit** to it (debounced for
-content edits, immediate for structural ops), authored as the local git user, on
-the checked-out branch (main), with **no remote push**. There is **no manual Save
-button** — only Sync/Refresh, for picking up external edits / a `git pull`. A
-plain (non-repo) `LESSON_COURSES_DIR` (e.g. `examples/`) is copied into a
+treats it like collab does: edits **autosave to the course FILES** there
+(debounced; structural ops reify immediately), authored/committed as below.
+A plain (non-repo) `LESSON_COURSES_DIR` (e.g. `examples/`) is copied into a
 **throwaway git repo** at startup (`_ensure_courses_repo` in `app.py`, with a local
-demo git identity) so the demo still autosaves + commits — to disposable git, never
-into this engine repo. `serve.sh` defaults `LESSON_COURSES_DIR` to a sibling
-`../bhs-cs-courses` checkout when present, else `examples`. The commit/autosave
-core lives in `collab.py` (`commit_repo`, `schedule_autosave`) and is shared by
-both modes; `app.py`'s `_git_target()` picks per-mode (repo, db, author, push) and
-`git_backed()` gates the shared UI/behavior. Debounce: `LESSON_AUTOSAVE_SECONDS`
-(default 2).
+demo git identity) so the demo still autosaves + can be saved — to disposable git,
+never into this engine repo. `serve.sh` defaults `LESSON_COURSES_DIR` to a sibling
+`../bhs-cs-courses` checkout when present, else `examples`.
+
+**Saving is decoupled from writing files** (see `plans/manual-save.md`). Editing
+updates the db (a cache); a debounced timer writes the db out to the course files
+(`schedule_autosave` → write-only `flush`, no commit) so disk tracks the db within
+the debounce window (`LESSON_AUTOSAVE_SECONDS`, default 2). **Committing is the
+explicit Save button** (sidebar): it reifies every course, prompts for a commit
+message (pre-filled from the buffered edit phrases via `collab.suggest_message`),
+commits, and — in collab mode — **pushes to GitHub immediately**; local-git/demo
+just commits. Routes: `/save` (commit + push), `/flush` (write pending files now —
+called via a `beforeunload` beacon), `/save/suggestion` (the dialog default),
+`/savebar` (the polled Save-button + status fragment, `_savebar.html`). A dirty
+flag (`collab.mark_dirty`/`is_dirty`, keyed by handle or `"_local"`) drives the
+Save button's "unsaved" hint; `git status` (`collab.has_uncommitted`) is the truth
+at Save/Sync time. **Sync** only pulls others' work: collab merges `origin/main`
+(and refuses while there are uncommitted edits — Save first); single-user reloads
+every course from disk (lossless — it flushes first). `commit_repo` (the shared
+stage-add-commit-maybe-push primitive) lives in `collab.py`; `app.py`'s
+`_git_target()` picks per-mode (repo, db, author, key, delay), `apply_structural`
+reifies structural ops to disk without committing, and `git_backed()` gates the
+shared UI/behavior.
 
 The outline workspace has an **"Edit as Markdown"** button (only on the editable
 outline) opening a CodeMirror 6 editor (`/<course>/outline/edit`) on the
@@ -122,7 +136,7 @@ Save htmx-posts to `lesson_part_save` → `node_attr`, swapping `_lessonpart.htm
 back in) and **whole-file** ("Edit as Markdown" → `lesson_edit_md` opens a
 CodeMirror editor on the eight `## part` sections, posting to `lesson_source` which
 parses → `node_attr` → `write_course`). Both rely on the lesson file's stable uuid;
-autosave/commit persists the lesson file as usual.
+the file autosave writes it to disk and the Save button commits it as usual.
 
 The **Calendar** sidebar item (`/<course>/calendar`) lays the outline across the
 school year (units→weeks, lessons→days; see `calendar_view.py` and the duration

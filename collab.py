@@ -341,8 +341,7 @@ def _take_actions(handle):
         return _actions.pop(handle, [])
 
 
-def _compose_message(handle, fallback):
-    actions = _take_actions(handle)
+def _format_actions(actions, fallback):
     if not actions:
         return fallback
     if len(actions) == 1:
@@ -350,18 +349,54 @@ def _compose_message(handle, fallback):
     return f"{len(actions)} edits\n\n" + "\n".join(f"- {a}" for a in actions)
 
 
+def suggest_message(handle, fallback):
+    """A suggested commit message from the buffered edit phrases WITHOUT consuming
+    them (clear_actions drops them once Save commits with its own message); this
+    peeks for the Save dialog's editable default."""
+    with _actions_guard:
+        actions = list(_actions.get(handle, []))
+    return _format_actions(actions, fallback)
+
+
+def clear_actions(handle):
+    """Drop the buffered edit phrases for `handle` (after a Save consumed them via
+    its own user-supplied message, so they don't leak into the next suggestion)."""
+    _take_actions(handle)
+
+
+# --------------------------------------------------------------------------
+# Dirty registry: keys (a teacher handle, or "_local" in single-user mode) with
+# edits not yet committed to git. Set on edit, cleared on a successful Save. Drives
+# the Save button's "unsaved" hint; `git status` is the source of truth at Save
+# time. In-process only -- a restart starts "clean" (the files on disk, written by
+# the autosave timer, are the real state; an uncommitted diff still shows in git).
+_dirty = set()
+_dirty_guard = threading.Lock()
+
+
+def mark_dirty(key):
+    with _dirty_guard:
+        _dirty.add(key)
+
+
+def clear_dirty(key):
+    with _dirty_guard:
+        _dirty.discard(key)
+
+
+def is_dirty(key):
+    with _dirty_guard:
+        return key in _dirty
+
+
 # --------------------------------------------------------------------------
 # Commit + push
 # --------------------------------------------------------------------------
 
-# Serialize all commits: the debounced autosave timer and the immediate structural
-# commits both run `git add -A` + commit, and concurrent git in one repo collides
+# Serialize all commits: a Save and (e.g.) a background push or a main-view refresh
+# can run git in the same repo at once, and concurrent `git add -A` + commit collide
 # on index.lock. Coarse (one lock for everything) but commits are brief.
 _commit_lock = threading.Lock()
-
-
-# Public alias: app.py composes a commit message from the buffered edit phrases.
-compose_message = _compose_message
 
 
 def commit_repo(repo_dir, message, author=None, push_key=None):
@@ -383,25 +418,6 @@ def commit_repo(repo_dir, message, author=None, push_key=None):
     if push_key:
         enqueue_push(push_key)
     return msg.splitlines()[0]
-
-
-def commit_and_push(handle, name, email, fallback_message):
-    """Collab: commit a teacher's worktree with the buffered edit phrases composed
-    into the message, and enqueue a push. Returns the commit subject, or None."""
-    handle = _safe_handle(handle)
-    return commit_repo(worktree_path(handle),
-                       lambda: _compose_message(handle, fallback_message),
-                       author=(name or handle, email or _noreply(handle)),
-                       push_key=handle)
-
-
-def commit_worktree(handle, name, email, message):
-    """Collab: commit a teacher's worktree with an explicit `message` and enqueue a
-    push -- for discrete structural changes. Returns the subject, or None."""
-    handle = _safe_handle(handle)
-    return commit_repo(worktree_path(handle), message,
-                       author=(name or handle, email or _noreply(handle)),
-                       push_key=handle)
 
 
 def _noreply(handle):
@@ -449,6 +465,12 @@ def enqueue_push(handle):
 
 def push_error(handle):
     return _push_failed.get(handle)
+
+
+def push_sync(handle):
+    """Push the editor's branch now and return (ok, output) -- for Save, which
+    reports the push result immediately instead of enqueueing for the worker."""
+    return _push_once(_safe_handle(handle))
 
 
 def _push_once(handle):
@@ -539,8 +561,9 @@ def _autosave_fire(key):
 
 
 def cancel_autosave(key):
-    """Drop any pending debounce timer + dirty set for `key`. Used by Sync, which
-    commits everything synchronously, so the deferred autosave has nothing to do."""
+    """Drop any pending debounce timer + dirty set for `key`. Used by Save/Sync,
+    which write every course's files synchronously, so the deferred file-autosave
+    has nothing left to do."""
     with _autosave_guard:
         st = _autosave.get(key)
         if st:
@@ -548,6 +571,33 @@ def cancel_autosave(key):
                 st["timer"].cancel()
             st["timer"] = None
             st["courses"] = set()
+
+
+def flush_pending(key):
+    """Run any pending debounced file-write for `key` NOW (cancel its timer first) --
+    e.g. on page unload, so the latest edit lands on disk immediately instead of
+    waiting out the debounce. A no-op if nothing is pending."""
+    with _autosave_guard:
+        st = _autosave.get(key)
+        if not st or not st["courses"]:
+            return
+        courses, flush = st["courses"], st["flush"]
+        st["courses"] = set()
+        if st["timer"] is not None:
+            st["timer"].cancel()
+            st["timer"] = None
+    for course in courses:
+        try:
+            flush(course)
+        except Exception as e:                             # never raise to the caller
+            print(f"collab: flush {key}/{course} failed: {e}", file=sys.stderr)
+
+
+def has_uncommitted(repo_dir):
+    """True if the working tree at `repo_dir` has any uncommitted change (staged,
+    unstaged, or untracked). The source-of-truth dirty check at Save/Sync time."""
+    _code, out = _git(["status", "--porcelain"], cwd=repo_dir)
+    return bool(out.strip())
 
 
 # --------------------------------------------------------------------------

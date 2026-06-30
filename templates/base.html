@@ -75,8 +75,27 @@
     .collablogout:hover { color: var(--gap); }
     .collabpending { font-size: .74rem; color: #555; background: #fffbe6;
                 border: 1px solid #f0e0a0; border-radius: 6px; padding: .3rem .5rem;
-                margin: -.5rem 0 .9rem; }
+                width: 100%; }
     .collabpending.err { color: #8a1f1a; background: #fdecea; border-color: #f5c2c0; }
+    /* Save button + status. Inside the collabbar in single-user; a standalone row
+       below it in collab (savebar-standalone adds the gap the old pending row had). */
+    .savebar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; min-width: 0; }
+    .savebar-standalone { margin: -.4rem 0 .9rem; }
+    .savebtn { font-size: .74rem; padding: .15rem .5rem; color: #2b6cb0; background: #fff;
+                border: 1px solid #cfe0f5; border-radius: 4px; cursor: pointer;
+                display: inline-flex; align-items: center; gap: .3rem; }
+    .savebtn:hover { background: #eef3f8; }
+    .savebtn.dirty { background: #2b6cb0; color: #fff; border-color: #2b6cb0; font-weight: 600; }
+    .savebtn.dirty:hover { background: #255d9c; }
+    .savedot { font-size: .6rem; line-height: 1; color: #ffe08a; }
+    .save-dialog { border: 1px solid var(--line); border-radius: 8px; padding: 1rem;
+                max-width: 30rem; width: calc(100vw - 2rem); }
+    .save-dialog::backdrop { background: rgba(0,0,0,.25); }
+    .saveform { display: flex; flex-direction: column; gap: .5rem; }
+    .saveform label { font-weight: 600; font-size: .85rem; }
+    .saveform textarea { font: inherit; width: 100%; resize: vertical; padding: .4rem .5rem;
+                border: 1px solid var(--line); border-radius: 6px; box-sizing: border-box; }
+    .savectl { display: flex; gap: .5rem; justify-content: flex-end; }
     .brandrow { display: flex; align-items: center; justify-content: space-between;
                 gap: .5rem; margin-bottom: 1rem; }
     .brandrow .addcourse { font-size: .82rem; line-height: 1; padding: .15rem .5rem;
@@ -648,12 +667,17 @@
         {% endif %}
       </div>
       {% if not collab_enabled and can_edit %}
-      {# Single-user analogue of collab Sync: reload every course from the
-         git-tracked course files on disk. Replaces the per-course Refresh buttons. #}
+      {# Save commits the course files (edits autosave to disk continuously; this is
+         the explicit commit). Sync reloads every course from the git-tracked files
+         on disk -- do the git pull yourself. #}
       <div class="collabbar">
+        <div id="savebar" class="savebar" hx-get="{{ url_for('savebar') }}"
+             hx-trigger="every 5s" hx-swap="innerHTML">
+          {% include "_savebar.html" %}
+        </div>
         <div class="collabacts">
           <form method="post" action="{{ url_for('sync_courses') }}" class="collabsync">
-            <button type="submit" title="Reload courses from git">
+            <button type="submit" title="Reload courses from the files on disk">
               <i class="bi bi-arrow-repeat"></i> Sync</button>
           </form>
         </div>
@@ -669,7 +693,7 @@
         <div class="collabacts">
           {% if can_edit %}
           <form method="post" action="{{ url_for('sync_courses') }}" class="collabsync">
-            <button type="submit" title="Commit & push your changes and pull the latest from main">
+            <button type="submit" title="Pull the latest from main (Save your changes first)">
               <i class="bi bi-arrow-repeat"></i> Sync</button>
           </form>
           {% endif %}
@@ -678,11 +702,11 @@
         </div>
       </div>
       {% if can_edit %}
-        {# Live push-status: no manual Save in collab, so poll to keep this fresh
-           as autosave commits and the background pusher drains. #}
-        <div id="collab-pending" hx-get="{{ url_for('collab_pending') }}"
+        {# Save button + live save/push status: poll so the "unsaved" hint stays
+           fresh as you edit (htmx swaps don't re-render the sidebar). #}
+        <div id="savebar" class="savebar savebar-standalone" hx-get="{{ url_for('savebar') }}"
              hx-trigger="every 5s" hx-swap="innerHTML">
-          {% include "_collab_pending.html" %}
+          {% include "_savebar.html" %}
         </div>
       {% endif %}
       {% endif %}
@@ -702,6 +726,23 @@
           </label>
         </form>
       </div>
+      {% endif %}
+      {% if can_edit and git_backed %}
+      {# Save dialog: opened by the Save button (#save-btn, wired in the script
+         below). Pre-filled with a suggested message fetched from /save/suggestion.
+         Submits a normal POST to /save (commit + push in collab). #}
+      <dialog id="save-dialog" class="save-dialog">
+        <form method="post" action="{{ url_for('save_courses') }}" class="saveform">
+          <label for="save-message">Commit message</label>
+          <textarea id="save-message" name="message" rows="3"
+                    placeholder="Describe your changes…"></textarea>
+          <div class="savectl">
+            <button type="submit" class="primary">
+              {{ 'Save &amp; push' | safe if collab_enabled else 'Save' }}</button>
+            <button type="button" class="cancel" id="save-cancel">Cancel</button>
+          </div>
+        </form>
+      </dialog>
       {% endif %}
       {% for c in course_nav %}
         <div class="course {{ 'active' if c.course == nav_course else '' }}">
@@ -805,6 +846,34 @@
       if (btn && form) btn.addEventListener('click', function () {
         form.hidden = !form.hidden;
         if (!form.hidden) document.getElementById('newcourse-id').focus();
+      });
+    })();
+
+    // Save: open the commit-message dialog (pre-filled with a suggested message),
+    // then a normal POST to /save commits (+ pushes in collab). The Save button is
+    // re-rendered by the sidebar poll, so the click is delegated. On page unload,
+    // beacon /flush so the latest edit is written to disk immediately (the
+    // server-side autosave would write it within the debounce window regardless).
+    (function () {
+      const dialog = document.getElementById('save-dialog');
+      if (!dialog) return;   // not git-backed / can't edit
+      const msg = document.getElementById('save-message');
+      document.addEventListener('click', function (e) {
+        if (e.target.closest && e.target.closest('#save-btn')) {
+          fetch('{{ url_for("save_suggestion") }}')
+            .then(r => (r.ok ? r.text() : ''))
+            .then(t => { msg.value = t || ''; })
+            .catch(() => { msg.value = ''; })
+            .finally(() => {
+              if (typeof dialog.showModal === 'function') dialog.showModal();
+              msg.focus();
+            });
+        } else if (e.target.closest && e.target.closest('#save-cancel')) {
+          dialog.close();
+        }
+      });
+      window.addEventListener('beforeunload', function () {
+        if (navigator.sendBeacon) navigator.sendBeacon('{{ url_for("flush_courses") }}');
       });
     })();
 

@@ -178,12 +178,12 @@ _AUTH_EXEMPT = {"collab_login", "collab_oauth_start", "collab_callback",
                 # session -- the login gate must let it through.
                 "github_webhook"}
 
-# Human phrases for the debounced-autosave commit message, keyed by mutating
-# endpoint (the route's function name); the acting course is interpolated. Some
-# endpoints cover several actions and set g.action_phrase at runtime instead
-# (place, node_duration_set, lesson_arrange) -- the entry here is just a fallback.
-# The immediate structural ops (_IMMEDIATE_OPS) are NOT here: they commit
-# themselves with their own message via commit_structural.
+# Human phrases buffered per edit, keyed by mutating endpoint (the route's function
+# name); the acting course is interpolated. They compose the Save dialog's suggested
+# commit message (collab.suggest_message) -- nothing here commits. Some endpoints
+# cover several actions and set g.action_phrase at runtime instead (place,
+# node_duration_set, lesson_arrange) -- the entry here is just a fallback. The
+# structural ops (_STRUCTURAL_OPS) buffer their own phrase via apply_structural.
 _ACTION_PHRASES = {
     "place": "placed objectives in {course}",
     "node_objectives_bulk": "edited node objectives in {course}",
@@ -203,14 +203,15 @@ _ACTION_PHRASES = {
     "references_reorder": "reordered references in {course}",
     "course_rename": "renamed course {course}",
 }
-# Endpoints that themselves perform the commit -- don't double-record them.
+# Whole-file save endpoints: they write the course files themselves and record
+# their own edit phrase -- the after_request hook skips them.
 _SAVE_ENDPOINTS = {"outline_source", "lesson_source"}
 
-# Discrete structural ops that commit themselves immediately (via commit_structural)
-# with their own message, rather than going through the debounced autosave -- they
-# add/remove whole courses or reference files, which a single write_course can't
-# express, and they deserve a meaningful one-off commit.
-_IMMEDIATE_OPS = {"course_new", "course_delete", "course_import",
+# Structural ops that reify to disk immediately (via apply_structural) rather than
+# via the debounced file autosave -- they add/remove whole courses or reference
+# files, disk reconciliations a single write_course can't express. They still don't
+# commit (commit is the explicit Save); they just buffer their own edit phrase.
+_STRUCTURAL_OPS = {"course_new", "course_delete", "course_import",
                   "hierarchy_load_course", "hierarchy_delete",
                   "objectives_upload", "hierarchy_upload", "objectives_import_from"}
 
@@ -241,13 +242,26 @@ def _git_target():
     return None
 
 
-def commit_structural(course, message, *, drop_course=False, remove_files=()):
-    """Immediately persist a structural change to the git-backed courses directory and commit
-    it with an explicit `message` (collab: worktree + push; local-git: the courses
-    repo) -- for create/delete/import of a course or add/remove of a reference,
-    which shouldn't wait for (or can't be expressed by) the debounced autosave.
-    `remove_files` are paths relative to the course dir to delete; `drop_course`
-    removes the whole course dir (and skips write_course). No-op when not git-backed."""
+def _record_edit(course, phrase):
+    """Buffer an edit `phrase` (for the Save dialog's suggested message) and mark the
+    workspace dirty -- for the ops that bypass the after_request hook (the structural
+    ops and the whole-file save endpoints). No-op when not git-backed."""
+    t = _git_target()
+    if not t:
+        return
+    if phrase:
+        collab.record_action(t["key"], phrase)
+    collab.mark_dirty(t["key"])
+
+
+def apply_structural(course, message, *, drop_course=False, remove_files=()):
+    """Reify a structural change to the git-backed course FILES immediately -- create,
+    delete, or import a course; add or remove a reference -- because these are disk
+    reconciliations a later write_course can't express (a deleted course dir, a
+    removed reference file). It does NOT commit: commit is the explicit Save. Buffers
+    `message` as the edit phrase and marks the workspace dirty. `remove_files` are
+    paths relative to the course dir to delete; `drop_course` removes the whole
+    course dir (and skips write_course). No-op when not git-backed."""
     t = _git_target()
     if not t:
         return
@@ -261,28 +275,11 @@ def commit_structural(course, message, *, drop_course=False, remove_files=()):
         shutil.rmtree(course_dir, ignore_errors=True)
     else:
         plan_io.write_course(t["db"], course, course_dir)
-    try:
-        collab.commit_repo(t["repo"], message, author=t["author"], push_key=t["push_key"])
-    except Exception as e:
-        flash(f"Saved locally, but git commit failed: {e}")
+    _record_edit(course, message)
 
 
 def current_user():
     return session.get("user") if collab.enabled() else None
-
-
-def commit_after_save(course, fallback):
-    """After a save wrote the courses directory, commit it with the buffered edit phrases
-    (collab: worktree + push; local-git: the courses repo). No-op when not
-    git-backed."""
-    t = _git_target()
-    if not t:
-        return
-    try:
-        collab.commit_repo(t["repo"], lambda: collab.compose_message(t["key"], fallback),
-                           author=t["author"], push_key=t["push_key"])
-    except Exception as e:
-        flash(f"Saved locally, but git commit failed: {e}")
 
 
 @app.before_request
@@ -319,38 +316,38 @@ def _collab_gate():
 
 @app.after_request
 def _autocommit_edit(resp):
-    """Record an edit phrase and schedule the debounced autosave, so a git-backed
-    courses directory (collab or local-git) commits content edits automatically -- no manual
-    Save. No-op when not git-backed, or when the op commits itself."""
+    """After an edit: buffer its phrase (for the Save suggestion), mark the workspace
+    dirty, and schedule the debounced autosave that writes the db to the course
+    FILES -- no commit. Commit is the explicit Save; the timer only keeps disk in
+    sync with the db (the db is a cache). No-op when not git-backed, or when the op
+    records itself (the structural ops and whole-file save endpoints)."""
     if not (request.method == "POST" and resp.status_code < 400):
         return resp
     t = _git_target()
     if not t:
         return resp
     ep = request.endpoint
-    # Save endpoints and the immediate structural ops commit themselves.
-    if ep in _SAVE_ENDPOINTS or ep in _IMMEDIATE_OPS:
+    if ep in _SAVE_ENDPOINTS or ep in _STRUCTURAL_OPS:
         return resp
     course = (request.view_args or {}).get("course")
     # A handler may set g.action_phrase to describe what it actually did when one
     # endpoint covers several actions (e.g. `place` maps vs. unmaps); otherwise
-    # fall back to the static per-endpoint phrase.
+    # fall back to the static per-endpoint phrase. A truthy phrase also marks this
+    # as a real edit (so /sync, /save, /flush etc. don't dirty the workspace).
     phrase = getattr(g, "action_phrase", None)
     if phrase is None and ep in _ACTION_PHRASES:
         phrase = _ACTION_PHRASES[ep].format(course=course or "the course")
     if phrase:
         collab.record_action(t["key"], phrase)
+        collab.mark_dirty(t["key"])
         if course:
             # Capture the target now so the timer thread needs no request context.
-            repo, db, author, push_key, key = (t["repo"], t["db"], t["author"],
-                                               t["push_key"], t["key"])
+            repo, db = t["repo"], t["db"]
 
-            def flush(c, repo=repo, db=db, author=author, push_key=push_key, key=key):
+            def flush(c, repo=repo, db=db):
                 plan_io.write_course(db, c, os.path.join(repo, c))
-                collab.commit_repo(repo, lambda: collab.compose_message(key, f"Update {c}"),
-                                   author=author, push_key=push_key)
 
-            collab.schedule_autosave(key, t["delay"], course, flush)
+            collab.schedule_autosave(t["key"], t["delay"], course, flush)
     return resp
 
 
@@ -359,10 +356,11 @@ def inject_collab():
     """Template flags: whether the current user may edit (always true in
     single-user mode), their identity, and any pending-push state."""
     if not collab.enabled():
-        # Single-user is always git-backed now (edits autosave + commit), so there
-        # is no manual Save button -- only a Sync/Refresh to pick up external edits.
+        # Single-user local-git (and the throwaway-repo demo): edits autosave to
+        # FILES on a timer, but committing is the explicit Save button.
         return {"collab_enabled": False, "can_edit": True, "collab_user": None,
-                "git_backed": True}
+                "git_backed": LOCAL_GIT,
+                "dirty": LOCAL_GIT and collab.is_dirty("_local")}
     editor = getattr(g, "editor", False)
     handle = getattr(g, "handle", None)
     published, pending = collab.push_status(handle) if editor and handle else (True, 0)
@@ -370,6 +368,7 @@ def inject_collab():
         "collab_enabled": True,
         "git_backed": editor,
         "can_edit": editor,
+        "dirty": editor and handle and collab.is_dirty(handle),
         "collab_user": getattr(g, "user", None),
         "collab_role": getattr(g, "role", None),
         "collab_pending": pending,
@@ -456,42 +455,98 @@ def collab_logout():
     return redirect(url_for("collab_login"))
 
 
-@app.route("/collab/pending")
-def collab_pending():
-    """The push-status banner fragment, polled by the sidebar so it stays live as
-    autosave commits and the background pusher drains -- the feedback that used to
-    come from the (now removed in collab) Save button. Empty when nothing pends."""
-    if not (collab.enabled() and getattr(g, "editor", False)):
+def _write_all_courses(t):
+    """Write every db course's files to the git-backed courses dir (the synchronous
+    flush Save/Sync do before committing/merging). Cancels the pending file-autosave
+    first so it doesn't race."""
+    collab.cancel_autosave(t["key"])
+    with db() as conn:
+        courses = [r["course"] for r in
+                   conn.execute("SELECT course FROM courses ORDER BY course")]
+    for c in courses:
+        plan_io.write_course(t["db"], c, os.path.join(t["repo"], c))
+
+
+@app.route("/save", methods=["POST"])
+def save_courses():
+    """Reify the latest db state to the course files and COMMIT them with the
+    user-supplied message; in collab mode push to GitHub immediately. The explicit
+    counterpart to the file-only autosave timer -- the one place a commit happens."""
+    back = redirect(request.referrer or url_for("index"))
+    t = _git_target()
+    if not t:
+        flash("Nothing to save here.")
+        return back
+    message = (request.form.get("message") or "").strip() \
+        or collab.suggest_message(t["key"], "Update courses")
+    _write_all_courses(t)
+    try:
+        subject = collab.commit_repo(t["repo"], message, author=t["author"], push_key=None)
+    except Exception as e:
+        flash(f"Save failed: {e}")
+        return back
+    collab.clear_dirty(t["key"])
+    if subject is None:
+        flash("Nothing to save — no changes since the last commit.")
+        return back
+    collab.clear_actions(t["key"])
+    if collab.enabled() and getattr(g, "editor", False):
+        ok, out = collab.push_sync(g.handle)
+        flash(f"Saved and pushed: {subject}" if ok
+              else f"Saved (commit {subject!r}), but the push failed: {out}")
+    else:
+        flash(f"Saved: {subject}")
+    return back
+
+
+@app.route("/flush", methods=["POST"])
+def flush_courses():
+    """Write any debounced-but-unwritten edits to the course files now -- called via a
+    `beforeunload` beacon so the latest edit is on disk the instant you leave. 204."""
+    t = _git_target()
+    if t:
+        collab.flush_pending(t["key"])
+    return ("", 204)
+
+
+@app.route("/savebar")
+def savebar():
+    """The Save button + live status fragment, polled by the sidebar so the 'unsaved'
+    hint stays current after htmx edits (which don't re-render the sidebar). Both
+    modes; empty for non-editors."""
+    return render_template("_savebar.html")
+
+
+@app.route("/save/suggestion")
+def save_suggestion():
+    """The suggested commit message for the Save dialog (the buffered edit phrases),
+    as plain text; an empty 204 when not git-backed."""
+    t = _git_target()
+    if not t:
         return ("", 204)
-    return render_template("_collab_pending.html")
+    return Response(collab.suggest_message(t["key"], "Update courses"),
+                    mimetype="text/plain")
 
 
 @app.route("/sync", methods=["POST"])
 def sync_courses():
-    """Pull in the latest course content. Collab: merge origin/main into the
-    editor's branch (per-user). Single-user: reload every course in the courses directory
-    from its files on disk -- the single-user analogue. (The courses directory is git-tracked;
-    do the git pull/commit yourself; this re-reads whatever's on disk.)"""
+    """Pull in the latest course content. Collab: merge origin/main into the editor's
+    branch (per-user) -- which needs a clean tree, so refuse while there are unsaved
+    (uncommitted) edits. Single-user: reload every course from its files on disk (the
+    git-tracked courses dir; do the git pull yourself, this re-reads what's there)."""
     back = redirect(request.referrer or url_for("index"))
     if collab.enabled():
         if not getattr(g, "editor", False):
             abort(403)
         u = g.user
+        t = _git_target()
+        # Flush pending writes so the dirty check sees the true state, then refuse if
+        # anything is uncommitted: Sync only pulls others' work; committing is Save.
+        _write_all_courses(t)
+        if collab.has_uncommitted(g.courses_root):
+            flash("You have unsaved changes — Save them before syncing.")
+            return back
         try:
-            # 1) Persist EVERYTHING: write the live db for all of the editor's
-            #    courses to the worktree and commit synchronously, so Sync captures
-            #    any debounced-but-uncommitted edits (and anything a restart lost),
-            #    not just what the autosave timer happened to flush.
-            collab.cancel_autosave(g.handle)
-            with db() as conn:
-                courses = [r["course"] for r in
-                           conn.execute("SELECT course FROM courses ORDER BY course")]
-            for c in courses:
-                plan_io.write_course(g.db_path, c, os.path.join(g.courses_root, c))
-            collab.commit_repo(g.courses_root,
-                               lambda: collab.compose_message(g.handle, "Save edits"),
-                               author=(u.get("name"), u.get("email")), push_key=None)
-            # 2) Merge origin/main and push -- synchronously.
             result = collab.sync(u["handle"], u.get("name"), u.get("email"))
         except Exception as e:
             flash(f"Sync failed: {e}")
@@ -501,6 +556,10 @@ def sync_courses():
         else:
             flash(result["message"])
         return back
+    # Single-user: flush db -> files first (so unsaved edits aren't lost to the
+    # reload), then re-read whatever's on disk.
+    if (t := _git_target()):
+        _write_all_courses(t)
     try:
         dirs = seed_module.course_dirs(courses_root())
         seed_module.load_courses(db_path(), courses_root())
@@ -872,7 +931,7 @@ def course_new():
         conn.execute("INSERT INTO courses(course, title) VALUES (?, ?)",
                      (course, title or course.upper()))
         ensure_outline(conn, course)
-    commit_structural(course, f"Create course {course}")
+    apply_structural(course, f"Create course {course}")
     # The new course appears in the sidebar; land on it (its empty outline).
     return redirect(url_for("tree", course=course))
 
@@ -986,7 +1045,7 @@ def hierarchy_load_course(course):
         flash(f"Loaded {slug!r}, but {len(orphaned)} existing coverage edge(s) now "
               f"point to node ids not in this version: {', '.join(orphaned[:6])}"
               f"{'…' if len(orphaned) > 6 else ''}")
-    commit_structural(course, f"Add reference {slug} to {course}")
+    apply_structural(course, f"Add reference {slug} to {course}")
     # Land on the loaded hierarchy so the upload (from the sidebar or setup) shows.
     return redirect(url_for("hierarchy_view", course=course, hierarchy=slug))
 
@@ -1014,7 +1073,7 @@ def hierarchy_delete(course, hierarchy):
                      (course, hierarchy, hierarchy))
         conn.execute("DELETE FROM nodes WHERE course=? AND hierarchy=?", (course, hierarchy))
         conn.execute("DELETE FROM hierarchies WHERE course=? AND hierarchy=?", (course, hierarchy))
-    commit_structural(course, f"Remove reference {hierarchy} from {course}",
+    apply_structural(course, f"Remove reference {hierarchy} from {course}",
                       remove_files=[f"{hierarchy}.md"])
     flash(f"Deleted hierarchy {hierarchy!r} ({n} coverage edge(s) removed).")
     return redirect(url_for("tree", course=course))
@@ -1093,7 +1152,7 @@ def course_delete(course):
                     "hierarchy_targets", "course_objectives", "objectives", "hierarchies"):
             conn.execute(f"DELETE FROM {tbl} WHERE course=?", (course,))
         conn.execute("DELETE FROM courses WHERE course=?", (course,))
-    commit_structural(course, f"Delete course {course}", drop_course=True)
+    apply_structural(course, f"Delete course {course}", drop_course=True)
     flash(f"Deleted course {course!r}.")
     return redirect(url_for("index"))
 
@@ -1129,7 +1188,7 @@ def course_import():
     except Exception as e:  # bad JSON, version, or id/slug clash (rolled back)
         flash(f"Import failed: {e}")
         return redirect(back)
-    commit_structural(cid, f"Import course {cid}")
+    apply_structural(cid, f"Import course {cid}")
     # We land on the imported course (in the sidebar, with its data); no flash.
     return redirect(url_for("tree", course=cid))
 
@@ -1432,7 +1491,7 @@ def hierarchy_upload(course, hierarchy):
         flash(f"Upload failed: {e}")
         return back
     stats, dangling = import_objectives.upsert(db_path(), course, rows)
-    commit_structural(course, f"Import objectives into {course}/{hierarchy}")
+    apply_structural(course, f"Import objectives into {course}/{hierarchy}")
     msg = _upsert_msg(f.filename, stats)
     unknown = dangling.get(hierarchy, [])
     if unknown:
@@ -1577,7 +1636,7 @@ def outline_source(course):
                                text=text, error=str(e))
     course_dir = os.path.join(courses_root(), course)
     _path, n_obj, n_cov = plan_io.write_course(db_path(), course, course_dir)
-    commit_after_save(course, f"Edit {course.upper()} outline via Markdown")
+    _record_edit(course, f"Edit {course.upper()} outline via Markdown")
     flash(f"Saved outline · {n_obj} objectives, {n_cov} coverage edges")
     # Back to the regular (non-markdown) outline workspace after a successful save.
     return redirect(url_for("plan", course=course))
@@ -1601,7 +1660,7 @@ def objectives_upload(course):
         flash(f"Upload failed: {e}")
         return back
     stats, dangling = import_objectives.upsert(db_path(), course, rows)
-    commit_structural(course, f"Import objectives into {course}")
+    apply_structural(course, f"Import objectives into {course}")
     msg = _upsert_msg(f.filename, stats)
     if dangling:
         n = sum(len(v) for v in dangling.values())
@@ -1625,7 +1684,7 @@ def objectives_import_from(course):
         flash("Pick a different existing course to import objectives from.")
         return back
     n = import_objectives.copy_objectives(db_path(), src, course)
-    commit_structural(course, f"Import objectives from {src} into {course}")
+    apply_structural(course, f"Import objectives from {src} into {course}")
     flash(f"Imported {n} objective(s) from {src.upper()}.")
     return back
 
@@ -2098,7 +2157,7 @@ def lesson_source(course, lesson_id):
                              " AND node_id=? AND name=?", (course, O, lesson_id, key))
         conn.commit()
     plan_io.write_course(db_path(), course, os.path.join(courses_root(), course))
-    commit_after_save(course, f"Edit a {course.upper()} lesson plan")
+    _record_edit(course, f"Edit a {course.upper()} lesson plan")
     flash("Saved lesson plan")
     return redirect(url_for("lesson_view", course=course, lesson_id=lesson_id,
                             **({"embed": 1} if request.args.get("embed") else {})))
