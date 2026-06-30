@@ -225,6 +225,21 @@ def main():
     assert any("school week" in w for w in pe["warnings"]), pe["warnings"]
     assert weeknums(named(pe, "P")) == [2], named(pe, "P")
 
+    # (g) A unit whose explicit WEEK COUNT is too big to fit before a pin is flagged
+    # (weeks_short + a warning), even with no lessons to overflow.
+    pg = cv.build_calendar(bs8, data8, [
+        {"title": "Big", "weeks": 8, "lessons": []},
+        {"title": "Review", "weeks": 2, "pin": {"edge": "end", "week": 8}, "lessons": []}])
+    big = named(pg, "Big")
+    assert big["weeks_short"] == 2 and big["weeks_shown"] == 6, big
+    assert any("Big" in w and "only 6" in w for w in pg["warnings"]), pg["warnings"]
+    # A unit that fits before its pin is NOT flagged.
+    assert named(pg, "Review")["weeks_short"] == 0, named(pg, "Review")
+    pg2 = cv.build_calendar(bs8, data8, [
+        {"title": "Ok", "weeks": 2, "lessons": []},
+        {"title": "Review", "weeks": 2, "pin": {"edge": "end", "week": 8}, "lessons": []}])
+    assert named(pg2, "Ok")["weeks_short"] == 0, named(pg2, "Ok")
+
     # (f) Out-of-order pins (a later unit pinned earlier than an earlier one) warn.
     pf = cv.build_calendar(bs8, data8, [
         {"title": "A", "weeks": 1, "lessons": []},

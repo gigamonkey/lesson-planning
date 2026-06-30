@@ -55,6 +55,7 @@
                  ><span class="cal-weeks-unit">{{ 'week' if (u.weeks_shown if u.derived else u.weeks) == 1 else 'weeks' }}</span></label>
         </form>
         {% if u.overflow %}<span class="cal-badge warn">overflow</span>{% endif %}
+        {% if u.weeks_short %}<span class="cal-badge warn" title="{% if u.weeks %}Needs {{ u.weeks|int if u.weeks == u.weeks|int else u.weeks }} weeks but only {{ u.weeks_shown }} fit before the next pinned unit{% else %}Doesn’t fit before the next pinned unit{% endif %}">won’t fit</span>{% endif %}
         {% if u.pin %}<span class="cal-badge pin" title="Pinned: this unit {{ 'ends on' if u.pin.edge == 'end' else 'starts on' }} week {{ u.pin.week }}"><i class="bi bi-pin-angle-fill"></i> {{ 'ends' if u.pin.edge == 'end' else 'starts' }} wk {{ u.pin.week }}</span>{% endif %}
       {% endif %}
       {% if u.node_id %}

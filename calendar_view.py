@@ -353,11 +353,25 @@ def build_calendar(bs, data, units):
                 if first:
                     first["addable"] = True
                     break
+        weeks_shown = sum(1 for w in taken if not w["is_break"])
+        # A real unit that a FOLLOWING PIN cut short got fewer school weeks than it
+        # asked for -- but the weeks pill still shows the requested count, so without
+        # an explicit flag the unit is silently shrunk. (max_idx < len(weeks) means the
+        # cap was a pin; a year-end cap is already covered by the over-subscription
+        # warning + the Unplanned tail.) `weeks_short` is the deficit: the requested
+        # span minus what fit for an explicit-week unit, or 1 for an auto unit squeezed
+        # out entirely (its lessons, if any, also overflow).
+        weeks_short = 0
+        if max_idx is not None and max_idx < len(weeks) and not unplanned:
+            if unit["weeks"]:
+                weeks_short = max(0, math.ceil(unit["weeks"]) - weeks_shown)
+            elif weeks_shown == 0:
+                weeks_short = 1
         out_units.append({"break_section": False, "unplanned": unplanned,
                           "node_id": unit.get("node_id"), "title": unit["title"],
                           "weeks": unit["weeks"], "derived": derived, "overflow": overflow,
-                          "pin": unit.get("pin"),
-                          "weeks_shown": sum(1 for w in taken if not w["is_break"]),
+                          "pin": unit.get("pin"), "weeks_short": weeks_short,
+                          "weeks_shown": weeks_shown,
                           "free_days": len(sdays) - i, "rows": rows})
 
     # --- Pins: resolve each pinned unit to the school-week INDEX it must START at.
@@ -455,6 +469,14 @@ def build_calendar(bs, data, units):
         warnings.append(f"Units ask for more weeks than the year has "
                         f"({_fmt_num(requested)} vs {school_total} school weeks).")
     for u in out_units:
+        if u.get("weeks_short"):   # a following pin left no room for the unit's span
+            if u["weeks"]:
+                warnings.append(f"Unit “{u['title']}” needs {_fmt_num(u['weeks'])} weeks "
+                                f"but only {u['weeks_shown']} fit before the next pinned "
+                                f"unit.")
+            else:
+                warnings.append(f"Unit “{u['title']}” doesn’t fit before the next "
+                                f"pinned unit.")
         if u.get("overflow"):   # break sections have no overflow
             n = sum(o["days"] - o["fit"] for o in u["overflow"])
             warnings.append(f"Unit “{u['title']}” overflows by {n} lesson-day(s).")
