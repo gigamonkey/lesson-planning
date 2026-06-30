@@ -71,6 +71,13 @@
 {% endblock %}
 
 {% block titlebtn %}
+  {# In the outline's lesson pane (embed), offer a way out to the full lesson page
+     (a new tab, so the outline stays put). Redundant on the standalone page. #}
+  {% if embed %}
+  <a class="editmd" target="_blank" rel="noopener"
+     href="{{ url_for('lesson_view', course=course, lesson_id=lesson_id) }}"
+     title="Open this lesson in its own page"><i class="bi bi-journal-text"></i></a>
+  {% endif %}
   {% if can_edit %}
   <a class="editmd" href="{{ url_for('lesson_edit_md', course=course, lesson_id=lesson_id) }}{% if embed %}?embed=1{% endif %}"
      title="Edit the whole lesson plan as Markdown">
