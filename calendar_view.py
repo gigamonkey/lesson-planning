@@ -481,6 +481,27 @@ def build_calendar(bs, data, units):
             n = sum(o["days"] - o["fit"] for o in u["overflow"])
             warnings.append(f"Unit “{u['title']}” overflows by {n} lesson-day(s).")
 
+    # Planned coverage: a week is "planned" if a real unit (not an Unplanned gap or
+    # a break section) covers it; a day is "planned" if it holds a lesson cell.
+    # Denominators are the year's total school weeks / school days.
+    school_days_total = sum(len(w["days"]) for w in weeks if not w["is_break"])
+    planned_weeks = planned_days = 0
+    for u in out_units:
+        if u.get("break_section") or u.get("unplanned"):
+            continue
+        for row in u["rows"]:
+            if row["kind"] != "week":
+                continue
+            planned_weeks += 1
+            planned_days += sum(c["days"] for c in row["cells"] if c["kind"] == "lesson")
+
+    def _pct(n, d):
+        return round(100 * n / d) if d else 0
+
     return {"warnings": warnings, "units": out_units,
             "school_weeks": school_total, "calendar_name": data.get("name", ""),
-            "year": _fmt_year(data.get("year"))}
+            "year": _fmt_year(data.get("year")),
+            "planned_weeks": planned_weeks, "planned_days": planned_days,
+            "school_days": school_days_total,
+            "planned_weeks_pct": _pct(planned_weeks, school_total),
+            "planned_days_pct": _pct(planned_days, school_days_total)}

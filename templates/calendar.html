@@ -9,6 +9,7 @@
      calendar isn't organized by coverage. */
   #cal-stats { max-width: var(--content-max); margin: 0 0 1rem; }
   #cal-stats .wstats-figures { display: none; }
+  #cal-stats .wstats-extra { margin-left: auto; }   /* right-aligned, where figures sit */
   /* "Units only": the stat-bar "N units" hides each unit's week grid and the
      add-unit button, leaving just unit heads -- but keeps the breaks (the
      standalone break sections between units, and any break row inside a unit) so
@@ -290,7 +291,8 @@
     </div>
   {% elif view %}
     <p class="cal-intro">{{ view.calendar_name }} - {{ view.year }} · {{ view.school_weeks }} school weeks.</p>
-    {% if stats %}{{ wstatbar(stats, id='cal-stats') }}{% endif %}
+    {% if stats %}{{ wstatbar(stats, id='cal-stats',
+       extra='Planned: %d%% weeks; %d%% days' | format(view.planned_weeks_pct, view.planned_days_pct)) }}{% endif %}
     <div id="cal-content">{% include "_calendar_content.html" %}</div>
   {% endif %}
 
