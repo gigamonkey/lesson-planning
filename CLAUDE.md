@@ -60,6 +60,7 @@ format and `plans/markdown-as-storage.md` for the design.
 | `rebuild_db.py`        | One-command rebuild from scratch: delete db, apply `schema.sql`, load every course in the courses directory. `--courses <dir>` (default `courses`). |
 | `course_bundle.py`     | Export/import a whole course as one self-contained JSON bundle (course + hierarchies + nodes/attrs + durations + objectives + coverage + targets). `export`/`import` subcommands; also wired into the app (per-course Setup export, sidebar import). Additive to the markdown courses directory. |
 | `calendar_view.py`     | Pure layout engine for the calendar view: given a `bells.BellSchedule` + a course's outline (units→weeks, lessons→days), lays units across the year's *teaching weeks* (loose; breaks skipped) and lessons into school days, returning a view model. No Flask/SQL. `load_calendar(id, dir)` loads a bells JSON. |
+| `validate.py`          | Internal-consistency checker for a course directory, on the **raw files** (no db) so it sees corruption before `read_course`'s lenient resolution hides it: every uuid slot is a real UUID (objectives.tsv/coverage.tsv `uuid`, each `lessons/*.md` `uuid:`), and every uuid reference resolves (coverage `uuid`→objective, plan.md bullet token→objective, lesson-heading token→lesson file, coverage `(hierarchy_id, node_id)`→reference node). `validate_course(dir)`→list of problem strings; `read_course` prints them as warnings on load; CLI `uv run validate.py <courses-dir>` checks a tree (non-zero exit if any). |
 
 ## Running
 
@@ -144,6 +145,9 @@ npm run build      # -> static/editor.bundle.js (committed)
 
 # Run the plan_io / load_plan_text round-trip checks.
 uv run test_plan_io.py
+
+# Check course files for internal consistency (uuids well-formed + references resolve).
+uv run validate.py <courses-dir>     # or test it: uv run test_validate.py
 ```
 
 The `examples/` courses directory (`examples/widgets/`) is a drop-in example course — see

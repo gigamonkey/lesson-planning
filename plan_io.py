@@ -35,6 +35,7 @@ import sqlite3
 
 import hierarchy
 import load_nodes
+import validate
 
 # A trailing identity token on an objective bullet: " (#abcd)". Recognized only as
 # the LAST parenthesized group of hex with a '#' sigil, so literal parens in the
@@ -324,6 +325,10 @@ def read_course(db_path, course_dir):
 
     Returns (course, n_refs, n_objectives) for reporting.
     """
+    # Surface internal-consistency problems (dangling/garbled uuids) on the raw
+    # files before the lenient load below quietly papers over them.
+    for prob in validate.validate_course(course_dir):
+        print(f"warning: {os.path.basename(os.path.normpath(course_dir))}: validation: {prob}")
     # Find the plan file (the .md whose front matter carries a `course:` key) and
     # classify the rest as reference hierarchies.
     plan_path, refs = None, []
