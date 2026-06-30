@@ -1,8 +1,20 @@
 {% extends "base.html" %}
+{% from "_wstatbar.html" import wstatbar %}
 
 {% block head %}
 <style>
   .cal-intro { color: var(--muted); font-size: .9rem; margin: 0 0 1rem; max-width: var(--content-max); }
+  /* The count subheader (units · lessons · placed objectives), reused from the
+     outline. Only the leaf metrics are outline-specific, so hide them here; the
+     calendar isn't organized by coverage. */
+  #cal-stats { max-width: var(--content-max); margin: 0 0 1rem; }
+  #cal-stats .wstats-figures { display: none; }
+  /* "Units only": the stat-bar "N units" hides each unit's week grid, the
+     standalone break sections, and the add-unit button, leaving just unit heads. */
+  .cal-units-only .cal-unit > *:not(.cal-unit-head) { display: none; }
+  .cal-units-only .cal-break-section,
+  .cal-units-only .cal-addunit { display: none; }
+  .cal-units-only .cal-unit { margin-bottom: .4rem; }
   .cal-warn { background: #fffaf0; border: 1px solid #f0dcc0; color: #8a5a14;
               border-radius: 6px; padding: .5rem .8rem; margin: 0 0 1rem; font-size: .88rem; }
   .cal-warn ul { margin: .2rem 0 0; padding-left: 1.1rem; }
@@ -244,11 +256,34 @@
     </div>
   {% elif view %}
     <p class="cal-intro">{{ view.calendar_name }} - {{ view.year }} · {{ view.school_weeks }} school weeks.</p>
+    {% if stats %}{{ wstatbar(stats, id='cal-stats') }}{% endif %}
     <div id="cal-content">{% include "_calendar_content.html" %}</div>
   {% endif %}
 
   <script>
     const course = "{{ course }}";
+
+    // Stat-bar "N units" toggles a units-only view (hide each unit's week grid,
+    // leaving just unit heads). The class lives on #cal-content so it survives the
+    // htmx swaps that re-lay-out the calendar; the stat bar sits outside #cal-content
+    // so its handler stays wired. The other two counts aren't actionable here -- the
+    // calendar isn't organized by lessons/objectives.
+    (function () {
+      const unitStat = document.querySelector('#cal-stats .wstats-level[data-level="unit"]');
+      const content = document.getElementById('cal-content');
+      if (!unitStat || !content) return;
+      unitStat.classList.add('clickable');
+      unitStat.title = 'Show units only / show the full calendar';
+      function sync() {
+        unitStat.classList.toggle('view-active', content.classList.contains('cal-units-only'));
+      }
+      unitStat.addEventListener('click', function () {
+        content.classList.toggle('cal-units-only');
+        sync();
+      });
+      sync();
+    })();
+
     // A lesson box is read-only text until clicked. Clicking it (or tabbing in)
     // adds `editing`, which reveals the bordered title field and the days pill,
     // both editable. A plain click on the box jumps straight to the days count;

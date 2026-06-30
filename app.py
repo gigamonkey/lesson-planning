@@ -1902,20 +1902,26 @@ def _outline_units(conn, course):
 
 
 def _calendar_ctx(conn, course):
-    """Template context for the calendar view: {calendar_id, view, error}. view is
-    the laid-out calendar (calendar_view.build_calendar) or None when no calendar is
-    bound / it can't load."""
+    """Template context for the calendar view: {calendar_id, view, error, stats}.
+    view is the laid-out calendar (calendar_view.build_calendar) or None when no
+    calendar is bound / it can't load; stats is the outline's count subheader (units
+    · lessons · placed objectives), reused from the workspace."""
+    O = outline_hierarchy(conn, course)
+    stats = None
+    if O:
+        nodes, by_node, pool = workspace_data(conn, course, O)
+        stats = workspace_stats(nodes, by_node, pool)
     crow = conn.execute("SELECT calendar FROM courses WHERE course=?", (course,)).fetchone()
     cal_id = crow["calendar"] if crow else None
     if not cal_id:
-        return {"calendar_id": None, "view": None, "error": None}
+        return {"calendar_id": None, "view": None, "error": None, "stats": stats}
     try:
         bs, data = calendar_view.load_calendar(cal_id, CALENDAR_DIR)
     except (OSError, ValueError) as e:
         return {"calendar_id": cal_id, "view": None,
-                "error": f"Couldn't load calendar {cal_id!r}: {e}"}
+                "error": f"Couldn't load calendar {cal_id!r}: {e}", "stats": stats}
     view = calendar_view.build_calendar(bs, data, _outline_units(conn, course))
-    return {"calendar_id": cal_id, "view": view, "error": None}
+    return {"calendar_id": cal_id, "view": view, "error": None, "stats": stats}
 
 
 @app.route("/<course>/calendar")
