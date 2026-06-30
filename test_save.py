@@ -79,7 +79,7 @@ def main():
 
     # A second Save with nothing to commit is a friendly no-op.
     r = c.post("/save", data={"message": "noop"}, follow_redirects=True)
-    check("no-op save says 'Nothing to save'", "Nothing to save" in r.get_data(as_text=True))
+    check("no-op commit says 'Nothing to commit'", "Nothing to commit" in r.get_data(as_text=True))
 
     # Single-user Sync is lossless: it flushes db -> files, then reloads from disk.
     with app.db() as conn:

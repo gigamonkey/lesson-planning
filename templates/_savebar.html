@@ -7,7 +7,7 @@
 {% if can_edit and git_backed %}
   <button type="button" id="save-btn" class="savebtn{{ ' dirty' if dirty }}"
           title="Commit your changes{{ ' and push to GitHub' if collab_enabled }}">
-    <i class="bi bi-floppy"></i> Save{% if dirty %} <span class="savedot" aria-label="unsaved changes">●</span>{% endif %}
+    <i class="bi bi-floppy"></i> Commit{% if dirty %} <span class="savedot" aria-label="uncommitted changes">●</span>{% endif %}
   </button>
   {% if collab_enabled and collab_pending %}
     <div class="collabpending {{ 'err' if collab_push_error else '' }}">

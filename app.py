@@ -475,7 +475,7 @@ def save_courses():
     back = redirect(request.referrer or url_for("index"))
     t = _git_target()
     if not t:
-        flash("Nothing to save here.")
+        flash("Nothing to commit here.")
         return back
     message = (request.form.get("message") or "").strip() \
         or collab.suggest_message(t["key"], "Update courses")
@@ -487,15 +487,15 @@ def save_courses():
         return back
     collab.clear_dirty(t["key"])
     if subject is None:
-        flash("Nothing to save — no changes since the last commit.")
+        flash("Nothing to commit — no changes since the last commit.")
         return back
     collab.clear_actions(t["key"])
     if collab.enabled() and getattr(g, "editor", False):
         ok, out = collab.push_sync(g.handle)
-        flash(f"Saved and pushed: {subject}" if ok
-              else f"Saved (commit {subject!r}), but the push failed: {out}")
+        flash(f"Committed and pushed: {subject}" if ok
+              else f"Committed {subject!r}, but the push failed: {out}")
     else:
-        flash(f"Saved: {subject}")
+        flash(f"Committed: {subject}")
     return back
 
 
