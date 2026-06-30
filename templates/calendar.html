@@ -264,25 +264,29 @@
   <script>
     const course = "{{ course }}";
 
-    // Stat-bar "N units" toggles a units-only view (hide each unit's week grid,
-    // leaving just unit heads). The class lives on #cal-content so it survives the
-    // htmx swaps that re-lay-out the calendar; the stat bar sits outside #cal-content
-    // so its handler stays wired. The other two counts aren't actionable here -- the
-    // calendar isn't organized by lessons/objectives.
+    // Stat-bar depth picker (like the outline's): "N units" collapses to a
+    // units-only view (hide each unit's week grid, keep the breaks), "M lessons"
+    // restores the full calendar; the active one is highlighted. "placed objectives"
+    // isn't actionable here -- the calendar isn't organized that way. The class lives
+    // on #cal-content so it survives the htmx swaps that re-lay-out the calendar; the
+    // stat bar sits outside #cal-content so its handlers stay wired.
     (function () {
-      const unitStat = document.querySelector('#cal-stats .wstats-level[data-level="unit"]');
       const content = document.getElementById('cal-content');
-      if (!unitStat || !content) return;
+      const unitStat = document.querySelector('#cal-stats .wstats-level[data-level="unit"]');
+      const lessonStat = document.querySelector('#cal-stats .wstats-level[data-level="lesson"]');
+      if (!content || !unitStat || !lessonStat) return;
       unitStat.classList.add('clickable');
-      unitStat.title = 'Show units only / show the full calendar';
-      function sync() {
-        unitStat.classList.toggle('view-active', content.classList.contains('cal-units-only'));
+      unitStat.title = 'Show units only';
+      lessonStat.classList.add('clickable');
+      lessonStat.title = 'Show the full calendar';
+      function setUnitsOnly(on) {
+        content.classList.toggle('cal-units-only', on);
+        unitStat.classList.toggle('view-active', on);
+        lessonStat.classList.toggle('view-active', !on);
       }
-      unitStat.addEventListener('click', function () {
-        content.classList.toggle('cal-units-only');
-        sync();
-      });
-      sync();
+      unitStat.addEventListener('click', function () { setUnitsOnly(true); });
+      lessonStat.addEventListener('click', function () { setUnitsOnly(false); });
+      setUnitsOnly(content.classList.contains('cal-units-only'));
     })();
 
     // A lesson box is read-only text until clicked. Clicking it (or tabbing in)
