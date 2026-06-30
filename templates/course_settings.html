@@ -53,6 +53,42 @@
   {% endif %}
   {% endif %}
 
+  {% if can_edit %}
+  <h2>Add objectives from a hierarchy level</h2>
+  {% if references %}
+  <p>Turn every node at a chosen level of a reference hierarchy into a raw
+     objective — interned into the pool and placed onto its source node. Useful when
+     a reference has a level whose items are themselves objectives (e.g. essential
+     knowledge). Re-running is safe: existing objectives are reused, not duplicated.</p>
+  <form method="post" action="{{ url_for('objectives_import_level', course=course) }}"
+        class="caction"
+        onsubmit="var o=this.pick.options[this.pick.selectedIndex];
+                  this.hierarchy.value=o.dataset.hierarchy||'';
+                  this.level.value=o.dataset.level||'';
+                  return !!this.hierarchy.value;">
+    <label>Level:
+      <select name="pick" required>
+        <option value="" disabled selected>Choose a hierarchy level…</option>
+        {% for h in references %}
+          {% for lvl in ref_levels.get(h.hierarchy, []) %}
+            <option data-hierarchy="{{ h.hierarchy }}" data-level="{{ lvl.tag }}">
+              {{ h.title or h.hierarchy }} → {{ lvl.label }} ({{ lvl.count }})
+            </option>
+          {% endfor %}
+        {% endfor %}
+      </select>
+    </label>
+    <input type="hidden" name="hierarchy"><input type="hidden" name="level">
+    <button type="submit" class="btn">
+      <i class="bi bi-list-check"></i> Import objectives
+    </button>
+  </form>
+  {% else %}
+  <p class="muted">Add a reference hierarchy above first — objectives are imported
+     from one of its levels.</p>
+  {% endif %}
+  {% endif %}
+
   <h2>Export a bundle</h2>
   <p>Download the whole course as a single self-contained JSON bundle (hierarchies,
      nodes, objectives, coverage, targets) — re-importable from the sidebar

@@ -1197,9 +1197,17 @@ def course_settings(course):
             outline_empty = conn.execute(
                 "SELECT 1 FROM nodes WHERE course=? AND hierarchy=? LIMIT 1",
                 (course, outline)).fetchone() is None
+        # Per-reference levels (tag + count, shallowest-first) for the
+        # "import objectives from a level" picker.
+        ref_levels = {}
+        for h in references:
+            rnodes = conn.execute(
+                "SELECT node_id, parent_id, level FROM nodes WHERE course=? AND hierarchy=?",
+                (course, h["hierarchy"])).fetchall()
+            ref_levels[h["hierarchy"]] = level_counts(rnodes)
     return render_template("course_settings.html", course=course, title=crow["title"],
                            references=references, outline_empty=outline_empty,
-                           page_title=f"{course.upper()} settings")
+                           ref_levels=ref_levels, page_title=f"{course.upper()} settings")
 
 
 @app.route("/<course>/delete", methods=["POST"])
@@ -1994,6 +2002,32 @@ def outline_import(course):
     flash(f"Built the outline from {reference}: {nu} unit(s), {nl} lesson(s), "
           f"{npl} objective placement(s).")
     return redirect(url_for("plan", course=course))
+
+
+@app.route("/<course>/objectives/import-level", methods=["POST"])
+def objectives_import_level(course):
+    """Create an interned objective from every node at a chosen level of a reference
+    hierarchy, placing each onto its source node (see import_objectives.import_level).
+    Idempotent -- re-running reuses existing objectives, adds no duplicates."""
+    hierarchy = (request.form.get("hierarchy") or "").strip()
+    level = (request.form.get("level") or "").strip()
+    with db() as conn:
+        if not conn.execute(
+                "SELECT 1 FROM hierarchies WHERE hierarchy=? AND course=? AND editable=0",
+                (hierarchy, course)).fetchone():
+            abort(404, f"no reference {hierarchy!r} for course {course!r}")
+        has_level = conn.execute(
+            "SELECT 1 FROM nodes WHERE course=? AND hierarchy=? AND level=? LIMIT 1",
+            (course, hierarchy, level)).fetchone()
+    if not has_level:
+        flash("Pick a hierarchy level that has nodes.")
+        return redirect(url_for("course_settings", course=course))
+    stats = import_objectives.import_level(db_path(), course, hierarchy, level)
+    apply_structural(course, f"Import {course}/{hierarchy} '{level}' nodes as objectives")
+    flash(f"Imported the '{level}' level of {hierarchy}: "
+          f"{stats['objectives_new']} new objective(s), "
+          f"{stats['pooled']} added to the pool, {stats['placed']} placed.")
+    return redirect(url_for("objectives", course=course))
 
 
 # --- Units ---

@@ -210,6 +210,34 @@ def copy_objectives(db_path, src_course, dst_course):
         conn.close()
 
 
+def import_level(db_path, course, hierarchy, level):
+    """Turn each node at `level` of reference `hierarchy` into an objective.
+
+    Every node tagged `level` becomes a raw objective (its text), interned into
+    the course pool and placed -- via a coverage edge -- onto that very node. Useful
+    when a reference has a level whose items are themselves objectives (e.g. a CED's
+    essential-knowledge or learning-objective level). The level need not be the
+    hierarchy's leaves: coverage on a non-leaf node is allowed (the leaf-only
+    affordance in the workspace is UI-only, not a model constraint).
+
+    Reuses upsert, so it is idempotent: interning is by (course, text) and coverage
+    is INSERT OR IGNORE, so re-running adds no duplicate objectives, pool rows, or
+    edges. Returns the upsert stats dict (see upsert)."""
+    conn = sqlite3.connect(db_path)
+    try:
+        apply_schema(conn)
+        nodes = conn.execute(
+            "SELECT node_id, text FROM nodes WHERE course=? AND hierarchy=? AND level=?"
+            " ORDER BY ordinal", (course, hierarchy, level)).fetchall()
+    finally:
+        conn.close()
+    # node_ids come straight from `nodes`, so upsert's `dangling` is always empty.
+    rows = [(None, (text or "").strip(), hierarchy, node_id)
+            for node_id, text in nodes if (text or "").strip()]
+    stats, _dangling = upsert(db_path, course, rows)
+    return stats
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("input", help="objectives file (plain text or TSV table)")
