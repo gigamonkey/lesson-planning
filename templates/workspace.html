@@ -161,6 +161,64 @@
     }
     rawSearch.addEventListener('input', applyRawFilter);
 
+    // Click-to-add: click a pool objective to "select" it (an alternative to
+    // dragging), then click a lesson to drop it there. selectedRaw holds the
+    // selected pool <li> (or null); the body gets .obj-selecting while one is live
+    // so lessons advertise themselves as click-to-add targets.
+    let selectedRaw = null;
+    function clearRawSelection() {
+      if (selectedRaw) selectedRaw.classList.remove('selected');
+      selectedRaw = null;
+      document.body.classList.remove('obj-selecting');
+    }
+    function selectRaw(li) {
+      if (selectedRaw === li) { clearRawSelection(); return; }   // toggle off
+      if (selectedRaw) selectedRaw.classList.remove('selected');
+      selectedRaw = li;
+      li.classList.add('selected');
+      document.body.classList.add('obj-selecting');
+    }
+    // Move the selected objective into `card`'s objectives box and persist it via
+    // the same /place endpoint the drag uses (uuid + destination zone + new order).
+    // Returns true if it consumed a live selection.
+    function addSelectedToLesson(card) {
+      const li = selectedRaw;
+      if (!li || !editable) return false;
+      const zone = card.querySelector('ul.rawzone');
+      if (!zone) return false;
+      clearRawSelection();
+      zone.appendChild(li);                  // move the node from the pool into the lesson
+      li.classList.remove('selected');
+      setLessonOpen(card, true);             // reveal the box so the drop is visible
+      const body = new URLSearchParams();
+      body.set('uuid', li.dataset.uuid);
+      body.set('to', zone.dataset.to);
+      body.set('ids', Array.from(zone.querySelectorAll('.rawitem'))
+        .map(x => x.dataset.uuid).join(','));
+      fetch(placeURL, { method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body })
+        .then(function () { refreshStats(); if (window.saveRefresh) window.saveRefresh(); });
+      applyRawFilter();
+      return true;
+    }
+    if (editable) {
+      // Delegated on the pool so it survives htmx swaps of the objective list.
+      // A drag ends with no click, so this fires only on a genuine click/tap.
+      document.getElementById('rawpool').addEventListener('click', function (e) {
+        const li = e.target.closest('li.rawitem');
+        if (li) selectRaw(li);
+      });
+      // Escape, or a click that isn't on a pool objective or a lesson, cancels.
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') clearRawSelection();
+      });
+      document.addEventListener('click', function (e) {
+        if (!selectedRaw) return;
+        if (e.target.closest('li.rawitem') || e.target.closest('li.lessoncard')) return;
+        clearRawSelection();
+      });
+    }
+
     function refreshStats() {
       if (window.htmx) htmx.ajax('GET', statsURL, { target: '#wstats', swap: 'outerHTML' });
     }
@@ -444,6 +502,9 @@
         if (title && !title.dataset.collapseInit) {
           title.dataset.collapseInit = '1';
           title.addEventListener('click', function () {
+            // With a pool objective selected, a click adds it here instead of
+            // toggling the lesson open/closed.
+            if (addSelectedToLesson(card)) return;
             setLessonOpen(card, card.classList.contains('collapsed'));
             markActiveView();
           });
@@ -451,7 +512,10 @@
         const zone = card.querySelector('ul.rawzone');
         if (zone && !zone.dataset.boxInit) {
           zone.dataset.boxInit = '1';
-          zone.addEventListener('click', function () { openObjEditor(card); });
+          zone.addEventListener('click', function () {
+            if (addSelectedToLesson(card)) return;   // selection wins over editing
+            openObjEditor(card);
+          });
         }
       });
       wireViewPicker();
