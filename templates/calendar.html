@@ -222,6 +222,34 @@
               display: inline-flex; align-items: center; gap: .3rem; }
   .cal-addunit-btn:hover, .cal-addunit-btn:focus-visible { color: #2b6cb0; }
 
+  /* --- Objective pool: click an objective then a lesson to place it, or drag it
+     onto a lesson. The pool sits in a sticky right column beside the calendar. --- */
+  /* The calendar sizes to its content (fixed-width weeks); the pool fills the rest
+     of the row -- same split as the outline's board (content-width + 1fr). */
+  .cal-layout { display: grid; grid-template-columns: auto minmax(0, 1fr);
+                gap: 1.2rem; align-items: start; }
+  .cal-main { min-width: 0; }
+  .cal-pool { position: sticky; top: 1rem; align-self: start;
+              background: #fff; border: 1px solid var(--line); border-radius: 6px;
+              padding: .5rem .6rem; max-height: calc(100vh - 2rem);
+              display: flex; flex-direction: column; }
+  .cal-pool h2 { margin: .1rem 0 .15rem; font-size: 1rem; }
+  .cal-pool .cal-pool-hint { color: var(--muted); font-size: .72rem; margin: 0 0 .45rem; }
+  .cal-pool .poolnew { margin: 0; }
+  .cal-pool .poolnew input, .cal-pool .poolsearch { width: 100%; box-sizing: border-box;
+              margin-bottom: .4rem; }
+  .cal-pool ul.rawpool { list-style: none; margin: 0; padding: 0; min-height: 3rem;
+              overflow-y: auto; }
+  /* While a pool objective is selected, lessons advertise themselves as targets. */
+  body.obj-selecting .cal-cell.lesson { cursor: pointer; }
+  body.obj-selecting .cal-cell.lesson:hover,
+  .cal-cell.lesson.cal-obj-target { outline: 2px solid #2b6cb0; outline-offset: 1px; }
+  /* A brief flash when an objective lands (it isn't shown in the cell otherwise). */
+  @keyframes calObjAdded {
+    from { box-shadow: 0 0 0 3px rgba(47, 111, 78, .75); }
+    to   { box-shadow: 0 0 0 3px rgba(47, 111, 78, 0); } }
+  .cal-cell.lesson.cal-obj-added { animation: calObjAdded .65s ease-out; }
+
   /* Phone: shrink the calendar to fit the viewport rather than scroll it. The
      five-column week is kept (it's what makes the grid legible) but the columns
      go fluid, the date label and boxes shrink, and the per-day lesson text drops
@@ -242,6 +270,9 @@
     .cal-cell.lesson .cal-lessonname textarea { font-size: .55rem; padding: .02rem; min-width: 0; }
     .cal-dayhdr { font-size: .52rem; letter-spacing: 0; }
     .cal-break { font-size: .72rem; min-height: 2.6rem; }
+    /* The pool drops below the calendar instead of beside it. */
+    .cal-layout { grid-template-columns: 1fr; }
+    .cal-pool { position: static; max-height: 18rem; }
   }
 </style>
 {% endblock %}
@@ -293,11 +324,132 @@
     <p class="cal-intro">{{ view.calendar_name }} - {{ view.year }} · {{ view.school_weeks }} school weeks.</p>
     {% if stats %}{{ wstatbar(stats, id='cal-stats',
        extra='Planned: %d%% weeks; %d%% days' | format(view.planned_weeks_pct, view.planned_days_pct)) }}{% endif %}
-    <div id="cal-content">{% include "_calendar_content.html" %}</div>
+    <div class="cal-layout">
+      <div class="cal-main"><div id="cal-content">{% include "_calendar_content.html" %}</div></div>
+      {% if can_edit and ref %}
+      {# Raw-objective pool: click an objective to select it (single click) then click
+         a lesson to place it, or drag it straight onto a lesson. Once placed an
+         objective leaves the pool; it isn't shown in the calendar cell. #}
+      <aside class="cal-pool">
+        <h2>Raw objectives (<span id="cal-pool-count">{{ pool|length }}</span>)</h2>
+        <p class="cal-pool-hint">Click one, then click a lesson — or drag it onto a lesson.</p>
+        <form class="poolnew" method="post" action="{{ url_for('objective_new', course=course) }}"
+              hx-post="{{ url_for('objective_new', course=course) }}"
+              hx-target="#cal-rawpool" hx-swap="afterbegin"
+              hx-on::after-request="this.reset()">
+          <input type="hidden" name="ref" value="{{ ref }}">
+          <input type="hidden" name="as" value="item">
+          <input type="text" name="text" placeholder="New objective…" autocomplete="off">
+        </form>
+        <input type="search" id="cal-raw-search" class="poolsearch" autocomplete="off"
+               placeholder="filter…">
+        <ul class="rawpool" id="cal-rawpool" data-to="pool">
+          {% for o in pool %}{% include "_rawitem.html" %}{% endfor %}
+        </ul>
+      </aside>
+      {% endif %}
+    </div>
   {% endif %}
 
   <script>
     const course = "{{ course }}";
+    const ref = "{{ ref or '' }}";   // the outline hierarchy slug ('' if none)
+
+    // --- Objective pool: click to select, then click a lesson to place; or drag ---
+    // Mirrors the outline's click-to-add. selectedRaw holds the selected pool <li>
+    // (or null); dragObjLi holds a pool <li> mid-drag. Placing reuses the outline's
+    // /place endpoint. The objective leaves the pool on placement; it isn't shown in
+    // the calendar cell (that's fine -- the pool is just a placement surface here).
+    const calPool = document.getElementById('cal-rawpool');
+    const calPoolCount = document.getElementById('cal-pool-count');
+    const calRawSearch = document.getElementById('cal-raw-search');
+    let selectedRaw = null, dragObjLi = null;
+
+    function clearRawSelection() {
+      if (selectedRaw) selectedRaw.classList.remove('selected');
+      selectedRaw = null;
+      document.body.classList.remove('obj-selecting');
+    }
+    function selectRaw(li) {
+      if (selectedRaw === li) { clearRawSelection(); return; }   // toggle off
+      if (selectedRaw) selectedRaw.classList.remove('selected');
+      selectedRaw = li;
+      li.classList.add('selected');
+      document.body.classList.add('obj-selecting');
+    }
+    function updatePoolCount() {
+      if (calPoolCount && calPool)
+        calPoolCount.textContent = calPool.querySelectorAll('li.rawitem').length;
+    }
+    function flashCell(cell) {          // brief pulse so a placement is visible
+      cell.classList.remove('cal-obj-added');
+      void cell.offsetWidth;
+      cell.classList.add('cal-obj-added');
+      setTimeout(function () { cell.classList.remove('cal-obj-added'); }, 700);
+    }
+    // Place a pool objective onto a lesson cell's node via the outline's /place
+    // endpoint (single placement per hierarchy). `append` puts it at the end of the
+    // lesson's list -- the calendar doesn't render objectives, so it can't send the
+    // node's full order the way the outline drag does.
+    function placeObjOnCell(li, cell) {
+      if (!li || !cell || !ref) return false;
+      const nodeId = cell.dataset.nodeId;
+      if (!nodeId) return false;
+      const uuid = li.dataset.uuid;
+      li.remove();                      // it's now placed on a lesson, not in the pool
+      updatePoolCount();
+      const body = new URLSearchParams();
+      body.set('uuid', uuid);
+      body.set('to', 'node-' + nodeId);
+      body.set('append', '1');
+      fetch('/' + course + '/h/' + encodeURIComponent(ref) + '/place', {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body }).then(function () { if (window.saveRefresh) window.saveRefresh(); });
+      flashCell(cell);
+      return true;
+    }
+    function clearObjTargets() {
+      document.querySelectorAll('.cal-obj-target')
+        .forEach(function (c) { c.classList.remove('cal-obj-target'); });
+    }
+    // Native HTML5 DnD needs the attribute on each item; (re)apply after any swap.
+    function initCalPool() {
+      if (!calPool) return;
+      calPool.querySelectorAll('li.rawitem').forEach(function (li) { li.draggable = true; });
+      updatePoolCount();
+      calApplyFilter();
+    }
+    function calApplyFilter() {
+      if (!calPool) return;
+      const q = calRawSearch ? calRawSearch.value.trim() : '';
+      let test = function () { return true; };
+      if (q) {
+        let re = null;
+        try { re = new RegExp(q, 'i'); } catch (e) { re = null; }
+        test = re ? function (t) { return re.test(t); }
+                  : function (t) { return t.toLowerCase().includes(q.toLowerCase()); };
+      }
+      calPool.querySelectorAll('li.rawitem').forEach(function (li) {
+        li.style.display = test(li.textContent) ? '' : 'none';
+      });
+    }
+    if (calPool) {
+      calPool.addEventListener('click', function (e) {   // single click selects
+        const li = e.target.closest('li.rawitem');
+        if (li) selectRaw(li);
+      });
+      if (calRawSearch) calRawSearch.addEventListener('input', calApplyFilter);
+      // Escape, or a click off any objective/lesson, cancels the selection.
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') clearRawSelection();
+      });
+      document.addEventListener('click', function (e) {
+        if (!selectedRaw) return;
+        if (e.target.closest('li.rawitem') || e.target.closest('.cal-cell.lesson')) return;
+        clearRawSelection();
+      });
+      initCalPool();
+    }
 
     // Stat-bar depth picker (like the outline's): "N units" collapses to a
     // units-only view (hide each unit's week grid, keep the breaks), "M lessons"
@@ -336,6 +488,15 @@
     }
     document.addEventListener('mousedown', function (e) {
       const cell = calLessonCell(e.target);
+      // With a pool objective selected, clicking a lesson places it there instead
+      // of entering edit mode.
+      if (selectedRaw && cell) {
+        e.preventDefault();
+        const li = selectedRaw;
+        clearRawSelection();
+        placeObjOnCell(li, cell);
+        return;
+      }
       // Click-away: pressing anywhere outside an open box closes it (focusout
       // alone isn't enough -- if nothing in the box ever took focus, it can't fire).
       document.querySelectorAll('.cal-cell.lesson.editing').forEach(function (c) {
@@ -381,6 +542,7 @@
     // which isn't focusable (so a bare `input` selector silently no-ops).
     document.body.addEventListener('htmx:afterSettle', function (e) {
       autosizeLessons();
+      initCalPool();   // a just-added pool objective needs draggable set + filtering
       const cell = document.querySelector('#cal-content [data-focus-title]');
       if (!cell) return;
       cell.removeAttribute('data-focus-title');
@@ -468,7 +630,19 @@
 
     document.addEventListener('dragstart', function (e) {
       const handle = e.target.closest && e.target.closest('.cal-draghandle');
-      if (!handle) return;
+      if (!handle) {
+        // Dragging a pool objective (not a lesson): a separate, copy-style drag
+        // that drops onto a lesson cell.
+        const raw = e.target.closest && e.target.closest('#cal-rawpool li.rawitem');
+        if (raw) {
+          dragObjLi = raw;
+          clearRawSelection();
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.setData('text/plain', raw.dataset.uuid || '');
+          document.body.classList.add('cal-dragging');
+        }
+        return;
+      }
       const cell = handle.closest('.cal-cell.lesson[data-node-id]');
       if (!cell) return;
       dragId = cell.dataset.nodeId;
@@ -484,10 +658,21 @@
     document.addEventListener('dragend', function () {
       document.body.classList.remove('cal-dragging');
       clearInsertMarks();
+      clearObjTargets();
       if (dragSrcCells) dragSrcCells.forEach(function (c) { c.classList.remove('cal-drag-src'); });
-      dragId = null; dragSrcCells = null;
+      dragId = null; dragSrcCells = null; dragObjLi = null;
     });
     document.addEventListener('dragover', function (e) {
+      if (dragObjLi) {                 // pool objective -> highlight the lesson cell
+        clearObjTargets();
+        const target = e.target.closest && e.target.closest('.cal-cell.lesson[data-node-id]');
+        if (target) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          target.classList.add('cal-obj-target');
+        }
+        return;
+      }
       if (!dragId) return;
       const section = e.target.closest && e.target.closest('.cal-unit[data-unit-id]');
       clearInsertMarks();
@@ -500,6 +685,12 @@
       }
     });
     document.addEventListener('drop', function (e) {
+      if (dragObjLi) {                 // pool objective dropped onto a lesson cell
+        const cell = e.target.closest && e.target.closest('.cal-cell.lesson[data-node-id]');
+        if (cell) { e.preventDefault(); placeObjOnCell(dragObjLi, cell); }
+        dragObjLi = null;
+        return;
+      }
       if (!dragId) return;
       const section = e.target.closest && e.target.closest('.cal-unit[data-unit-id]');
       if (!section) return;

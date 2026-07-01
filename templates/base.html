@@ -279,6 +279,15 @@
     li.rawitem:active { cursor: grabbing; }
     li.rawitem .rawtext { flex: 1; min-width: 0; }
     li.rawitem.sortable-ghost { opacity: .4; }
+    /* Double-click a pool objective to "select" it, then click a lesson to add it.
+       The selected item is highlighted; while a selection is live, lessons show a
+       primed outline + pointer to signal they're click-to-add targets. */
+    li.rawitem.selected { border-color: #2b6cb0; background: #ebf3fb;
+              box-shadow: 0 0 0 2px rgba(43,108,176,.35); }
+    body.obj-selecting .units li.lessoncard { cursor: pointer; }
+    body.obj-selecting .units li.lessoncard > .lessonhead .lessontitle:hover,
+    body.obj-selecting .units li.lessoncard:hover > .lessonhead {
+              outline: 2px dashed #2b6cb0; outline-offset: 2px; border-radius: 4px; }
 
     /* Lessons board */
     .board { display: grid; grid-template-columns: 280px 1fr; gap: 1rem; align-items: start; }
