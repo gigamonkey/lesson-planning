@@ -1419,10 +1419,13 @@ def place(course, hierarchy):
     """Drag a raw objective: `to` is "node-<id>" (map/recategorize) or "pool"
     (unmap). Single placement per hierarchy. `ids` carries the destination zone's
     full order so the per-node order (coverage.position) -- or the master pool
-    order (course_objectives.position) when dropped in the pool -- is persisted."""
+    order (course_objectives.position) when dropped in the pool -- is persisted.
+    `append=1` instead drops it at the END of the node (the caller doesn't know the
+    node's current contents -- e.g. the calendar, which doesn't render objectives)."""
     uuid = request.form.get("uuid")
     to = (request.form.get("to") or "").strip()
     node = to[5:] if to.startswith("node-") else None
+    append = bool(request.form.get("append"))
     with db() as conn:
         # A stale tab can POST to a renamed/removed hierarchy; refuse rather than
         # write orphan coverage under a slug that no longer exists.
@@ -1438,8 +1441,16 @@ def place(course, hierarchy):
         conn.execute("DELETE FROM coverage WHERE course=? AND hierarchy=? AND uuid=?",
                      (course, hierarchy, uuid))
         if node:
+            # Append lands after the node's current objectives (position = max+1);
+            # otherwise it goes in at 0 and the zone's `ids` order renumbers below.
+            pos = 0
+            if append:
+                row = conn.execute(
+                    "SELECT MAX(position) AS m FROM coverage WHERE course=? AND hierarchy=? "
+                    "AND node_id=?", (course, hierarchy, node)).fetchone()
+                pos = (row["m"] + 1) if row and row["m"] is not None else 0
             conn.execute("INSERT OR IGNORE INTO coverage(course, hierarchy, uuid, node_id, position) "
-                         "VALUES (?, ?, ?, ?, 0)", (course, hierarchy, uuid, node))
+                         "VALUES (?, ?, ?, ?, ?)", (course, hierarchy, uuid, node, pos))
             # Renumber the destination node by the zone's order (the dropped item
             # included). ids not in this node (defensive) simply match nothing.
             for i, u in enumerate(_id_list("ids")):
@@ -1958,20 +1969,25 @@ def _calendar_ctx(conn, course):
     · lessons · placed objectives), reused from the workspace."""
     O = outline_hierarchy(conn, course)
     stats = None
+    pool = []
     if O:
         nodes, by_node, pool = workspace_data(conn, course, O)
         stats = workspace_stats(nodes, by_node, pool)
+    # The outline hierarchy + its unplaced pool drive the calendar's click/drag-to-add:
+    # an objective dropped on a lesson cell is placed via the same /place endpoint the
+    # outline uses (keyed by this `ref`).
+    base = {"stats": stats, "pool": pool, "ref": O}
     crow = conn.execute("SELECT calendar FROM courses WHERE course=?", (course,)).fetchone()
     cal_id = crow["calendar"] if crow else None
     if not cal_id:
-        return {"calendar_id": None, "view": None, "error": None, "stats": stats}
+        return {"calendar_id": None, "view": None, "error": None, **base}
     try:
         bs, data = calendar_view.load_calendar(cal_id, CALENDAR_DIR)
     except (OSError, ValueError) as e:
         return {"calendar_id": cal_id, "view": None,
-                "error": f"Couldn't load calendar {cal_id!r}: {e}", "stats": stats}
+                "error": f"Couldn't load calendar {cal_id!r}: {e}", **base}
     view = calendar_view.build_calendar(bs, data, _outline_units(conn, course))
-    return {"calendar_id": cal_id, "view": view, "error": None, "stats": stats}
+    return {"calendar_id": cal_id, "view": view, "error": None, **base}
 
 
 @app.route("/<course>/calendar")
