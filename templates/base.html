@@ -474,6 +474,15 @@
     table.reftable td.nid { width: 1%; white-space: nowrap; padding-right: .7rem;
             font-family: ui-monospace, monospace; font-size: .76rem; color: var(--muted); }
     table.reftable .wlabel { min-width: 0; }
+    /* A collapsible node's label toggles its next level (children, or a leaf's
+       objectives); the caret points down when open, right when collapsed. */
+    table.reftable tr.has-children > td .wlabel,
+    table.reftable tr.has-objectives > td .wlabel { cursor: pointer; }
+    table.reftable tr.has-children > td .wlabel:hover,
+    table.reftable tr.has-objectives > td .wlabel:hover { color: #2b6cb0; }
+    table.reftable .rcaret { display: inline-block; font-size: .6em; color: var(--muted);
+            margin-right: .35rem; vertical-align: middle; transition: transform .12s ease; }
+    table.reftable tr.node-collapsed .rcaret { transform: rotate(-90deg); }
     /* Typographic scale by nesting depth (spacing via cell padding). */
     table.reftable .depth-1 .wlabel { font-weight: 700; font-size: 1.15rem; }
     table.reftable .depth-1 > td { padding-top: 1rem; padding-bottom: .15rem;

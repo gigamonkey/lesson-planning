@@ -4,12 +4,14 @@
 {# A reference node: its drop zone + (optionally) children. Structure is fixed. #}
 {# A reference hierarchy as a flat table (pre-order rows): an auto-sized id
    column, then the node text + its objectives. Depth drives the typography. #}
-{% macro reftable(nodes, depth=1) %}
+{% macro reftable(nodes, depth=1, parent='') %}
   {% for n in nodes %}
-    <tr class="depth-{{ depth }} lvl-{{ n.level }}{{ ' leaf' if n.is_leaf else '' }}">
+    {% set collapsible = n.children or (n.is_leaf and n.objectives) %}
+    <tr class="depth-{{ depth }} lvl-{{ n.level }}{{ ' leaf' if n.is_leaf else '' }}{{ ' has-children' if n.children else '' }}{{ ' has-objectives' if (n.is_leaf and n.objectives) else '' }}"
+        data-depth="{{ depth }}" data-node="{{ n.id }}" data-parent="{{ parent }}">
       <td class="nid">{{ n.id }}</td>
       <td class="rcontent">
-        <div class="wlabel">{{ n.label|inline }}{% if n.is_leaf %}
+        <div class="wlabel">{% if collapsible %}<i class="bi bi-caret-down-fill rcaret"></i>{% endif %}{{ n.label|inline }}{% if n.is_leaf %}
           <button type="button" class="addobjbtn" title="Add or edit objectives for this node">+</button>{% endif %}</div>
         {% if n.is_leaf %}
           {# Only leaf nodes take objectives: a droppable zone plus a bulk editor. #}
@@ -34,7 +36,7 @@
         {% endif %}
       </td>
     </tr>
-    {% if n.children %}{{ reftable(n.children, depth + 1) }}{% endif %}
+    {% if n.children %}{{ reftable(n.children, depth + 1, n.id) }}{% endif %}
   {% endfor %}
 {% endmacro %}
 
@@ -72,6 +74,10 @@
          <b>+</b> to edit its objectives as <code>plan.md</code>-style bullets (reword the
          text freely; leave each trailing <code>(#token)</code> to keep an objective's
          identity). The outline itself is fixed — it comes from the source.</p>
+      <p>The counts in the bar above set how deep the whole hierarchy is shown: click a
+         level to collapse to it (deeper levels hidden), or <b>placed objectives</b>
+         to reveal every leaf's objectives. You can also click any <b>node</b> to
+         fold or unfold it on its own — unfolding reveals the next level down.</p>
     {% endif %}
     <menu><button type="button" onclick="this.closest('dialog').close()">Close</button></menu>
   </dialog>
@@ -420,7 +426,7 @@
       }
     }
     function initCollapse(root) {
-      if (!editable) return;
+      if (!editable) { wireRefViewPicker(); return; }
       root.querySelectorAll('section.unit').forEach(function (unit) {
         if (collapsedUnits.has(unit.dataset.unitId)) unit.classList.add('collapsed');
         const tri = unit.querySelector('.unittoggle');
@@ -503,6 +509,121 @@
       markActiveView();
     }
 
+    // The read-only reference table is a flat pre-order list of rows, each tagged
+    // with its node id + parent id + depth. Collapsing is per-node: refCollapsed
+    // holds the nodes whose "next level" is hidden -- child rows for an internal
+    // node, its objective list for a leaf. A row is visible iff none of its
+    // ancestors is collapsed. The stat bar drives the same set uniformly ("collapse
+    // to level L"); clicking a node's label toggles just that node. refView names
+    // the active uniform level for the stat-bar highlight (null once you drill by
+    // hand); it survives the stat bar's htmx re-render.
+    let refView = 'objective';       // the active uniform level, or null when hand-drilled
+    const refCollapsed = new Set();  // node ids whose next level is hidden
+
+    function refRowByNode() {
+      const map = {};
+      document.querySelectorAll('table.reftable tr[data-node]').forEach(function (tr) {
+        map[tr.dataset.node] = tr;
+      });
+      return map;
+    }
+    // Apply refCollapsed to the DOM: hide rows under a collapsed ancestor, hide a
+    // collapsed leaf's objectives, and point each caret up (collapsed) or down.
+    function refRecompute() {
+      const rows = refRowByNode();
+      Object.keys(rows).forEach(function (id) {
+        const tr = rows[id];
+        let p = tr.dataset.parent, hidden = false;
+        while (p) {                       // any collapsed ancestor hides this row
+          if (refCollapsed.has(p)) { hidden = true; break; }
+          p = rows[p] ? rows[p].dataset.parent : '';
+        }
+        tr.hidden = hidden;
+        const collapsed = refCollapsed.has(id);
+        tr.classList.toggle('node-collapsed', collapsed);
+        const zone = tr.querySelector('ul.rawzone');   // a leaf's objectives = its next level
+        if (zone) zone.style.display = collapsed ? 'none' : '';
+      });
+    }
+    // Uniform view (the stat-bar picker): collapse every internal node at/below
+    // `maxDepth` (hiding rows past that level) and -- unless showing objectives --
+    // every leaf (hiding objective lists everywhere).
+    function applyRefView(maxDepth, showObjectives) {
+      refCollapsed.clear();
+      document.querySelectorAll('table.reftable tr[data-node]').forEach(function (tr) {
+        const d = parseInt(tr.dataset.depth, 10);
+        const leaf = tr.classList.contains('leaf');
+        if ((!leaf && d >= maxDepth) || (leaf && !showObjectives)) refCollapsed.add(tr.dataset.node);
+      });
+      refRecompute();
+      markRefActiveView();
+    }
+    // Toggle one node. Expanding reveals only the next level: its direct children
+    // start collapsed, so grandchildren stay hidden until you open them too.
+    function toggleRefNode(node) {
+      if (refCollapsed.has(node)) {
+        refCollapsed.delete(node);
+        document.querySelectorAll('table.reftable tr[data-parent="' + CSS.escape(node) + '"]')
+          .forEach(function (tr) { refCollapsed.add(tr.dataset.node); });
+      } else {
+        refCollapsed.add(node);
+      }
+      refView = null;              // a hand-drill no longer matches a uniform level
+      refRecompute();
+      markRefActiveView();
+    }
+    function markRefActiveView() {
+      document.querySelectorAll('.wstats .wstats-level').forEach(function (el) {
+        el.classList.toggle('view-active', refView !== null && el.dataset.level === refView);
+      });
+    }
+    function refDepthByTag() {
+      const byTag = {};
+      document.querySelectorAll('table.reftable tr[data-depth]').forEach(function (tr) {
+        const cls = Array.from(tr.classList).find(c => c.indexOf('lvl-') === 0);
+        const tag = cls ? cls.slice(4) : '';
+        const d = parseInt(tr.dataset.depth, 10);
+        if (tag && (!(tag in byTag) || d < byTag[tag])) byTag[tag] = d;
+      });
+      return byTag;
+    }
+    function wireRefViewPicker() {
+      if (editable) return;
+      const byTag = refDepthByTag();
+      document.querySelectorAll('.wstats .wstats-level').forEach(function (el) {
+        const tag = el.dataset.level;
+        const isObj = tag === 'objective';   // the trailing "placed objectives" count
+        if (!isObj && !(tag in byTag)) return;  // a stat with no matching rows
+        if (!el.dataset.viewInit) {
+          el.dataset.viewInit = '1';
+          el.classList.add('clickable');
+          el.title = isObj ? 'Show every objective'
+                           : 'Collapse to the ' + tag.replace(/-/g, ' ') + ' level';
+          el.addEventListener('click', function () {
+            refView = tag;
+            if (isObj) applyRefView(Infinity, true);
+            else applyRefView(byTag[tag], false);
+          });
+        }
+      });
+      // Per-node toggle: clicking a collapsible node's label folds/unfolds it.
+      // Delegated + wired once (the table isn't swapped by the stats refresh).
+      const tbl = document.querySelector('table.reftable');
+      if (tbl && !tbl.dataset.collapseInit) {
+        tbl.dataset.collapseInit = '1';
+        tbl.addEventListener('click', function (e) {
+          if (e.target.closest('.addobjbtn, ul.rawzone, form.bulkobj')) return;  // their own controls
+          const label = e.target.closest('.wlabel');
+          if (!label) return;
+          const tr = label.closest('tr[data-node]');
+          if (!tr || !tr.classList.contains('has-children') && !tr.classList.contains('has-objectives')) return;
+          toggleRefNode(tr.dataset.node);
+        });
+        refRecompute();   // set the initial caret/zone state (fully expanded)
+      }
+      markRefActiveView();   // restore the highlight after a stat-bar swap
+    }
+
     // Wire every interactive piece within `root`. Idempotent (each helper guards
     // already-initialized elements), so it's safe to run on the whole document at
     // load and again on just the htmx-swapped outline region.
@@ -554,7 +675,7 @@
     // Skip the stats refresh's own swap to avoid an infinite loop.
     document.body.addEventListener('htmx:afterSwap', function (e) {
       var path = (e.detail && e.detail.requestConfig && e.detail.requestConfig.path) || '';
-      if (path.indexOf('/stats') !== -1) { wireViewPicker(); return; }
+      if (path.indexOf('/stats') !== -1) { wireViewPicker(); wireRefViewPicker(); return; }
       var target = e.detail && e.detail.target;
       if (target && target.id === 'outline-units') initWorkspace(target);
       refreshStats();
