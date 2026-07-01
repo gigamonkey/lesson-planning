@@ -367,7 +367,7 @@ def inject_collab():
         # FILES on a timer, but committing is the explicit Save button.
         return {"collab_enabled": False, "can_edit": True, "collab_user": None,
                 "git_backed": LOCAL_GIT,
-                "dirty": LOCAL_GIT and collab.is_dirty("_local"),
+                "dirty": LOCAL_GIT and collab.reconcile_dirty("_local", COURSES_ROOT),
                 "conflict": LOCAL_GIT and collab.has_conflict(COURSES_ROOT)}
     editor = getattr(g, "editor", False)
     handle = getattr(g, "handle", None)
@@ -376,7 +376,8 @@ def inject_collab():
         "collab_enabled": True,
         "git_backed": editor,
         "can_edit": editor,
-        "dirty": editor and handle and collab.is_dirty(handle),
+        "dirty": bool(editor and handle and getattr(g, "courses_root", None)
+                      and collab.reconcile_dirty(handle, g.courses_root)),
         "conflict": bool(editor and getattr(g, "courses_root", None)
                          and collab.has_conflict(g.courses_root)),
         "collab_user": getattr(g, "user", None),

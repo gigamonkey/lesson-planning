@@ -392,6 +392,25 @@ def is_dirty(key):
         return key in _dirty
 
 
+def reconcile_dirty(key, repo_dir):
+    """Confirm the optimistic in-memory dirty flag against git, and clear it if it's
+    stale. `mark_dirty` is set on every edit, but an edit can net to nothing -- a
+    no-op "Edit as Markdown" save, or a change-then-undo -- leaving the course files
+    byte-identical and the tree clean. Once the autosave has written everything out
+    (no writes still pending) and `git status` reports a clean tree, the flag is
+    stale; drop it so the Commit button stops claiming there's something to commit.
+    Returns the reconciled dirty state. (While writes are still pending we can't trust
+    git yet -- the latest edit isn't on disk -- so we keep the flag.)"""
+    if not is_dirty(key):
+        return False
+    if has_pending(key):
+        return True
+    if has_uncommitted(repo_dir):
+        return True
+    clear_dirty(key)
+    return False
+
+
 # --------------------------------------------------------------------------
 # External-change guard: the db reflects a repo at a known HEAD (recorded when we
 # load the db from it or commit to it). If HEAD later differs, the files changed
@@ -619,6 +638,15 @@ def _autosave_fire(key):
             flush(course)
         except Exception as e:                             # never kill the timer thread
             print(f"collab: autosave {key}/{course} failed: {e}", file=sys.stderr)
+
+
+def has_pending(key):
+    """True if `key` has a debounced file-write still waiting to run -- the latest
+    edit isn't on disk yet, so a `git status` check can't be trusted as the dirty
+    truth. Used by `reconcile_dirty`."""
+    with _autosave_guard:
+        st = _autosave.get(key)
+        return bool(st and st["courses"])
 
 
 def cancel_autosave(key):
